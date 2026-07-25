@@ -1,0 +1,4 @@
+com.pivotos.starter.core.config.CoreAutoConfiguration
+com.pivotos.starter.core.config.TraceAutoConfiguration
+com.pivotos.starter.core.config.JsonAutoConfiguration
+com.pivotos.starter.core.config.I18nAutoConfiguration

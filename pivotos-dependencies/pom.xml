@@ -33,7 +33,7 @@
 
         <!-- ==================== 工具与序列化 ==================== -->
         <!-- fastjson2 必须 >= 2.0.61（2.0.5x 有已知 ASM 缺陷） -->
-        <fastjson2.version>2.0.62</fastjson2.version>
+        <fastjson2.version>2.0.61</fastjson2.version>
         <mapstruct-plus.version>1.5.1</mapstruct-plus.version>
         <hutool.version>5.8.47</hutool.version>
 
@@ -219,7 +219,11 @@
                 <artifactId>pivotos-common-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
-
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
