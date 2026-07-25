@@ -209,7 +209,6 @@
             </dependency>
 
             <!-- ========== 本项目内部模块（随会话推进逐个取消注释） ========== -->
-            <!--
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-common-core</artifactId>
@@ -220,7 +219,6 @@
                 <artifactId>pivotos-common-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
-            -->
 
         </dependencies>
     </dependencyManagement>

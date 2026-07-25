@@ -13,6 +13,7 @@
 
     <modules>
         <module>pivotos-dependencies</module>
+        <module>pivotos-commons</module>
         <!-- 后续会话逐步加入：
         <module>pivotos-commons</module>
         <module>pivotos-starters</module>

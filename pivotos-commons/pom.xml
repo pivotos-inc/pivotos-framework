@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-framework</artifactId>
+        <version>0.5.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>pivotos-commons</artifactId>
+    <packaging>pom</packaging>
+
+    <name>pivotos-commons</name>
+    <description>PivotOS 契约层聚合模块（纯契约，禁 Spring 依赖）</description>
+
+    <modules>
+        <module>pivotos-common-core</module>
+        <module>pivotos-common-api</module>
+    </modules>
+
+    <!-- commons 全模块统一引入 BOM 仲裁 -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-dependencies</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>
