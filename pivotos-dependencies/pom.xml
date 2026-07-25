@@ -32,6 +32,8 @@
         <lock4j.version>2.2.7</lock4j.version>
 
         <!-- ==================== 工具与序列化 ==================== -->
+        <!-- Lombok：JDK 25 需 >= 1.18.40；JDK 23+ 必须配合 annotationProcessorPaths 显式开启 -->
+        <lombok.version>1.18.44</lombok.version>
         <!-- fastjson2 必须 >= 2.0.61（2.0.5x 有已知 ASM 缺陷） -->
         <fastjson2.version>2.0.61</fastjson2.version>
         <mapstruct-plus.version>1.5.1</mapstruct-plus.version>
@@ -122,6 +124,15 @@
                 <groupId>com.baomidou</groupId>
                 <artifactId>lock4j-redisson-spring-boot-starter</artifactId>
                 <version>${lock4j.version}</version>
+            </dependency>
+
+            <!-- ========== Lombok（provided，编译期增强，不进运行时包） ========== -->
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+                <scope>provided</scope>
+                <optional>true</optional>
             </dependency>
 
             <!-- ========== fastjson2（含 Spring6 扩展） ========== -->
@@ -232,6 +243,11 @@
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-starter-redis</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-mybatis</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
