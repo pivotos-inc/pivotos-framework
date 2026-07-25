@@ -1,4 +1,4 @@
-package com.pivotos.common.core;
+package com.pivotos.common.core.result;
 
 import com.pivotos.common.core.enums.error.ErrorCode;
 import com.pivotos.common.core.enums.error.GlobalErrorCode;
