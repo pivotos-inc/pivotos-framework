@@ -24,10 +24,10 @@
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <druid.version>1.2.28</druid.version>
         <dynamic-datasource.version>4.3.1</dynamic-datasource.version>
-        <mysql-connector.version>8.0.33</mysql-connector.version>
+        <mysql-connector.version>9.7.0</mysql-connector.version>
 
         <!-- ==================== 认证 / 缓存 ==================== -->
-        <sa-token.version>1.6.0</sa-token.version>
+        <sa-token.version>1.45.0</sa-token.version>
         <redisson.version>4.6.1</redisson.version>
         <lock4j.version>2.2.7</lock4j.version>
 
@@ -45,8 +45,7 @@
 
         <!-- ==================== 搜索（Easy-ES 锁定 ES 7.17.28） ==================== -->
         <easy-es.version>3.0.2</easy-es.version>
-        <elasticsearch.version>9.4.4</elasticsearch.version>
-        <elasticsearch-high.version>7.17.29</elasticsearch-high.version>
+        <elasticsearch.version>7.17.28</elasticsearch.version>
 
 
         <!-- ==================== 测试 ==================== -->
@@ -191,7 +190,7 @@
             <dependency>
                 <groupId>org.elasticsearch.client</groupId>
                 <artifactId>elasticsearch-rest-high-level-client</artifactId>
-                <version>${elasticsearch-high.version}</version>
+                <version>${elasticsearch.version}</version>
             </dependency>
 
             <!-- ========== 测试 ========== -->
