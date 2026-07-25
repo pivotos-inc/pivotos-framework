@@ -1,0 +1,4 @@
+com.pivotos.starter.web.config.WebExceptionAutoConfiguration
+com.pivotos.starter.web.config.RepeatSubmitAutoConfiguration
+com.pivotos.starter.web.config.EncryptAutoConfiguration
+com.pivotos.starter.web.config.XssCorsAutoConfiguration

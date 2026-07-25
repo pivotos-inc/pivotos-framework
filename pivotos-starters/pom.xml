@@ -17,6 +17,7 @@
 
     <modules>
         <module>pivotos-starter-core</module>
+        <module>pivotos-starter-web</module>
         <!-- S5 后半程加入：<module>pivotos-starter-web</module> -->
     </modules>
 
