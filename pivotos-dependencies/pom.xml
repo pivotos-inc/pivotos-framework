@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-framework</artifactId>
+        <version>0.5.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>pivotos-dependencies</artifactId>
+    <packaging>pom</packaging>
+
+    <name>pivotos-dependencies</name>
+    <description>PivotOS BOM：全项目第三方版本唯一仲裁点</description>
+
+    <properties>
+        <!-- ==================== 核心框架 ==================== -->
+        <spring-boot.version>4.1.0</spring-boot.version>
+
+        <!-- ==================== 持久层 ==================== -->
+        <!-- SB4 专属 artifactId，勿用 SB3 旧 starter -->
+        <mybatis-plus.version>3.5.17</mybatis-plus.version>
+        <druid.version>1.2.28</druid.version>
+        <dynamic-datasource.version>4.3.1</dynamic-datasource.version>
+        <mysql-connector.version>8.0.33</mysql-connector.version>
+
+        <!-- ==================== 认证 / 缓存 ==================== -->
+        <sa-token.version>1.6.0</sa-token.version>
+        <redisson.version>4.6.1</redisson.version>
+        <lock4j.version>2.2.7</lock4j.version>
+
+        <!-- ==================== 工具与序列化 ==================== -->
+        <!-- fastjson2 必须 >= 2.0.61（2.0.5x 有已知 ASM 缺陷） -->
+        <fastjson2.version>2.0.62</fastjson2.version>
+        <mapstruct-plus.version>1.5.1</mapstruct-plus.version>
+        <hutool.version>5.8.47</hutool.version>
+
+        <!-- ==================== 文档 / 任务 / 存储 ==================== -->
+        <springdoc.version>3.0.3</springdoc.version>
+        <xxl-job.version>3.4.2</xxl-job.version>
+        <minio.version>9.0.3</minio.version>
+        <aws-sdk-v2.version>2.49.3</aws-sdk-v2.version>
+
+        <!-- ==================== 搜索（Easy-ES 锁定 ES 7.17.28） ==================== -->
+        <easy-es.version>3.0.2</easy-es.version>
+        <elasticsearch.version>9.4.4</elasticsearch.version>
+        <elasticsearch-high.version>7.17.29</elasticsearch-high.version>
+
+
+        <!-- ==================== 测试 ==================== -->
+        <testcontainers.version>2.0.5</testcontainers.version>
+        <archunit.version>1.4.2</archunit.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+
+            <!-- ========== Spring Boot 官方 BOM（import 方式，版本仲裁底座） ========== -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- ========== MyBatis-Plus（SB4 专属 starter） ========== -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-spring-boot4-starter</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-jsqlparser</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+
+            <!-- ========== Druid（SB4 专属 starter） ========== -->
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>druid-spring-boot-4-starter</artifactId>
+                <version>${druid.version}</version>
+            </dependency>
+
+            <!-- ========== dynamic-datasource ========== -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>dynamic-datasource-spring-boot3-starter</artifactId>
+                <version>${dynamic-datasource.version}</version>
+            </dependency>
+
+            <!-- ========== MySQL 驱动 ========== -->
+            <dependency>
+                <groupId>com.mysql</groupId>
+                <artifactId>mysql-connector-j</artifactId>
+                <version>${mysql-connector.version}</version>
+            </dependency>
+
+            <!-- ========== Sa-Token ========== -->
+            <!-- TODO(S5/S6): SB4 下确认是否有 sa-token-spring-boot4-starter；
+                 没有则先用 SB3 starter + 兼容性验证，必要时薄封装并记技术债 -->
+            <dependency>
+                <groupId>cn.dev33</groupId>
+                <artifactId>sa-token-spring-boot3-starter</artifactId>
+                <version>${sa-token.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.dev33</groupId>
+                <artifactId>sa-token-redisson</artifactId>
+                <version>${sa-token.version}</version>
+            </dependency>
+
+            <!-- ========== Redisson / Lock4j ========== -->
+            <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson-spring-boot-starter</artifactId>
+                <version>${redisson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>lock4j-redisson-spring-boot-starter</artifactId>
+                <version>${lock4j.version}</version>
+            </dependency>
+
+            <!-- ========== fastjson2（含 Spring6 扩展） ========== -->
+            <dependency>
+                <groupId>com.alibaba.fastjson2</groupId>
+                <artifactId>fastjson2</artifactId>
+                <version>${fastjson2.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.fastjson2</groupId>
+                <artifactId>fastjson2-extension-spring6</artifactId>
+                <version>${fastjson2.version}</version>
+            </dependency>
+
+            <!-- ========== MapStruct-Plus ========== -->
+            <dependency>
+                <groupId>io.github.linpeilie</groupId>
+                <artifactId>mapstruct-plus-spring-boot-starter</artifactId>
+                <version>${mapstruct-plus.version}</version>
+            </dependency>
+
+            <!-- ========== Hutool ========== -->
+            <dependency>
+                <groupId>cn.hutool</groupId>
+                <artifactId>hutool-all</artifactId>
+                <version>${hutool.version}</version>
+            </dependency>
+
+            <!-- ========== SpringDoc ========== -->
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+                <version>${springdoc.version}</version>
+            </dependency>
+
+            <!-- ========== XXL-Job ========== -->
+            <dependency>
+                <groupId>com.xuxueli</groupId>
+                <artifactId>xxl-job-core</artifactId>
+                <version>${xxl-job.version}</version>
+            </dependency>
+
+            <!-- ========== 对象存储：MinIO / AWS SDK v2 ========== -->
+            <dependency>
+                <groupId>io.minio</groupId>
+                <artifactId>minio</artifactId>
+                <version>${minio.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>s3</artifactId>
+                <version>${aws-sdk-v2.version}</version>
+            </dependency>
+
+            <!-- ========== Easy-ES：锁定 ES 7.17.28，防止与 Spring Data ES 冲突 ========== -->
+            <dependency>
+                <groupId>org.dromara.easy-es</groupId>
+                <artifactId>easy-es-boot-starter</artifactId>
+                <version>${easy-es.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.elasticsearch</groupId>
+                <artifactId>elasticsearch</artifactId>
+                <version>${elasticsearch.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.elasticsearch.client</groupId>
+                <artifactId>elasticsearch-rest-high-level-client</artifactId>
+                <version>${elasticsearch-high.version}</version>
+            </dependency>
+
+            <!-- ========== 测试 ========== -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.tngtech.archunit</groupId>
+                <artifactId>archunit-junit5</artifactId>
+                <version>${archunit.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- ========== 本项目内部模块（随会话推进逐个取消注释） ========== -->
+            <!--
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-common-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-common-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            -->
+
+        </dependencies>
+    </dependencyManagement>
+
+</project>
