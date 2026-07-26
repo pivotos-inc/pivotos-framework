@@ -42,7 +42,8 @@ public enum SystemErrorCode implements ErrorCode {
     DICT_TYPE_NOT_FOUND(2061, "字典类型不存在"),
     DICT_DATA_NOT_FOUND(2062, "字典数据不存在"),
     CONFIG_KEY_EXISTS(2070, "参数键名已存在"),
-    CONFIG_NOT_FOUND(2071, "参数不存在");
+    CONFIG_NOT_FOUND(2071, "参数不存在"),
+    CONFIG_BUILTIN_FORBIDDEN(2072, "系统内置参数不允许删除");
 
     private final int code;
     private final String msg;

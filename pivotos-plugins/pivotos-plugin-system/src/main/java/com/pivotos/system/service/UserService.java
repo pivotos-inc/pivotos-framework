@@ -1,0 +1,34 @@
+package com.pivotos.system.service;
+
+import com.baomidou.mybatisplus.spring.service.IService;
+import com.pivotos.common.core.page.PageResult;
+import com.pivotos.system.domain.dto.ResetPasswordBody;
+import com.pivotos.system.domain.dto.UserQuery;
+import com.pivotos.system.domain.dto.UserSaveRequest;
+import com.pivotos.system.domain.entity.SysUser;
+import com.pivotos.system.domain.vo.UserVO;
+
+/** 用户服务 */
+public interface UserService extends IService<SysUser> {
+
+    /** 分页查询用户 */
+    PageResult<UserVO> pageUsers(UserQuery query);
+
+    /** 查询用户详情 */
+    UserVO getUser(Long userId);
+
+    /** 新增用户（含角色分配），返回用户ID */
+    Long createUser(UserSaveRequest request);
+
+    /** 修改用户（含角色重建；密码留空表示不变） */
+    void updateUser(UserSaveRequest request);
+
+    /** 删除用户（逻辑删除，清理角色关联） */
+    void deleteUser(Long userId);
+
+    /** 重置密码 */
+    void resetPassword(ResetPasswordBody body);
+
+    /** 按用户名查询实体（登录专用，返回含密码的完整实体） */
+    SysUser getByUsername(String username);
+}

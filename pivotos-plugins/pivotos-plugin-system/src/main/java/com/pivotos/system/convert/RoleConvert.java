@@ -1,5 +1,6 @@
 package com.pivotos.system.convert;
 
+import com.pivotos.system.api.dto.RoleDTO;
 import com.pivotos.system.domain.dto.RoleSaveRequest;
 import com.pivotos.system.domain.entity.SysRole;
 import com.pivotos.system.domain.vo.RoleVO;
@@ -16,4 +17,8 @@ public interface RoleConvert {
     List<RoleVO> toVoList(List<SysRole> source);
 
     SysRole toEntity(RoleSaveRequest source);
+
+    RoleDTO toDto(SysRole source);
+
+    List<RoleDTO> toDtoList(List<SysRole> source);
 }

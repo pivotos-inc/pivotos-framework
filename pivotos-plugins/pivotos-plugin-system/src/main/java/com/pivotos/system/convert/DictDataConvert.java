@@ -1,5 +1,6 @@
 package com.pivotos.system.convert;
 
+import com.pivotos.system.api.dto.DictDataDTO;
 import com.pivotos.system.domain.dto.DictDataSaveRequest;
 import com.pivotos.system.domain.entity.SysDictData;
 import com.pivotos.system.domain.vo.DictDataVO;
@@ -16,4 +17,8 @@ public interface DictDataConvert {
     List<DictDataVO> toVoList(List<SysDictData> source);
 
     SysDictData toEntity(DictDataSaveRequest source);
+
+    DictDataDTO toDto(SysDictData source);
+
+    List<DictDataDTO> toDtoList(List<SysDictData> source);
 }
