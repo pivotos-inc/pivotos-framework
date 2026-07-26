@@ -39,6 +39,9 @@
         <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
         <jacoco-maven-plugin.version>0.8.14</jacoco-maven-plugin.version>
         <flatten-maven-plugin.version>1.7.3</flatten-maven-plugin.version>
+
+        <!-- 与 pivotos-dependencies 中 mapstruct-plus.version 保持一致（annotationProcessorPaths 无法引用 import BOM 的属性） -->
+        <mapstruct-plus.version>1.5.1</mapstruct-plus.version>
     </properties>
 
     <build>
@@ -65,6 +68,11 @@
                                 <groupId>org.projectlombok</groupId>
                                 <artifactId>lombok-mapstruct-binding</artifactId>
                                 <version>0.2.0</version>
+                            </path>
+                            <path>
+                                <groupId>io.github.linpeilie</groupId>
+                                <artifactId>mapstruct-plus-processor</artifactId>
+                                <version>${mapstruct-plus.version}</version>
                             </path>
                         </annotationProcessorPaths>
                     </configuration>
