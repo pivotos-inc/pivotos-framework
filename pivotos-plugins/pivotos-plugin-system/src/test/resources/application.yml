@@ -1,0 +1,33 @@
+# system 插件集成测试配置：连接本地中间件（与 S1 环境一致）
+# 注意：使用独立测试库 pivotos_test，绝不触碰开发库 pivotos
+
+spring:
+  autoconfigure:
+    # SB4 适配：druid boot4 starter 的自动配置类不在 dynamic-datasource 的排序声明内（上游 4.5.0 仍未适配），
+    # 排除其独立 DataSource 装配，由 dynamic-datasource 的 DruidDynamicDataSourceConfiguration 统一创建连接池
+    exclude: com.alibaba.druid.spring.boot4.autoconfigure.DruidDataSourceAutoConfigure
+  datasource:
+    dynamic:
+      primary: master
+      datasource:
+        master:
+          # 账号密码按你本地 MySQL 实际修改；createDatabaseIfNotExist 首次自动建测试库
+          url: jdbc:mysql://192.168.50.10:3306/test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          username: root
+          password: mysql_PBM2cc
+          driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: 192.168.50.10
+      port: 6379
+      password: redis_xrC48x
+      timeout: 5s
+
+sa-token:
+  token-name: Authorization
+  timeout: 3600
+  is-print: false
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl

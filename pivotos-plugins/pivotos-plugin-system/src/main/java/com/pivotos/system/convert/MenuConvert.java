@@ -8,7 +8,7 @@ import org.mapstruct.Mapper;
 import java.util.List;
 
 /** 菜单对象转换 */
-@Mapper
+@Mapper(componentModel = "spring")
 public interface MenuConvert {
 
     MenuVO toVo(SysMenu source);

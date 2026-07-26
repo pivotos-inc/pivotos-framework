@@ -9,7 +9,7 @@ import org.mapstruct.Mapper;
 import java.util.List;
 
 /** 角色对象转换 */
-@Mapper
+@Mapper(componentModel = "spring")
 public interface RoleConvert {
 
     RoleVO toVo(SysRole source);

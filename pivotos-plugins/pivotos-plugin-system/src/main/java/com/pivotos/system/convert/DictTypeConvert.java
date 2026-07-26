@@ -8,7 +8,7 @@ import org.mapstruct.Mapper;
 import java.util.List;
 
 /** 字典类型对象转换 */
-@Mapper
+@Mapper(componentModel = "spring")
 public interface DictTypeConvert {
 
     DictTypeVO toVo(SysDictType source);

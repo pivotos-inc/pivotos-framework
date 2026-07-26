@@ -9,7 +9,7 @@ import org.mapstruct.Mapper;
 import java.util.List;
 
 /** 用户对象转换 */
-@Mapper
+@Mapper(componentModel = "spring")
 public interface UserConvert {
 
     UserVO toVo(SysUser source);

@@ -8,7 +8,7 @@ import org.mapstruct.Mapper;
 import java.util.List;
 
 /** 参数配置对象转换 */
-@Mapper
+@Mapper(componentModel = "spring")
 public interface ConfigConvert {
 
     ConfigVO toVo(SysConfig source);

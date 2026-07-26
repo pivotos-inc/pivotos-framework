@@ -9,7 +9,7 @@ import org.mapstruct.Mapper;
 import java.util.List;
 
 /** 部门对象转换 */
-@Mapper
+@Mapper(componentModel = "spring")
 public interface DeptConvert {
 
     DeptVO toVo(SysDept source);
