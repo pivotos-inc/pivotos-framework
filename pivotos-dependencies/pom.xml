@@ -36,6 +36,8 @@
         <lombok.version>1.18.44</lombok.version>
         <!-- fastjson2 必须 >= 2.0.61（2.0.5x 有已知 ASM 缺陷） -->
         <fastjson2.version>2.0.61</fastjson2.version>
+        <!-- Jackson 2 兼容层：SB4 默认 Jackson 3，Sa-Token 仍依赖 Jackson 2，补齐 jsr310 时间模块 -->
+        <jackson2.version>2.21.4</jackson2.version>
         <mapstruct-plus.version>1.5.1</mapstruct-plus.version>
         <hutool.version>5.8.47</hutool.version>
 
@@ -114,6 +116,13 @@
                 <version>${sa-token.version}</version>
             </dependency>
 
+            <!-- Redisson 核心包必须与 starter 同版本锁定，防止 sa-token-redisson / lock4j 传递进来的旧核心包抢占仲裁 -->
+            <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson</artifactId>
+                <version>${redisson.version}</version>
+            </dependency>
+
             <!-- ========== Redisson / Lock4j ========== -->
             <dependency>
                 <groupId>org.redisson</groupId>
@@ -145,6 +154,12 @@
                 <groupId>com.alibaba.fastjson2</groupId>
                 <artifactId>fastjson2-extension-spring6</artifactId>
                 <version>${fastjson2.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.fasterxml.jackson.datatype</groupId>
+                <artifactId>jackson-datatype-jsr310</artifactId>
+                <version>${jackson2.version}</version>
             </dependency>
 
             <!-- ========== MapStruct-Plus ========== -->
@@ -248,6 +263,11 @@
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-starter-mybatis</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-auth</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

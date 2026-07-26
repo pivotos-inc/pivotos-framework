@@ -20,6 +20,7 @@
         <module>pivotos-starter-web</module>
         <module>pivotos-starter-redis</module>
         <module>pivotos-starter-mybatis</module>
+        <module>pivotos-starter-auth</module>
         <!-- S5 后半程加入：<module>pivotos-starter-web</module> -->
     </modules>
 

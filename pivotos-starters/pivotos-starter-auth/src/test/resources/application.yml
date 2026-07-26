@@ -1,0 +1,15 @@
+spring:
+  data:
+    redis:
+      host: 192.168.50.10
+      port: 6379
+      password: redis_xrC48x
+      timeout: 5s
+
+sa-token:
+  # 前端携带 Token 的请求头
+  token-name: Authorization
+  # Token 有效期（秒）
+  timeout: 3600
+  # 关闭启动时的 Sa-Token 字符画
+  is-print: false

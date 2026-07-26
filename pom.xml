@@ -50,6 +50,8 @@
                     <configuration>
                         <release>${maven.compiler.release}</release>
                         <encoding>${project.build.sourceEncoding}</encoding>
+                        <!-- 保留方法参数名（@RequestParam 省略 name、Lock4j/SpEL 参数引用依赖此项） -->
+                        <parameters>true</parameters>
                         <!-- JDK 23+ javac 不再默认扫描 classpath 上的注解处理器，必须显式声明 -->
                         <annotationProcessorPaths>
                             <path>

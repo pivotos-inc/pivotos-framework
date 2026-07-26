@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-starters</artifactId>
+        <version>0.5.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>pivotos-starter-auth</artifactId>
+
+    <name>pivotos-starter-auth</name>
+    <description>Sa-Token 多账号多端认证 / LoginContext 绑定 / 权限校验</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-web</artifactId>
+        </dependency>
+
+        <!-- Sa-Token（boot3 starter 内置 v3v4 公共兼容层）+ Redis Token 存储 -->
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-spring-boot3-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-redisson</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- 步骤 3 总验收 demo：分布式锁验证需要（Lock4j 在 redis starter 里） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-redis</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Sa-Token (Jackson 2) 在 SB4 (Jackson 3) 下的时间序列化兼容模块 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>
