@@ -270,6 +270,16 @@
                 <artifactId>pivotos-starter-auth</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-system-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-system</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
