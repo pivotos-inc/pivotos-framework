@@ -1,12 +1,20 @@
 package com.pivotos.starter.auth.config;
 
+import cn.dev33.satoken.dao.SaTokenDao;
+import cn.dev33.satoken.dao.SaTokenDaoDefaultImpl;
+import cn.dev33.satoken.dao.SaTokenDaoForRedisson;
 import cn.dev33.satoken.interceptor.SaInterceptor;
 import cn.dev33.satoken.stp.StpInterface;
 import com.pivotos.starter.auth.filter.LoginContextFilter;
 import com.pivotos.starter.auth.handler.SaTokenExceptionHandler;
 import com.pivotos.starter.auth.support.AuthPermissionProvider;
 import com.pivotos.starter.auth.support.StpInterfaceImpl;
+import org.redisson.api.RedissonClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -24,6 +32,28 @@ import java.util.List;
 @AutoConfiguration
 @RestControllerAdvice
 public class AuthAutoConfiguration {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthAutoConfiguration.class);
+
+    /**
+     * Sa-Token 持久化到 Redis：sa-token-redisson 只提供实现类、不带自动装配，
+     * 不显式注册则回落内存实现（重启后所有登录态丢失，S13 验收实测踩坑）。
+     * 用 ObjectProvider 延迟解析规避 @ConditionalOnBean 的装配顺序敏感
+     * （Redisson 4.x 由 RedissonAutoConfigurationV4 注册客户端，顺序不可控）；
+     * 无 RedissonClient（未装配 redis starter）时显式回落默认内存实现。
+     */
+    @Bean
+    @ConditionalOnClass(RedissonClient.class)
+    @ConditionalOnMissingBean(SaTokenDao.class)
+    public SaTokenDao saTokenDao(ObjectProvider<RedissonClient> redissonClientProvider) {
+        RedissonClient redissonClient = redissonClientProvider.getIfAvailable();
+        if (redissonClient == null) {
+            log.warn("[PivotOS] 未发现 RedissonClient，Sa-Token 使用内存持久化（重启后登录态丢失）");
+            return new SaTokenDaoDefaultImpl();
+        }
+        log.info("[PivotOS] Sa-Token 持久化：Redis（SaTokenDaoForRedisson）");
+        return new SaTokenDaoForRedisson(redissonClient);
+    }
 
     /**
      * LoginContext 绑定过滤器：排在 TraceIdFilter / XssFilter 之后
