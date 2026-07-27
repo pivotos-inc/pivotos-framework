@@ -18,6 +18,7 @@
     <modules>
         <module>pivotos-plugin-system-api</module>
         <module>pivotos-plugin-system</module>
+        <module>pivotos-plugin-message-api</module>
     </modules>
 
     <dependencyManagement>
