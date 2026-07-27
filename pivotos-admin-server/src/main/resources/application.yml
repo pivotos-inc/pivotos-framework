@@ -7,10 +7,13 @@ spring:
   profiles:
     active: dev
   # Flyway：脚本在各 Plugin 自己的 jar 内 db/migration/，classpath 扫描会跨 jar 合并
+  # ignore-migration-patterns "*:missing"：插件移除后其已应用的迁移记录不再阻断启动，
+  # 这是"增删依赖 0 改动"装配验证（S13 硬卡点）的平台级支撑
   flyway:
     enabled: true
     baseline-on-migrate: true
     validate-on-migrate: true
+    ignore-migration-patterns: "*:missing"
 
 sa-token:
   token-name: Authorization

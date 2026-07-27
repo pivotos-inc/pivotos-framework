@@ -43,10 +43,14 @@
             <artifactId>pivotos-starter-auth</artifactId>
         </dependency>
 
-        <!-- ===== 业务 Plugin（system-api 由 plugin 传递带入） ===== -->
+        <!-- ===== 业务 Plugin（system-api/message-api 由 plugin 传递带入） ===== -->
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-system</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-message</artifactId>
         </dependency>
 
         <!-- ===== API 文档 ===== -->
