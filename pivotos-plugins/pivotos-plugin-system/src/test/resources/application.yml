@@ -2,10 +2,6 @@
 # 注意：使用独立测试库 pivotos_test，绝不触碰开发库 pivotos
 
 spring:
-  autoconfigure:
-    # SB4 适配：druid boot4 starter 的自动配置类不在 dynamic-datasource 的排序声明内（上游 4.5.0 仍未适配），
-    # 排除其独立 DataSource 装配，由 dynamic-datasource 的 DruidDynamicDataSourceConfiguration 统一创建连接池
-    exclude: com.alibaba.druid.spring.boot4.autoconfigure.DruidDataSourceAutoConfigure
   datasource:
     dynamic:
       primary: master
