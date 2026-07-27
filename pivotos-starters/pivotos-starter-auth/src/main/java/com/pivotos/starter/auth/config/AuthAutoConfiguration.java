@@ -11,6 +11,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.Ordered;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -21,6 +22,7 @@ import java.util.List;
  * 登录上下文绑定 / 注解鉴权（SaInterceptor）/ 权限数据桥 / 异常统一。
  */
 @AutoConfiguration
+@RestControllerAdvice
 public class AuthAutoConfiguration {
 
     /**
@@ -77,9 +79,10 @@ public class AuthAutoConfiguration {
     }
 
     /**
-     * Sa-Token 异常统一转换
+     * Sa-Token 异常统一转换（注册路径唯一化，同 WebExceptionAutoConfiguration 注释）
      */
     @Bean
+    @ConditionalOnMissingBean(SaTokenExceptionHandler.class)
     public SaTokenExceptionHandler saTokenExceptionHandler() {
         return new SaTokenExceptionHandler();
     }
