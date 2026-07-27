@@ -46,11 +46,17 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-flyway</artifactId>
         </dependency>
+        <!-- Flyway MySQL 方言（flyway-core 由 spring-boot-flyway 传递带入）。
+             持久层底座能力统一由本 Starter 携带，Plugin 只带自己的 db/migration 脚本（S9 消重） -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
 
         <!-- 多数据源（默认单库可跑，P1 多租户/读写分离用） -->
         <dependency>
             <groupId>com.baomidou</groupId>
-            <artifactId>dynamic-datasource-spring-boot3-starter</artifactId>
+            <artifactId>dynamic-datasource-spring-boot4-starter</artifactId>
         </dependency>
 
         <dependency>

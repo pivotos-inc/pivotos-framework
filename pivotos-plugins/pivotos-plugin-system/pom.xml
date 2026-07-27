@@ -56,16 +56,6 @@
             <artifactId>hutool-all</artifactId>
         </dependency>
 
-        <!-- Flyway：版本由 Spring Boot BOM 仲裁，MySQL 必须同时引 flyway-mysql -->
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-mysql</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

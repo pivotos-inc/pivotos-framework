@@ -23,7 +23,9 @@
         <!-- SB4 专属 artifactId，勿用 SB3 旧 starter -->
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <druid.version>1.2.28</druid.version>
-        <dynamic-datasource.version>4.3.1</dynamic-datasource.version>
+        <!-- SB4 专属构件 dynamic-datasource-spring-boot4-starter：4.5.0 起适配 SB4
+             （@AutoConfigureBefore 已覆盖 druid boot4 包名，exclude 规避与 TypeNotPresentException 告警同步消除） -->
+        <dynamic-datasource.version>4.5.0</dynamic-datasource.version>
         <mysql-connector.version>9.7.0</mysql-connector.version>
 
         <!-- ==================== 认证 / 缓存 ==================== -->
@@ -91,7 +93,7 @@
             <!-- ========== dynamic-datasource ========== -->
             <dependency>
                 <groupId>com.baomidou</groupId>
-                <artifactId>dynamic-datasource-spring-boot3-starter</artifactId>
+                <artifactId>dynamic-datasource-spring-boot4-starter</artifactId>
                 <version>${dynamic-datasource.version}</version>
             </dependency>
 
