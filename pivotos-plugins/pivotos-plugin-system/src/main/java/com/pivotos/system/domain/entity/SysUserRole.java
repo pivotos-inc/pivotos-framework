@@ -1,5 +1,7 @@
 package com.pivotos.system.domain.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
@@ -7,6 +9,10 @@ import lombok.Data;
 @Data
 @TableName("sys_user_role")
 public class SysUserRole {
+
+    /** 主键（雪花） */
+    @TableId(type = IdType.ASSIGN_ID)
+    private Long id;
 
     /** 用户ID */
     private Long userId;
