@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -156,26 +157,32 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
         List<RouterVO> roots = new ArrayList<>();
         for (SysMenu menu : menus) {
             if (CommonConstants.TREE_ROOT_ID.equals(menu.getParentId()) || !byId.containsKey(menu.getParentId())) {
-                roots.add(toRouter(menu, byId));
+                roots.add(toRouter(menu, byId, ""));
             }
         }
         return roots;
     }
 
-    private RouterVO toRouter(SysMenu menu, Map<Long, SysMenu> byId) {
+    private RouterVO toRouter(SysMenu menu, Map<Long, SysMenu> byId, String parentPath) {
         RouterVO router = new RouterVO();
         router.setPath(menu.getPath());
-        router.setName(toRouteName(menu.getPath()));
+        // 全路径路由名：不同目录下的同名叶子（如 system/user 与 message/user）name 必须唯一，
+        // 否则 vue-router 同名覆盖导致先注册的路由 404（S13 验收实测踩坑）
+        String fullPath = menu.getPath().startsWith("/")
+                ? menu.getPath()
+                : parentPath + "/" + menu.getPath();
+        router.setName(toRouteName(fullPath));
         router.setComponent(TYPE_DIR.equals(menu.getMenuType()) ? "Layout" : menu.getComponent());
         router.setHidden(Objects.equals(CommonStatusEnum.DISABLED.getValue(), menu.getVisible()));
         RouterVO.Meta meta = new RouterVO.Meta();
         meta.setTitle(menu.getMenuName());
         meta.setIcon(menu.getIcon());
         router.setMeta(meta);
+        final String currentPath = fullPath;
         List<RouterVO> children = byId.values().stream()
                 .filter(m -> Objects.equals(m.getParentId(), menu.getId()))
                 .sorted(Comparator.comparing(SysMenu::getSort, Comparator.nullsLast(Integer::compareTo)))
-                .map(m -> toRouter(m, byId))
+                .map(m -> toRouter(m, byId, currentPath))
                 .toList();
         if (!children.isEmpty()) {
             router.setChildren(children);
@@ -183,13 +190,16 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
         return router;
     }
 
-    /** 路由名：路径转大驼峰（如 user → User，/system → System） */
-    private String toRouteName(String path) {
-        if (!StringUtils.hasText(path)) {
+    /** 路由名：全路径分段大驼峰拼接（如 /system/user → SystemUser），全局唯一 */
+    private String toRouteName(String fullPath) {
+        if (!StringUtils.hasText(fullPath)) {
             return "";
         }
-        String clean = path.startsWith("/") ? path.substring(1) : path;
-        return StringUtils.capitalize(clean.replace("/", "_"));
+        String clean = fullPath.startsWith("/") ? fullPath.substring(1) : fullPath;
+        return Arrays.stream(clean.split("/"))
+                .filter(StringUtils::hasText)
+                .map(StringUtils::capitalize)
+                .collect(Collectors.joining());
     }
 
     /** 平铺菜单 VO → 树 */
