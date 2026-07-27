@@ -50,6 +50,8 @@ public class MessageServiceImpl extends ServiceImpl<MsgMessageMapper, MsgMessage
     private final TemplateService templateService;
     private final IUserFacade userFacade;
     private final ApplicationEventPublisher eventPublisher;
+    /** 外发渠道集合（Spring 自动注入全部 MessageChannel 实现，站内信不在其中） */
+    private final List<com.pivotos.message.channel.MessageChannel> outboundChannels;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -113,6 +115,13 @@ public class MessageServiceImpl extends ServiceImpl<MsgMessageMapper, MsgMessage
                 return row;
             }).toList();
             rows.forEach(userMessageMapper::insert);
+        } else {
+            // 外发渠道（sms/email…）：按渠道标识路由到对应 MessageChannel 实现
+            outboundChannels.stream()
+                    .filter(c -> c.channel() == channelEnum)
+                    .findFirst()
+                    .orElseThrow(() -> new ServiceException(MessageErrorCode.CHANNEL_UNSUPPORTED))
+                    .dispatch(message, validIds);
         }
 
         // 5. 发布事件（移动端推送 Starter 后续消费）
