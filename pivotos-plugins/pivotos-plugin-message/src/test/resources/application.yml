@@ -1,0 +1,31 @@
+# message 插件集成测试配置：连接本地中间件（与 S1 环境一致）
+# 注意：使用插件独立测试库 test_message（Flyway 历史与 system 等插件隔离），绝不触碰开发库 pivotos
+
+spring:
+  datasource:
+    dynamic:
+      primary: master
+      datasource:
+        master:
+          url: jdbc:mysql://192.168.50.10:3306/test_message?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          username: root
+          password: mysql_PBM2cc
+          driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: 192.168.50.10
+      port: 6379
+      password: redis_xrC48x
+      timeout: 5s
+
+sa-token:
+  token-name: Authorization
+  timeout: 3600
+  is-print: false
+
+# Flyway：先执行测试夹具（最小 sys_menu 宿主表），再执行插件正式迁移
+spring.flyway.locations: classpath:db/testfixture,classpath:db/migration
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
