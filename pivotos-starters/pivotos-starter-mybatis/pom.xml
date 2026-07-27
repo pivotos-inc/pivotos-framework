@@ -41,6 +41,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- SB4 模块化：Flyway 自动配置独立成模块，flyway-core 本身不含装配类 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-flyway</artifactId>
+        </dependency>
+
         <!-- 多数据源（默认单库可跑，P1 多租户/读写分离用） -->
         <dependency>
             <groupId>com.baomidou</groupId>
