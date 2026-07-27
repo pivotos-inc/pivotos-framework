@@ -1,0 +1,29 @@
+spring:
+  datasource:
+    dynamic:
+      primary: master
+      datasource:
+        master:
+          # 开发库 pivotos；账号密码按你本地 MySQL 实际修改（与 S1 docker-compose.dev.yml 一致）
+          url: jdbc:mysql://192.168.50.10:3306/pivotos?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          username: root
+          password: mysql_PBM2cc
+          driver-class-name: com.mysql.cj.jdbc.Driver
+      druid:
+        initial-size: 5
+        min-idle: 5
+        max-active: 20
+  data:
+    redis:
+      host: 192.168.50.10
+      port: 6379
+      password: redis_xrC48x
+      timeout: 5s
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+logging:
+  level:
+    com.pivotos: debug

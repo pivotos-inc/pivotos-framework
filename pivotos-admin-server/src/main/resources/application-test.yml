@@ -1,0 +1,21 @@
+# 部署态测试环境（区别于 S7 的集成测试库方案；CI/测试机部署用）
+spring:
+  datasource:
+    dynamic:
+      primary: master
+      datasource:
+        master:
+          url: jdbc:mysql://${MYSQL_HOST:192.168.50.10}:3306/pivotos_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          username: ${MYSQL_USER:root}
+          password: ${MYSQL_PASSWORD:mysql_PBM2cc}
+          driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:192.168.50.10}
+      port: 6379
+      password: ${REDIS_PASSWORD:redis_xrC48x}
+      timeout: 5s
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl

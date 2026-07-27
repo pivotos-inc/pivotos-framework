@@ -16,12 +16,7 @@
         <module>pivotos-commons</module>
         <module>pivotos-starters</module>
         <module>pivotos-plugins</module>
-        <!-- 后续会话逐步加入：
-        <module>pivotos-commons</module>
-        <module>pivotos-starters</module>
-        <module>pivotos-plugins</module>
         <module>pivotos-admin-server</module>
-        -->
     </modules>
 
     <properties>

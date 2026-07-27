@@ -1,0 +1,40 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: pivotos-admin-server
+  profiles:
+    active: dev
+  autoconfigure:
+    # 【S7 坑 4 · 必做】druid boot4 starter 的自动配置类不在 dynamic-datasource 的排序声明内，
+    # 不排除会在单体启动时原样复现 "Failed to determine suitable jdbc url"
+    exclude: com.alibaba.druid.spring.boot4.autoconfigure.DruidDataSourceAutoConfigure
+
+  # Flyway：脚本在各 Plugin 自己的 jar 内 db/migration/，classpath 扫描会跨 jar 合并
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    validate-on-migrate: true
+
+sa-token:
+  token-name: Authorization
+  timeout: 86400
+  is-print: false
+  is-log: false
+
+mybatis-plus:
+  global-config:
+    banner: false
+
+# API 文档
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /doc.html
+  default-flat-param-object: true
+
+# PivotOS 自定义配置
+pivotos:
+  deploy-mode: monolith
