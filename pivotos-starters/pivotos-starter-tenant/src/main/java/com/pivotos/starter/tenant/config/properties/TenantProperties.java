@@ -24,6 +24,7 @@ public class TenantProperties {
             "sys_dept", "sys_post", "sys_user", "sys_role", "sys_menu",
             "sys_user_role", "sys_user_post", "sys_role_menu",
             "sys_dict_type", "sys_dict_data", "sys_config",
+            "sys_social_user",
             "flyway_schema_history");
 
     /** 总开关（条件装配锚点），默认关闭 */
@@ -42,7 +43,8 @@ public class TenantProperties {
     private List<String> ignoreTables = new ArrayList<>();
 
     /** 不绑定租户上下文的接口（Ant 风格，如登录、平台管理接口） */
-    private List<String> ignoreUrls = new ArrayList<>(List.of("/system/auth/login", "/system/auth/logout"));
+    private List<String> ignoreUrls = new ArrayList<>(List.of("/system/auth/login", "/system/auth/logout",
+            "/app/auth/login", "/mini/auth/login", "/mini/auth/phone", "/mini/auth/bind"));
 
     /** 严格模式：true 时启用后解析不到租户 → 403 拒绝（SaaS 强隔离场景） */
     private boolean strict = false;
