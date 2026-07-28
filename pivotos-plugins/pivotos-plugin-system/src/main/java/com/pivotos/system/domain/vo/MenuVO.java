@@ -32,6 +32,9 @@ public class MenuVO extends BaseDTO {
     /** 图标 */
     private String icon;
 
+    /** 可见端（pc/app/mini 逗号分隔） */
+    private String device;
+
     /** 显示顺序 */
     private Integer sort;
 

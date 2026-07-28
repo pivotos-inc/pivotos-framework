@@ -1,5 +1,6 @@
 package com.pivotos.system.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.pivotos.common.core.constant.CommonConstants;
@@ -15,6 +16,7 @@ import com.pivotos.system.domain.entity.SysRoleMenu;
 import com.pivotos.system.domain.entity.SysUserRole;
 import com.pivotos.system.domain.vo.MenuVO;
 import com.pivotos.system.domain.vo.RouterVO;
+import com.pivotos.system.domain.vo.WorkbenchItemVO;
 import com.pivotos.system.mapper.SysMenuMapper;
 import com.pivotos.system.mapper.SysRoleMenuMapper;
 import com.pivotos.system.mapper.SysUserRoleMapper;
@@ -127,6 +129,36 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
         return buildRouterTree(menus);
     }
 
+    @Override
+    public List<WorkbenchItemVO> listWorkbenchItems(Long userId, String device) {
+        LambdaQueryWrapper<SysMenu> wrapper = Wrappers.<SysMenu>lambdaQuery()
+                .eq(SysMenu::getMenuType, TYPE_MENU)
+                .eq(SysMenu::getStatus, CommonStatusEnum.ENABLED.getValue())
+                .eq(SysMenu::getVisible, CommonStatusEnum.ENABLED.getValue())
+                // device 逗号分隔多值，模糊匹配（app / mini 调用方各传各的）
+                .like(SysMenu::getDevice, device)
+                .orderByAsc(SysMenu::getSort);
+        List<SysMenu> menus;
+        if (roleService.isSuperAdmin(userId)) {
+            menus = list(wrapper);
+        } else {
+            List<Long> menuIds = listMenuIdsByUserId(userId);
+            if (menuIds.isEmpty()) {
+                return List.of();
+            }
+            menus = list(wrapper.in(SysMenu::getId, menuIds));
+        }
+        return menus.stream().map(m -> {
+            WorkbenchItemVO vo = new WorkbenchItemVO();
+            vo.setId(m.getId());
+            vo.setMenuName(m.getMenuName());
+            vo.setIcon(m.getIcon());
+            vo.setPath(m.getPath());
+            vo.setSort(m.getSort());
+            return vo;
+        }).toList();
+    }
+
     /** 用户经 角色→菜单 链路可见的菜单ID集合 */
     private List<Long> listMenuIdsByUserId(Long userId) {
         List<Long> roleIds = userRoleMapper.selectList(Wrappers.<SysUserRole>lambdaQuery()
@@ -140,12 +172,14 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
                 .stream().map(SysRoleMenu::getMenuId).distinct().toList();
     }
 
-    /** 路由查询条件：M/C 类型、正常状态、按父ID与排序 */
+    /** 路由查询条件：M/C 类型、正常状态、仅 PC 端可见、按父ID与排序 */
     private com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysMenu> routeWrapper(List<Long> menuIds) {
         return Wrappers.<SysMenu>lambdaQuery()
                 .in(menuIds != null, SysMenu::getId, menuIds)
                 .in(SysMenu::getMenuType, TYPE_DIR, TYPE_MENU)
                 .eq(SysMenu::getStatus, CommonStatusEnum.ENABLED.getValue())
+                // 移动端专属菜单（device 不含 pc）不下发 PC 路由
+                .like(SysMenu::getDevice, "pc")
                 .orderByAsc(SysMenu::getParentId)
                 .orderByAsc(SysMenu::getSort);
     }
