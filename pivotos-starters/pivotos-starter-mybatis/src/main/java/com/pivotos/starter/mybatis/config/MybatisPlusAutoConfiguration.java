@@ -12,7 +12,9 @@ import com.pivotos.starter.mybatis.crypto.FieldEncryptCrypto;
 import com.pivotos.starter.mybatis.handler.AuditMetaObjectHandler;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.LongValue;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.util.StringUtils;
@@ -34,15 +36,14 @@ public class MybatisPlusAutoConfiguration {
     }
 
     /**
-     * MP 插件链。顺序约定：租户 → 分页 → 乐观锁 → 防全表更新
+     * 默认租户行级处理器：TenantContext 未绑定（单租户模式）时所有表放行。
+     * 抽为可替换 Bean（装配点）：P1 tenant Starter 在 column 模式下注册增强实现
+     * （ignore-tables 等）自动替换本默认实现，业务代码 0 改动。
      */
     @Bean
-    public MybatisPlusInterceptor mybatisPlusInterceptor(MybatisProperties properties) {
-        MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
-
-        // 租户行级过滤：未绑定租户上下文时全表放行（单租户模式 0 改动）
-        TenantLineInnerInterceptor tenantInterceptor = new TenantLineInnerInterceptor();
-        tenantInterceptor.setTenantLineHandler(new TenantLineHandler() {
+    @ConditionalOnMissingBean(TenantLineHandler.class)
+    public TenantLineHandler tenantLineHandler(MybatisProperties properties) {
+        return new TenantLineHandler() {
             @Override
             public Expression getTenantId() {
                 Long tenantId = TenantContext.get();
@@ -59,7 +60,21 @@ public class MybatisPlusAutoConfiguration {
                 // 默认策略：无租户上下文 → 不过滤任何表
                 return TenantContext.get() == null;
             }
-        });
+        };
+    }
+
+    /**
+     * MP 插件链。顺序约定：租户 → 分页 → 乐观锁 → 防全表更新。
+     * TenantLineHandler 经 ObjectProvider 延迟解析（历史经验：跨自动配置禁用
+     * @ConditionalOnBean 直接注入，装配顺序敏感）。
+     */
+    @Bean
+    public MybatisPlusInterceptor mybatisPlusInterceptor(ObjectProvider<TenantLineHandler> tenantLineHandlerProvider) {
+        MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+
+        // 租户行级过滤：handler 可被 tenant Starter 增强替换；未绑定租户上下文时全表放行（单租户模式 0 改动）
+        TenantLineInnerInterceptor tenantInterceptor = new TenantLineInnerInterceptor();
+        tenantInterceptor.setTenantLineHandler(tenantLineHandlerProvider.getObject());
         interceptor.addInnerInterceptor(tenantInterceptor);
 
         // 分页（单页上限与 PageQuery 对齐）
