@@ -38,7 +38,7 @@ pivotos:
 | `mode` | `column` | 隔离模式：`column` / `schema` / `datasource` |
 | `header-name` | `X-Tenant-Id` | 请求头租户解析来源 |
 | `ignore-tables` | `[]` | 追加的行级过滤忽略表（与内置 sys_* + flyway_schema_history 取并集） |
-| `ignore-urls` | `[/auth/login, /auth/logout]` | 不绑定租户上下文的接口（Ant 风格） |
+| `ignore-urls` | `[/system/auth/login, /system/auth/logout]` | 不绑定租户上下文的接口（Ant 风格） |
 | `strict` | `false` | `true` 时解析不到租户 → 403（code 1003） |
 | `schema-map` | `{}` | schema 模式：租户 ID → 数据源 key |
 | `datasource-map` | `{}` | datasource 模式：租户 ID → 数据源 key |
