@@ -21,6 +21,7 @@
         <module>pivotos-starter-redis</module>
         <module>pivotos-starter-mybatis</module>
         <module>pivotos-starter-auth</module>
+        <module>pivotos-starter-tenant</module>
     </modules>
 
     <dependencyManagement>
