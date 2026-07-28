@@ -42,6 +42,11 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-auth</artifactId>
         </dependency>
+        <!-- tenant Starter：默认关闭（pivotos.tenant.enabled 不写=单租户），装配开关验证对象 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-tenant</artifactId>
+        </dependency>
 
         <!-- ===== 业务 Plugin（system-api/message-api 由 plugin 传递带入） ===== -->
         <dependency>
