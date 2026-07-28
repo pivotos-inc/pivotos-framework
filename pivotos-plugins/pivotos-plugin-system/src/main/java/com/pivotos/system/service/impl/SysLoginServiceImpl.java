@@ -1,9 +1,11 @@
 package com.pivotos.system.service.impl;
 
+import cn.dev33.satoken.stp.StpLogic;
 import cn.hutool.crypto.digest.BCrypt;
 import com.pivotos.common.api.context.LoginUser;
 import com.pivotos.common.core.enums.CommonStatusEnum;
 import com.pivotos.common.core.exception.ServiceException;
+import com.pivotos.starter.auth.account.StpAppUtil;
 import com.pivotos.starter.auth.account.StpSysUtil;
 import com.pivotos.starter.auth.support.AuthSessionHolder;
 import com.pivotos.starter.core.context.LoginContext;
@@ -36,18 +38,12 @@ public class SysLoginServiceImpl implements SysLoginService {
 
     @Override
     public LoginVO login(LoginBody body) {
-        SysUser user = userService.getByUsername(body.getUsername());
-        // 用户不存在与密码错误统一报 2001，不泄露账号是否存在
-        if (user == null || !BCrypt.checkpw(body.getPassword(), user.getPassword())) {
-            throw new ServiceException(SystemErrorCode.LOGIN_FAILED);
-        }
-        if (!Objects.equals(CommonStatusEnum.ENABLED.getValue(), user.getStatus())) {
-            throw new ServiceException(SystemErrorCode.USER_DISABLED);
-        }
-        String token = StpSysUtil.login(user.getId());
-        AuthSessionHolder.saveLoginUser(StpSysUtil.STP,
-                new LoginUser(user.getId(), user.getUsername(), StpSysUtil.TYPE, null));
-        return new LoginVO(token);
+        return doLogin(body, StpSysUtil.STP, StpSysUtil.TYPE);
+    }
+
+    @Override
+    public LoginVO appLogin(LoginBody body) {
+        return doLogin(body, StpAppUtil.STP, StpAppUtil.TYPE);
     }
 
     @Override
@@ -66,5 +62,28 @@ public class SysLoginServiceImpl implements SysLoginService {
     @Override
     public void logout() {
         StpSysUtil.logout();
+    }
+
+    @Override
+    public void appLogout() {
+        StpAppUtil.logout();
+    }
+
+    /**
+     * 账密登录主流程：同一 sys_user 用户库，按账号体系发隔离 Token。
+     * 用户不存在与密码错误统一报 2001，不泄露账号是否存在。
+     */
+    private LoginVO doLogin(LoginBody body, StpLogic stpLogic, String loginType) {
+        SysUser user = userService.getByUsername(body.getUsername());
+        if (user == null || !BCrypt.checkpw(body.getPassword(), user.getPassword())) {
+            throw new ServiceException(SystemErrorCode.LOGIN_FAILED);
+        }
+        if (!Objects.equals(CommonStatusEnum.ENABLED.getValue(), user.getStatus())) {
+            throw new ServiceException(SystemErrorCode.USER_DISABLED);
+        }
+        stpLogic.login(user.getId());
+        AuthSessionHolder.saveLoginUser(stpLogic,
+                new LoginUser(user.getId(), user.getUsername(), loginType, null));
+        return new LoginVO(stpLogic.getTokenValue());
     }
 }
