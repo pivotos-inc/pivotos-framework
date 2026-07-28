@@ -20,6 +20,8 @@
         <module>pivotos-plugin-system</module>
         <module>pivotos-plugin-message-api</module>
         <module>pivotos-plugin-message</module>
+        <module>pivotos-plugin-file-api</module>
+        <module>pivotos-plugin-file</module>
     </modules>
 
     <dependencyManagement>
