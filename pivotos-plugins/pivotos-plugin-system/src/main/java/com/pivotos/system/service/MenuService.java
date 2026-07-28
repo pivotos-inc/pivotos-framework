@@ -6,6 +6,7 @@ import com.pivotos.system.domain.dto.MenuSaveRequest;
 import com.pivotos.system.domain.entity.SysMenu;
 import com.pivotos.system.domain.vo.MenuVO;
 import com.pivotos.system.domain.vo.RouterVO;
+import com.pivotos.system.domain.vo.WorkbenchItemVO;
 
 import java.util.List;
 
@@ -30,6 +31,9 @@ public interface MenuService extends IService<SysMenu> {
     /** 查询用户权限标识集合（超管返回 ["*:*:*"]） */
     List<String> listPermsByUserId(Long userId);
 
-    /** 查询用户动态路由（M/C 类型菜单树，超管全量） */
+    /** 查询用户动态路由（M/C 类型菜单树，超管全量；仅 PC 端可见菜单） */
     List<RouterVO> listRoutersByUserId(Long userId);
+
+    /** 查询用户移动端工作台宫格（C 类型平铺，按 device 过滤，超管全量） */
+    List<WorkbenchItemVO> listWorkbenchItems(Long userId, String device);
 }

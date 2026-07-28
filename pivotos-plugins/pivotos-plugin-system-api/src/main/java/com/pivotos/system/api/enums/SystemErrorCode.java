@@ -11,6 +11,7 @@ import com.pivotos.common.core.enums.error.ErrorCode;
  *   <li>2020-2039 角色与菜单</li>
  *   <li>2040-2059 部门</li>
  *   <li>2060-2079 字典与参数</li>
+ *   <li>2080-2099 三方社交登录</li>
  * </ul>
  */
 public enum SystemErrorCode implements ErrorCode {
@@ -43,7 +44,13 @@ public enum SystemErrorCode implements ErrorCode {
     DICT_DATA_NOT_FOUND(2062, "字典数据不存在"),
     CONFIG_KEY_EXISTS(2070, "参数键名已存在"),
     CONFIG_NOT_FOUND(2071, "参数不存在"),
-    CONFIG_BUILTIN_FORBIDDEN(2072, "系统内置参数不允许删除");
+    CONFIG_BUILTIN_FORBIDDEN(2072, "系统内置参数不允许删除"),
+
+    // ---------- 三方社交登录 ----------
+    SOCIAL_NOT_CONFIGURED(2080, "小程序登录未配置，请联系管理员"),
+    SOCIAL_CODE_INVALID(2081, "微信授权码无效或已过期，请重试"),
+    SOCIAL_API_FAILED(2082, "微信接口调用失败，请稍后重试"),
+    SOCIAL_ALREADY_BOUND(2083, "该微信已绑定其他账号");
 
     private final int code;
     private final String msg;

@@ -35,6 +35,9 @@ public class MenuSaveRequest {
     /** 图标 */
     private String icon;
 
+    /** 可见端（pc/app/mini 逗号分隔，留空默认 pc） */
+    private String device;
+
     /** 显示顺序 */
     private Integer sort;
 
