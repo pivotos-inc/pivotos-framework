@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>0.5.0</version>
+        <version>1.0.0</version>
     </parent>
 
     <artifactId>pivotos-admin-server</artifactId>
@@ -42,11 +42,24 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-auth</artifactId>
         </dependency>
+        <!-- tenant Starter：默认关闭（pivotos.tenant.enabled 不写=单租户），装配开关验证对象 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-tenant</artifactId>
+        </dependency>
 
-        <!-- ===== 业务 Plugin（system-api 由 plugin 传递带入） ===== -->
+        <!-- ===== 业务 Plugin（system-api/message-api 由 plugin 传递带入） ===== -->
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-system</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-message</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-file</artifactId>
         </dependency>
 
         <!-- ===== API 文档 ===== -->

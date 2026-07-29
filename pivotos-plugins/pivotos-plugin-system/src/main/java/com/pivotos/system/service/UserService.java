@@ -3,6 +3,8 @@ package com.pivotos.system.service;
 import com.baomidou.mybatisplus.spring.service.IService;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.system.domain.dto.ResetPasswordBody;
+import com.pivotos.system.domain.dto.ChangePasswordBody;
+import com.pivotos.system.domain.dto.ProfileUpdateRequest;
 import com.pivotos.system.domain.dto.UserQuery;
 import com.pivotos.system.domain.dto.UserSaveRequest;
 import com.pivotos.system.domain.entity.SysUser;
@@ -31,4 +33,10 @@ public interface UserService extends IService<SysUser> {
 
     /** 按用户名查询实体（登录专用，返回含密码的完整实体） */
     SysUser getByUsername(String username);
+
+    /** 修改本人资料（昵称/头像/邮箱/手机号，null 字段不动） */
+    void updateProfile(Long userId, ProfileUpdateRequest request);
+
+    /** 修改本人密码（旧密码校验通过才允许重置） */
+    void changePassword(Long userId, ChangePasswordBody body);
 }

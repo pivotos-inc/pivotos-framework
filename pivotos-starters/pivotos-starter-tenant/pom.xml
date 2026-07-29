@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-starters</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>pivotos-starter-tenant</artifactId>
+
+    <name>pivotos-starter-tenant</name>
+    <description>多租户技术底座：字段/schema/datasource 三模式隔离 + 租户上下文绑定（默认关闭）</description>
+
+    <dependencies>
+        <!-- 依赖约定（S14 设计评审 D2）：starter-mybatis + starter-core，不反向依赖 auth -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-mybatis</artifactId>
+        </dependency>
+
+        <!-- Web 能力标记 optional：下游是 Web 应用时 TenantContextFilter 才装配（同 starter-core 惯例） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <!-- 测试 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

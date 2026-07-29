@@ -1,5 +1,6 @@
 package com.pivotos.system.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.pivotos.common.core.constant.CommonConstants;
@@ -15,6 +16,7 @@ import com.pivotos.system.domain.entity.SysRoleMenu;
 import com.pivotos.system.domain.entity.SysUserRole;
 import com.pivotos.system.domain.vo.MenuVO;
 import com.pivotos.system.domain.vo.RouterVO;
+import com.pivotos.system.domain.vo.WorkbenchItemVO;
 import com.pivotos.system.mapper.SysMenuMapper;
 import com.pivotos.system.mapper.SysRoleMenuMapper;
 import com.pivotos.system.mapper.SysUserRoleMapper;
@@ -25,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -126,6 +129,36 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
         return buildRouterTree(menus);
     }
 
+    @Override
+    public List<WorkbenchItemVO> listWorkbenchItems(Long userId, String device) {
+        LambdaQueryWrapper<SysMenu> wrapper = Wrappers.<SysMenu>lambdaQuery()
+                .eq(SysMenu::getMenuType, TYPE_MENU)
+                .eq(SysMenu::getStatus, CommonStatusEnum.ENABLED.getValue())
+                .eq(SysMenu::getVisible, CommonStatusEnum.ENABLED.getValue())
+                // device 逗号分隔多值，模糊匹配（app / mini 调用方各传各的）
+                .like(SysMenu::getDevice, device)
+                .orderByAsc(SysMenu::getSort);
+        List<SysMenu> menus;
+        if (roleService.isSuperAdmin(userId)) {
+            menus = list(wrapper);
+        } else {
+            List<Long> menuIds = listMenuIdsByUserId(userId);
+            if (menuIds.isEmpty()) {
+                return List.of();
+            }
+            menus = list(wrapper.in(SysMenu::getId, menuIds));
+        }
+        return menus.stream().map(m -> {
+            WorkbenchItemVO vo = new WorkbenchItemVO();
+            vo.setId(m.getId());
+            vo.setMenuName(m.getMenuName());
+            vo.setIcon(m.getIcon());
+            vo.setPath(m.getPath());
+            vo.setSort(m.getSort());
+            return vo;
+        }).toList();
+    }
+
     /** 用户经 角色→菜单 链路可见的菜单ID集合 */
     private List<Long> listMenuIdsByUserId(Long userId) {
         List<Long> roleIds = userRoleMapper.selectList(Wrappers.<SysUserRole>lambdaQuery()
@@ -139,12 +172,14 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
                 .stream().map(SysRoleMenu::getMenuId).distinct().toList();
     }
 
-    /** 路由查询条件：M/C 类型、正常状态、按父ID与排序 */
+    /** 路由查询条件：M/C 类型、正常状态、仅 PC 端可见、按父ID与排序 */
     private com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysMenu> routeWrapper(List<Long> menuIds) {
         return Wrappers.<SysMenu>lambdaQuery()
                 .in(menuIds != null, SysMenu::getId, menuIds)
                 .in(SysMenu::getMenuType, TYPE_DIR, TYPE_MENU)
                 .eq(SysMenu::getStatus, CommonStatusEnum.ENABLED.getValue())
+                // 移动端专属菜单（device 不含 pc）不下发 PC 路由
+                .like(SysMenu::getDevice, "pc")
                 .orderByAsc(SysMenu::getParentId)
                 .orderByAsc(SysMenu::getSort);
     }
@@ -156,26 +191,32 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
         List<RouterVO> roots = new ArrayList<>();
         for (SysMenu menu : menus) {
             if (CommonConstants.TREE_ROOT_ID.equals(menu.getParentId()) || !byId.containsKey(menu.getParentId())) {
-                roots.add(toRouter(menu, byId));
+                roots.add(toRouter(menu, byId, ""));
             }
         }
         return roots;
     }
 
-    private RouterVO toRouter(SysMenu menu, Map<Long, SysMenu> byId) {
+    private RouterVO toRouter(SysMenu menu, Map<Long, SysMenu> byId, String parentPath) {
         RouterVO router = new RouterVO();
         router.setPath(menu.getPath());
-        router.setName(toRouteName(menu.getPath()));
+        // 全路径路由名：不同目录下的同名叶子（如 system/user 与 message/user）name 必须唯一，
+        // 否则 vue-router 同名覆盖导致先注册的路由 404（S13 验收实测踩坑）
+        String fullPath = menu.getPath().startsWith("/")
+                ? menu.getPath()
+                : parentPath + "/" + menu.getPath();
+        router.setName(toRouteName(fullPath));
         router.setComponent(TYPE_DIR.equals(menu.getMenuType()) ? "Layout" : menu.getComponent());
         router.setHidden(Objects.equals(CommonStatusEnum.DISABLED.getValue(), menu.getVisible()));
         RouterVO.Meta meta = new RouterVO.Meta();
         meta.setTitle(menu.getMenuName());
         meta.setIcon(menu.getIcon());
         router.setMeta(meta);
+        final String currentPath = fullPath;
         List<RouterVO> children = byId.values().stream()
                 .filter(m -> Objects.equals(m.getParentId(), menu.getId()))
                 .sorted(Comparator.comparing(SysMenu::getSort, Comparator.nullsLast(Integer::compareTo)))
-                .map(m -> toRouter(m, byId))
+                .map(m -> toRouter(m, byId, currentPath))
                 .toList();
         if (!children.isEmpty()) {
             router.setChildren(children);
@@ -183,13 +224,16 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
         return router;
     }
 
-    /** 路由名：路径转大驼峰（如 user → User，/system → System） */
-    private String toRouteName(String path) {
-        if (!StringUtils.hasText(path)) {
+    /** 路由名：全路径分段大驼峰拼接（如 /system/user → SystemUser），全局唯一 */
+    private String toRouteName(String fullPath) {
+        if (!StringUtils.hasText(fullPath)) {
             return "";
         }
-        String clean = path.startsWith("/") ? path.substring(1) : path;
-        return StringUtils.capitalize(clean.replace("/", "_"));
+        String clean = fullPath.startsWith("/") ? fullPath.substring(1) : fullPath;
+        return Arrays.stream(clean.split("/"))
+                .filter(StringUtils::hasText)
+                .map(StringUtils::capitalize)
+                .collect(Collectors.joining());
     }
 
     /** 平铺菜单 VO → 树 */

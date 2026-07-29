@@ -12,6 +12,8 @@ import com.pivotos.system.api.enums.SystemErrorCode;
 import com.pivotos.system.constant.SystemConstants;
 import com.pivotos.system.convert.UserConvert;
 import com.pivotos.system.domain.dto.ResetPasswordBody;
+import com.pivotos.system.domain.dto.ChangePasswordBody;
+import com.pivotos.system.domain.dto.ProfileUpdateRequest;
 import com.pivotos.system.domain.dto.UserQuery;
 import com.pivotos.system.domain.dto.UserSaveRequest;
 import com.pivotos.system.domain.entity.SysUser;
@@ -111,6 +113,31 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     @Override
     public SysUser getByUsername(String username) {
         return getOne(Wrappers.<SysUser>lambdaQuery().eq(SysUser::getUsername, username));
+    }
+
+    @Override
+    public void updateProfile(Long userId, ProfileUpdateRequest request) {
+        requireUser(userId);
+        SysUser entity = new SysUser();
+        entity.setId(userId);
+        entity.setNickname(request.getNickname());
+        entity.setAvatar(request.getAvatar());
+        entity.setEmail(request.getEmail());
+        entity.setMobile(request.getMobile());
+        // MP updateById 只更新非 null 字段，null 即"不动该列"
+        updateById(entity);
+    }
+
+    @Override
+    public void changePassword(Long userId, ChangePasswordBody body) {
+        SysUser user = requireUser(userId);
+        if (!BCrypt.checkpw(body.getOldPassword(), user.getPassword())) {
+            throw new ServiceException(SystemErrorCode.OLD_PASSWORD_ERROR);
+        }
+        SysUser entity = new SysUser();
+        entity.setId(userId);
+        entity.setPassword(BCrypt.hashpw(body.getNewPassword(), BCrypt.gensalt()));
+        updateById(entity);
     }
 
     /** 查询用户，不存在抛 2004 */

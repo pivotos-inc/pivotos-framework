@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>0.5.0</version>
+        <version>1.0.0</version>
     </parent>
 
     <artifactId>pivotos-dependencies</artifactId>
@@ -47,6 +47,7 @@
         <springdoc.version>3.0.3</springdoc.version>
         <xxl-job.version>3.4.2</xxl-job.version>
         <minio.version>9.0.3</minio.version>
+        <okhttp.version>5.3.2</okhttp.version>
         <aws-sdk-v2.version>2.49.3</aws-sdk-v2.version>
 
         <!-- ==================== 搜索（Easy-ES 锁定 ES 7.17.28） ==================== -->
@@ -198,6 +199,12 @@
                 <artifactId>minio</artifactId>
                 <version>${minio.version}</version>
             </dependency>
+            <!-- minio 9.x 依赖 okhttp 5（KMP 元数据包），Maven 必须显式引 okhttp-jvm 才有真实类 -->
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>okhttp-jvm</artifactId>
+                <version>${okhttp.version}</version>
+            </dependency>
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>s3</artifactId>
@@ -274,12 +281,37 @@
             </dependency>
             <dependency>
                 <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-tenant</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-plugin-system-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-plugin-system</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-message-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-message</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-file-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-file</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

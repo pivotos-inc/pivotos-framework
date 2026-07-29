@@ -27,3 +27,11 @@ mybatis-plus:
 logging:
   level:
     com.pivotos: debug
+
+pivotos:
+  file:
+    endpoint: http://192.168.50.10:9000
+    access-key: minio_bw4463
+    secret-key: minio_dSBYhi
+    bucket: huweilong
+    # public-url 缺省回落 endpoint（内网直连场景两者相同）

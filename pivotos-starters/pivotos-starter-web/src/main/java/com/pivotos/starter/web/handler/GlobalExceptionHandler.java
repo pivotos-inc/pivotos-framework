@@ -17,6 +17,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -86,6 +87,15 @@ public class GlobalExceptionHandler {
     public R<Void> handleBadRequest(Exception e) {
         log.warn("请求不合法: {}", e.getMessage());
         return fill(R.fail(GlobalErrorCode.PARAM_INVALID));
+    }
+
+    /**
+     * 静态资源/路由不存在（如直接访问后端地址或 SPA 路由打到 Spring）
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public R<Void> handleNoResourceFound(NoResourceFoundException e) {
+        log.warn("资源不存在: {}", e.getMessage());
+        return fill(R.fail(GlobalErrorCode.NOT_FOUND));
     }
 
     /**

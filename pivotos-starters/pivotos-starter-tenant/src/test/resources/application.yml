@@ -1,0 +1,29 @@
+# tenant Starter 集成测试共享配置：连内网中间件（S1 环境结论）
+# 各 IT 类在 @SpringBootTest(properties) 中指定 primary 库与 pivotos.tenant.* ——
+# column → test_tenant；schema → test_tenant_s1/s2；datasource → test_tenant_d1/d2
+# 独立库隔离 Flyway 历史（历史经验：共享库会互相踩踏），复跑前 jshell 重建
+
+spring:
+  datasource:
+    dynamic:
+      druid:
+        initial-size: 1
+        min-idle: 1
+        max-active: 5
+      datasource:
+        # schema 模式的第二 schema（同实例不同库名）
+        s2:
+          url: jdbc:mysql://192.168.50.10:3306/test_tenant_s2?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          username: root
+          password: mysql_PBM2cc
+          driver-class-name: com.mysql.cj.jdbc.Driver
+        # datasource 模式的第二数据源（测试用同实例不同库模拟独立数据源）
+        d2:
+          url: jdbc:mysql://192.168.50.10:3306/test_tenant_d2?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          username: root
+          password: mysql_PBM2cc
+          driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
