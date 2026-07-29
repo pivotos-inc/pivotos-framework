@@ -5,7 +5,7 @@
 
     <groupId>com.pivotos</groupId>
     <artifactId>pivotos-framework</artifactId>
-    <version>0.5.0</version>
+    <version>1.0.0</version>
     <packaging>pom</packaging>
 
     <name>pivotos-framework</name>
