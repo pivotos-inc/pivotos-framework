@@ -17,6 +17,7 @@ public enum FileErrorCode implements ErrorCode {
     FILENAME_EMPTY(4001, "文件名不能为空"),
     FILE_TYPE_NOT_ALLOWED(4002, "文件类型不允许"),
     PRESIGN_FAILED(4003, "预签名生成失败"),
+    FILE_KEY_EMPTY(4004, "文件标识不能为空"),
 
     // ---------- 存储配置 ----------
     FILE_STORAGE_NOT_CONFIGURED(4020, "文件存储未配置");

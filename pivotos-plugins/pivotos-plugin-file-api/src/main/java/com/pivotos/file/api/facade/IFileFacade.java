@@ -20,4 +20,13 @@ public interface IFileFacade {
      * 由对象键还原访问地址
      */
     String buildFileUrl(String objectKey);
+
+    /**
+     * 为已存储对象生成预签名下载地址（GET，限时有效）。
+     * 适用于私有桶回显：前端拿到限时 URL 直接展示。
+     *
+     * @param objectKeyOrUrl 对象键，或历史落库的完整 fileUrl（统一归一化为对象键）
+     * @return 预签名 GET 访问地址
+     */
+    String presignDownload(String objectKeyOrUrl);
 }

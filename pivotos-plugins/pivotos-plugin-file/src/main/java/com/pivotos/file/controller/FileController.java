@@ -31,4 +31,13 @@ public class FileController {
         }
         return R.ok(fileService.presignUpload(filename));
     }
+
+    /** 预签名下载地址（GET，私有桶回显：key 可传对象键或历史完整 fileUrl） */
+    @GetMapping("/presign-download")
+    public R<String> presignDownload(@RequestParam String key) {
+        if (!LoginContext.isLogin()) {
+            throw new ServiceException(GlobalErrorCode.UNAUTHORIZED);
+        }
+        return R.ok(fileService.presignDownload(key));
+    }
 }
