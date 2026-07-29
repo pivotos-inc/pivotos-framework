@@ -22,4 +22,9 @@ public class FileLocalFacade implements IFileFacade {
     public String buildFileUrl(String objectKey) {
         return fileService.buildFileUrl(objectKey);
     }
+
+    @Override
+    public String presignDownload(String objectKeyOrUrl) {
+        return fileService.presignDownload(objectKeyOrUrl);
+    }
 }

@@ -16,4 +16,11 @@ public interface FileService {
      * 由对象键还原访问地址
      */
     String buildFileUrl(String objectKey);
+
+    /**
+     * 为已存储对象生成预签名下载地址（GET，限时有效，用于私有桶回显）
+     *
+     * @param objectKeyOrUrl 对象键，或历史落库的完整 fileUrl
+     */
+    String presignDownload(String objectKeyOrUrl);
 }

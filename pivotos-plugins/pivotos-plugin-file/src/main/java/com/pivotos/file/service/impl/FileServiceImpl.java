@@ -71,6 +71,55 @@ public class FileServiceImpl implements FileService {
         return properties.effectivePublicUrl() + "/" + properties.getBucket() + "/" + objectKey;
     }
 
+    @Override
+    public String presignDownload(String objectKeyOrUrl) {
+        if (!StringUtils.hasText(objectKeyOrUrl)) {
+            throw new ServiceException(FileErrorCode.FILE_KEY_EMPTY);
+        }
+        MinioClient client = requireClient();
+        String objectKey = normalizeObjectKey(objectKeyOrUrl);
+        try {
+            return client.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
+                    .method(Http.Method.GET)
+                    .bucket(properties.getBucket())
+                    .object(objectKey)
+                    .expiry(properties.getPresignExpireSeconds())
+                    .build());
+        } catch (Exception e) {
+            log.error("[PivotOS] 预签名下载地址生成失败 objectKey={}", objectKey, e);
+            throw new ServiceException(FileErrorCode.PRESIGN_FAILED);
+        }
+    }
+
+    /**
+     * 归一化对象键：兼容历史落库的完整 fileUrl（{publicUrl}/{bucket}/{objectKey}）与裸对象键。
+     */
+    private String normalizeObjectKey(String objectKeyOrUrl) {
+        String value = objectKeyOrUrl.trim();
+        if (value.startsWith("http://") || value.startsWith("https://")) {
+            String bucketPrefix = "/" + properties.getBucket() + "/";
+            int idx = value.indexOf(bucketPrefix);
+            if (idx >= 0) {
+                value = value.substring(idx + bucketPrefix.length());
+            } else {
+                // 兑底：去掉协议与主机，取 path 部分
+                int schemeEnd = value.indexOf("://");
+                int pathStart = value.indexOf('/', schemeEnd + 3);
+                value = pathStart >= 0 ? value.substring(pathStart + 1) : value;
+            }
+        }
+        // 去掉可能携带的查询串（历史 URL 若带签名参数）
+        int q = value.indexOf('?');
+        if (q >= 0) {
+            value = value.substring(0, q);
+        }
+        // 去掉前导斜杠
+        while (value.startsWith("/")) {
+            value = value.substring(1);
+        }
+        return value;
+    }
+
     private MinioClient requireClient() {
         MinioClient client = minioClientProvider.getIfAvailable();
         if (client == null) {
