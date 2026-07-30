@@ -1,0 +1,35 @@
+package com.pivotos.ai.domain.vo;
+
+import com.pivotos.common.api.dto.BaseDTO;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+
+/** 供应商视图对象（管理页） */
+@Data
+@EqualsAndHashCode(callSuper = true)
+public class ProviderVO extends BaseDTO {
+
+    /** 供应商名称 */
+    private String name;
+
+    /** 供应商编码 */
+    private String code;
+
+    /** OpenAI 兼容 base-url */
+    private String baseUrl;
+
+    /** 默认模型 */
+    private String defaultModel;
+
+    /** 排序 */
+    private Integer sort;
+
+    /** 状态（0启用 1停用） */
+    private Integer status;
+
+    /** 备注 */
+    private String remark;
+
+    /** 启用中的 Key 数量（管理页概览） */
+    private Long activeKeyCount;
+}
