@@ -22,6 +22,8 @@
         <module>pivotos-plugin-message</module>
         <module>pivotos-plugin-file-api</module>
         <module>pivotos-plugin-file</module>
+        <module>pivotos-plugin-ai-api</module>
+        <module>pivotos-plugin-ai</module>
     </modules>
 
     <dependencyManagement>
