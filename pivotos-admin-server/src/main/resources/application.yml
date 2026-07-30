@@ -43,3 +43,7 @@ springdoc:
 # PivotOS 自定义配置
 pivotos:
   deploy-mode: monolith
+  mybatis:
+    # 字段加密密钥（AES，16/24/32 位）：ai_api_key.api_key 等 @FieldEncrypt 字段落库加密
+    # dev 默认值恰 16 位仅供本地联调，生产必须用环境变量覆盖
+    field-encrypt-key: ${PIVOTOS_FIELD_ENCRYPT_KEY:pivotos-dev-key!}

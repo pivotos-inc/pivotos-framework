@@ -3,14 +3,18 @@ package com.pivotos.ai.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.pivotos.ai.api.enums.AiErrorCode;
+import com.pivotos.ai.client.AiClientRegistry;
 import com.pivotos.ai.domain.dto.ChatSendRequest;
+import com.pivotos.ai.domain.entity.AiApiKey;
 import com.pivotos.ai.domain.entity.AiChatMessage;
 import com.pivotos.ai.domain.entity.AiConversation;
+import com.pivotos.ai.domain.entity.AiProvider;
 import com.pivotos.ai.domain.vo.ChatMessageVO;
 import com.pivotos.ai.domain.vo.ConversationVO;
 import com.pivotos.ai.mapper.AiChatMessageMapper;
 import com.pivotos.ai.mapper.AiConversationMapper;
 import com.pivotos.ai.service.AiChatService;
+import com.pivotos.ai.service.AiProviderService;
 import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.starter.ai.config.AiProperties;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +24,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
@@ -38,8 +43,10 @@ import java.util.Map;
 /**
  * AI 对话服务实现
  *
- * <p>模型调用经 starter-ai 装配的 ChatClient；未配置 api-key 时 ChatClient 不存在，
- * 端点返回 5020 而非启动失败。流式对话用 Spring AI 的 Flux 桥接 SseEmitter
+ * <p>模型调用优先走后台配置的动态供应商（AiClientRegistry 按供应商×Key 缓存 ChatClient，
+ * 多 Key 轮询分摊，同步调用失败自动换下一 Key 重试一次；流式已发 meta 不重试）；
+ * 未指定供应商且无默认供应商时回落 starter-ai 装配的静态 ChatClient（spring.ai.openai.*），
+ * 再无则端点返回 5020 而非启动失败。流式对话用 Spring AI 的 Flux 桥接 SseEmitter
  * （回调线程由 Reactor/HTTP 客户端调度，非裸线程，不触 A6）；回调线程 LoginContext
  * 已丢失，落库前显式补齐 userId/tenantId/审计时间，绕开自动填充对上下文的依赖。
  */
@@ -54,29 +61,21 @@ public class AiChatServiceImpl implements AiChatService {
 
     private final AiConversationMapper conversationMapper;
     private final AiChatMessageMapper chatMessageMapper;
-    /** ChatClient 可能不存在（api-key 未配置），懒获取 + 5020 兜底 */
+    /** 静态兜底 ChatClient（spring.ai.openai.* 未配置时不存在），懒获取 + 5020 兜底 */
     private final ObjectProvider<ChatClient> chatClientProvider;
     private final AiProperties aiProperties;
     private final Environment environment;
+    private final AiProviderService aiProviderService;
+    private final AiClientRegistry clientRegistry;
 
     @Override
     public ChatMessageVO send(Long userId, ChatSendRequest request) {
-        ChatClient chatClient = requireChatClient();
-        AiConversation conversation = resolveConversation(userId, request);
+        ChatTarget target = resolveTarget(request);
+        AiConversation conversation = resolveConversation(userId, request, target.model());
         List<Message> history = loadHistory(conversation.getId());
         saveMessage(conversation, userId, "user", request.getContent());
 
-        String reply;
-        try {
-            reply = chatClient.prompt()
-                    .messages(history)
-                    .user(request.getContent())
-                    .call()
-                    .content();
-        } catch (Exception e) {
-            log.error("[PivotOS] AI 同步对话失败：conversationId={}", conversation.getId(), e);
-            throw new ServiceException(AiErrorCode.CHAT_FAILED);
-        }
+        String reply = callWithFailover(target, history, request.getContent(), conversation.getId());
 
         AiChatMessage assistant = saveMessage(conversation, userId, "assistant", reply);
         touchConversation(conversation.getId());
@@ -85,8 +84,9 @@ public class AiChatServiceImpl implements AiChatService {
 
     @Override
     public SseEmitter stream(Long userId, ChatSendRequest request) {
-        ChatClient chatClient = requireChatClient();
-        AiConversation conversation = resolveConversation(userId, request);
+        ChatTarget target = resolveTarget(request);
+        ChatClient chatClient = pickClient(target, 0);
+        AiConversation conversation = resolveConversation(userId, request, target.model());
         List<Message> history = loadHistory(conversation.getId());
         AiChatMessage userMessage = saveMessage(conversation, userId, "user", request.getContent());
 
@@ -99,9 +99,8 @@ public class AiChatServiceImpl implements AiChatService {
 
         Long conversationId = conversation.getId();
         StringBuilder answer = new StringBuilder();
-        Flux<String> flux = chatClient.prompt()
-                .messages(history)
-                .user(request.getContent())
+        // 流式已发 meta，失败不换 Key 重试（半途换 Key 会重复输出），直接下发 error 事件
+        Flux<String> flux = buildPrompt(chatClient, target, history, request.getContent())
                 .stream()
                 .content();
         flux.subscribe(
@@ -154,17 +153,88 @@ public class AiChatServiceImpl implements AiChatService {
                 .eq(AiChatMessage::getConversationId, conversationId));
     }
 
-    /** ChatClient 兜底：api-key 未配置时返回 5020 明确提示 */
-    private ChatClient requireChatClient() {
-        ChatClient chatClient = chatClientProvider.getIfAvailable();
-        if (chatClient == null) {
+    /**
+     * 解析调用目标（三级兜底链）：
+     * ① 请求指定 providerId → 校验启用 + 有可用 Key；
+     * ② 未指定 → 默认供应商（启用中 sort 最靠前且有启用 Key 者）；
+     * ③ 无动态供应商 → 静态 ChatClient（spring.ai.openai.*）；再无 → 5020。
+     */
+    private ChatTarget resolveTarget(ChatSendRequest request) {
+        AiProvider provider = request.getProviderId() != null
+                ? aiProviderService.requireActiveProvider(request.getProviderId())
+                : aiProviderService.findDefaultProvider();
+        if (provider != null) {
+            List<AiApiKey> keys = aiProviderService.listActiveKeys(provider.getId());
+            if (keys.isEmpty()) {
+                throw new ServiceException(AiErrorCode.NO_AVAILABLE_KEY);
+            }
+            String model = request.getModel() != null && !request.getModel().isBlank()
+                    ? request.getModel().strip()
+                    : provider.getDefaultModel();
+            int startIndex = clientRegistry.nextKeyIndex(provider.getId(), keys.size());
+            return new ChatTarget(provider, keys, startIndex, model, null);
+        }
+        ChatClient staticClient = chatClientProvider.getIfAvailable();
+        if (staticClient == null) {
             throw new ServiceException(AiErrorCode.AI_NOT_CONFIGURED);
         }
-        return chatClient;
+        return new ChatTarget(null, null, 0,
+                environment.getProperty("spring.ai.openai.chat.options.model", ""), staticClient);
     }
 
-    /** 定位或新建会话（新建时标题取首条消息前 20 字，模型取 Spring AI 标准配置） */
-    private AiConversation resolveConversation(Long userId, ChatSendRequest request) {
+    /** 取第 attempt 次尝试对应的 ChatClient（动态走轮询偏移，静态恒为兜底 client） */
+    private ChatClient pickClient(ChatTarget target, int attempt) {
+        if (!target.dynamic()) {
+            return target.staticClient();
+        }
+        AiApiKey key = target.keys().get((target.startIndex() + attempt) % target.keys().size());
+        return clientRegistry.getChatClient(target.provider(), key);
+    }
+
+    /** 组装 prompt：动态目标按请求/供应商模型覆盖 options（静态 client 用其自带默认模型） */
+    private ChatClient.ChatClientRequestSpec buildPrompt(
+            ChatClient client, ChatTarget target, List<Message> history, String content) {
+        ChatClient.ChatClientRequestSpec spec = client.prompt()
+                .messages(history)
+                .user(content);
+        if (target.dynamic() && target.model() != null && !target.model().isBlank()) {
+            // Spring AI 2.0 options() 收 Builder 本体，内部与 client 默认 options 合并
+            spec = spec.options(OpenAiChatOptions.builder().model(target.model()));
+        }
+        return spec;
+    }
+
+    /** 同步调用：动态目标失败自动换下一 Key 重试一次（单 Key 或静态目标不重试） */
+    private String callWithFailover(ChatTarget target, List<Message> history, String content, Long conversationId) {
+        int attempts = target.dynamic() ? Math.min(2, target.keys().size()) : 1;
+        for (int i = 0; i < attempts; i++) {
+            try {
+                return buildPrompt(pickClient(target, i), target, history, content)
+                        .call()
+                        .content();
+            } catch (Exception e) {
+                boolean lastAttempt = i == attempts - 1;
+                log.error("[PivotOS] AI 同步对话失败：conversationId={} providerId={} 第 {}/{} 次尝试",
+                        conversationId, target.dynamic() ? target.provider().getId() : null,
+                        i + 1, attempts, e);
+                if (lastAttempt) {
+                    throw new ServiceException(AiErrorCode.CHAT_FAILED);
+                }
+            }
+        }
+        throw new ServiceException(AiErrorCode.CHAT_FAILED);
+    }
+
+    /** 调用目标：动态 = 供应商 + 启用 Key 列表 + 轮询起点；静态 = 兜底 ChatClient */
+    private record ChatTarget(AiProvider provider, List<AiApiKey> keys, int startIndex,
+                              String model, ChatClient staticClient) {
+        boolean dynamic() {
+            return provider != null;
+        }
+    }
+
+    /** 定位或新建会话（新建时标题取首条消息前 20 字，模型记本次实际解析结果） */
+    private AiConversation resolveConversation(Long userId, ChatSendRequest request, String model) {
         if (request.getConversationId() != null) {
             return requireOwned(userId, request.getConversationId());
         }
@@ -173,7 +243,7 @@ public class AiChatServiceImpl implements AiChatService {
         String content = request.getContent().strip();
         conversation.setTitle(content.length() > TITLE_MAX_LENGTH
                 ? content.substring(0, TITLE_MAX_LENGTH) : content);
-        conversation.setModel(environment.getProperty("spring.ai.openai.chat.options.model", ""));
+        conversation.setModel(model == null ? "" : model);
         conversationMapper.insert(conversation);
         return conversation;
     }

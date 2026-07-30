@@ -21,7 +21,13 @@ public enum AiErrorCode implements ErrorCode {
     CHAT_FAILED(5003, "AI 对话失败，请稍后重试"),
 
     // ---------- 模型配置 ----------
-    AI_NOT_CONFIGURED(5020, "AI 模型未配置");
+    AI_NOT_CONFIGURED(5020, "AI 模型未配置"),
+    PROVIDER_NOT_FOUND(5021, "AI 供应商不存在或已停用"),
+    NO_AVAILABLE_KEY(5022, "该供应商暂无可用 API Key"),
+    MODEL_LIST_FAILED(5023, "模型列表查询失败，请检查 base-url 与 Key"),
+    PROVIDER_CODE_DUPLICATE(5024, "供应商编码已存在"),
+    API_KEY_NOT_FOUND(5025, "API Key 不存在"),
+    API_KEY_EMPTY(5026, "API Key 不能为空");
 
     private final int code;
     private final String msg;
