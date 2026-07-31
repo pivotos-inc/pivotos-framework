@@ -1,9 +1,9 @@
 spring:
   data:
     redis:
-      host: ${REDIS_HOST:192.168.50.10}
+      host: ${REDIS_HOST:175.24.176.176}
       port: 6379
-      password: ${REDIS_PASSWORD:redis_xrC48x}
+      password: ${REDIS_PASSWORD:redis_wKTrkz}
       timeout: 5s
 
 sa-token:
