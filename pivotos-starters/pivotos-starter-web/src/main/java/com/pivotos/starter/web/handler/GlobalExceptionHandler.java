@@ -7,6 +7,8 @@ import com.pivotos.starter.core.context.TraceContext;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
@@ -25,6 +27,9 @@ import java.util.stream.Collectors;
 /**
  * 全局异常处理器：所有异常统一转换为 R，并回填 traceId。
  * 业务异常抛 ServiceException，未知异常兜底 1500 并记录完整堆栈。
+ * 统一用 ResponseEntity 显式声明 application/json：SSE 端点（Accept:
+ * text/event-stream）流建立前抛异常时，若交给内容协商会因 Accept 无交集
+ * 失败成 500 空 body，前端整包 JSON 回退分支永远拿不到 R.msg（S23 实测）。
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -35,7 +40,7 @@ public class GlobalExceptionHandler {
      * 业务异常
      */
     @ExceptionHandler(ServiceException.class)
-    public R<Void> handleServiceException(ServiceException e) {
+    public ResponseEntity<R<Void>> handleServiceException(ServiceException e) {
         log.warn("业务异常: code={}, msg={}", e.getCode(), e.getMessage());
         return fill(R.fail(e.getCode(), e.getMessage()));
     }
@@ -44,7 +49,7 @@ public class GlobalExceptionHandler {
      * @RequestBody 对象参数校验失败
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public R<Void> handleMethodArgumentNotValid(MethodArgumentNotValidException e) {
+    public ResponseEntity<R<Void>> handleMethodArgumentNotValid(MethodArgumentNotValidException e) {
         String msg = Optional.ofNullable(e.getBindingResult().getFieldError())
                 .map(FieldError::getDefaultMessage)
                 .orElse(GlobalErrorCode.PARAM_INVALID.getMsg());
@@ -55,7 +60,7 @@ public class GlobalExceptionHandler {
      * 表单对象绑定失败
      */
     @ExceptionHandler(BindException.class)
-    public R<Void> handleBindException(BindException e) {
+    public ResponseEntity<R<Void>> handleBindException(BindException e) {
         String msg = e.getBindingResult().getFieldErrors().stream()
                 .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining("；"));
@@ -67,7 +72,7 @@ public class GlobalExceptionHandler {
      * 方法级 @Validated 单参数校验失败
      */
     @ExceptionHandler(ConstraintViolationException.class)
-    public R<Void> handleConstraintViolation(ConstraintViolationException e) {
+    public ResponseEntity<R<Void>> handleConstraintViolation(ConstraintViolationException e) {
         String msg = e.getConstraintViolations().stream()
                 .map(v -> v.getPropertyPath() + " " + v.getMessage())
                 .collect(Collectors.joining("；"));
@@ -84,7 +89,7 @@ public class GlobalExceptionHandler {
             HttpRequestMethodNotSupportedException.class,
             HttpMediaTypeNotSupportedException.class,
             MethodArgumentTypeMismatchException.class})
-    public R<Void> handleBadRequest(Exception e) {
+    public ResponseEntity<R<Void>> handleBadRequest(Exception e) {
         log.warn("请求不合法: {}", e.getMessage());
         return fill(R.fail(GlobalErrorCode.PARAM_INVALID));
     }
@@ -93,7 +98,7 @@ public class GlobalExceptionHandler {
      * 静态资源/路由不存在（如直接访问后端地址或 SPA 路由打到 Spring）
      */
     @ExceptionHandler(NoResourceFoundException.class)
-    public R<Void> handleNoResourceFound(NoResourceFoundException e) {
+    public ResponseEntity<R<Void>> handleNoResourceFound(NoResourceFoundException e) {
         log.warn("资源不存在: {}", e.getMessage());
         return fill(R.fail(GlobalErrorCode.NOT_FOUND));
     }
@@ -102,13 +107,14 @@ public class GlobalExceptionHandler {
      * 未知异常兜底：对外只暴露统一文案，堆栈只进日志
      */
     @ExceptionHandler(Exception.class)
-    public R<Void> handleUnknown(Exception e) {
+    public ResponseEntity<R<Void>> handleUnknown(Exception e) {
         log.error("系统内部错误", e);
         return fill(R.fail(GlobalErrorCode.SYSTEM_ERROR));
     }
 
-    private R<Void> fill(R<Void> r) {
+    private ResponseEntity<R<Void>> fill(R<Void> r) {
         r.setTraceId(TraceContext.get());
-        return r;
+        // 显式 Content-Type 跳过 Accept 协商（SSE 等非 JSON Accept 场景也能拿到 R 体）
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(r);
     }
 }

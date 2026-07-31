@@ -36,7 +36,7 @@ abstract class TenantRoutingITSupport {
     protected abstract String primaryJdbcUrl();
 
     protected static void createFixtureTableIfAbsent(String jdbcUrl) throws Exception {
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, "root", "mysql_PBM2cc");
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, "root", "mysql_DbHEfw");
              Statement st = conn.createStatement()) {
             st.execute("CREATE TABLE IF NOT EXISTS t_tenant_demo ("
                     + "id BIGINT NOT NULL, title VARCHAR(128) NOT NULL,"
@@ -76,7 +76,7 @@ abstract class TenantRoutingITSupport {
     /** 纯 JDBC 直连指定库查询标题（实证数据物理落点） */
     protected List<String> jdbcTitles(String jdbcUrl) throws Exception {
         List<String> titles = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, "root", "mysql_PBM2cc");
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, "root", "mysql_DbHEfw");
              Statement st = conn.createStatement();
              ResultSet rs = st.executeQuery("SELECT title FROM t_tenant_demo")) {
             while (rs.next()) {

@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>1.0.0</version>
+        <version>2.0.0</version>
     </parent>
 
     <artifactId>pivotos-starters</artifactId>
@@ -22,6 +22,7 @@
         <module>pivotos-starter-mybatis</module>
         <module>pivotos-starter-auth</module>
         <module>pivotos-starter-tenant</module>
+        <module>pivotos-starter-ai</module>
     </modules>
 
     <dependencyManagement>
