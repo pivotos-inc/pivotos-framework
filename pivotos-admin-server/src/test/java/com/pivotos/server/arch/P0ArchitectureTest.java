@@ -40,7 +40,8 @@ class P0ArchitectureTest {
     private static final java.util.Map<String, String> TABLE_PREFIX_WHITELIST = java.util.Map.of(
         "pivotos-plugin-system", "sys_",
         "pivotos-plugin-message", "msg_",
-        "pivotos-plugin-ai", "ai_");
+        "pivotos-plugin-ai", "ai_",
+        "pivotos-plugin-file", "sys_");
 
     // ========== A1 + A2：Plugin 实现包之间无编译依赖；跨插件仅可访问对方 api 包 ==========
     // 直接否定式：system 实现包不得依赖任何"其他插件实现包"；其他插件 api 包不在清单内，天然放行。
