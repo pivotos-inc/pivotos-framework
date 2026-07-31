@@ -4,6 +4,8 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.common.core.result.R;
 import com.pivotos.starter.auth.account.StpSysUtil;
+import com.pivotos.system.api.annotation.Log;
+import com.pivotos.system.api.enums.OperType;
 import com.pivotos.system.domain.dto.ResetPasswordBody;
 import com.pivotos.system.domain.dto.UserQuery;
 import com.pivotos.system.domain.dto.UserSaveRequest;
@@ -45,6 +47,7 @@ public class UserController {
     /** 新增 */
     @PostMapping
     @SaCheckPermission(value = "system:user:add", type = StpSysUtil.TYPE)
+    @Log(module = "用户管理", type = OperType.CREATE)
     public R<Long> create(@Validated @RequestBody UserSaveRequest request) {
         return R.ok(userService.createUser(request));
     }
@@ -52,6 +55,7 @@ public class UserController {
     /** 修改 */
     @PutMapping
     @SaCheckPermission(value = "system:user:edit", type = StpSysUtil.TYPE)
+    @Log(module = "用户管理", type = OperType.UPDATE)
     public R<Void> update(@Validated @RequestBody UserSaveRequest request) {
         userService.updateUser(request);
         return R.ok();
@@ -60,14 +64,16 @@ public class UserController {
     /** 删除 */
     @DeleteMapping("/{id}")
     @SaCheckPermission(value = "system:user:remove", type = StpSysUtil.TYPE)
+    @Log(module = "用户管理", type = OperType.DELETE)
     public R<Void> delete(@PathVariable Long id) {
         userService.deleteUser(id);
         return R.ok();
     }
 
-    /** 重置密码 */
+    /** 重置密码（入参含密码，切面脱敏为 ***） */
     @PutMapping("/reset-password")
     @SaCheckPermission(value = "system:user:resetPwd", type = StpSysUtil.TYPE)
+    @Log(module = "用户管理", type = OperType.UPDATE)
     public R<Void> resetPassword(@Validated @RequestBody ResetPasswordBody body) {
         userService.resetPassword(body);
         return R.ok();

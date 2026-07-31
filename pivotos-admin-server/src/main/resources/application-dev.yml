@@ -29,6 +29,9 @@ logging:
     com.pivotos: debug
 
 pivotos:
+  tenant:
+    enabled: true        # 默认 false，不写=单租户
+    mode: column         # column / schema / datasource
   file:
     endpoint: http://175.24.176.176:9000
     access-key: minio_zJfsQb

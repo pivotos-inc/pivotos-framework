@@ -1,0 +1,33 @@
+package com.pivotos.system.domain.entity;
+
+import com.baomidou.mybatisplus.annotation.TableName;
+import com.pivotos.starter.mybatis.domain.BaseDO;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+
+import java.time.LocalDateTime;
+
+/** 通知公告实体（独立于 message 站内信，平台共享表） */
+@Data
+@EqualsAndHashCode(callSuper = true)
+@TableName("sys_notice")
+public class SysNotice extends BaseDO {
+
+    /** 公告标题 */
+    private String title;
+
+    /** 类型（1通知 2公告） */
+    private Integer noticeType;
+
+    /** 富文本内容（HTML） */
+    private String content;
+
+    /** 状态（0草稿 1已发布 2已撤回） */
+    private Integer status;
+
+    /** 发布时间 */
+    private LocalDateTime publishTime;
+
+    /** 备注 */
+    private String remark;
+}

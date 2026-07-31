@@ -16,6 +16,7 @@ import com.pivotos.system.domain.dto.LoginBody;
 import com.pivotos.system.domain.entity.SysUser;
 import com.pivotos.system.domain.vo.LoginVO;
 import com.pivotos.system.domain.vo.UserInfoVO;
+import com.pivotos.system.service.LoginLogService;
 import com.pivotos.system.service.MenuService;
 import com.pivotos.system.service.RoleService;
 import com.pivotos.system.service.SysLoginService;
@@ -35,6 +36,7 @@ public class SysLoginServiceImpl implements SysLoginService {
     private final RoleService roleService;
     private final MenuService menuService;
     private final UserConvert userConvert;
+    private final LoginLogService loginLogService;
 
     @Override
     public LoginVO login(LoginBody body) {
@@ -76,12 +78,15 @@ public class SysLoginServiceImpl implements SysLoginService {
     private LoginVO doLogin(LoginBody body, StpLogic stpLogic, String loginType) {
         SysUser user = userService.getByUsername(body.getUsername());
         if (user == null || !BCrypt.checkpw(body.getPassword(), user.getPassword())) {
+            loginLogService.record(body.getUsername(), false, SystemErrorCode.LOGIN_FAILED.getMsg());
             throw new ServiceException(SystemErrorCode.LOGIN_FAILED);
         }
         if (!Objects.equals(CommonStatusEnum.ENABLED.getValue(), user.getStatus())) {
+            loginLogService.record(body.getUsername(), false, SystemErrorCode.USER_DISABLED.getMsg());
             throw new ServiceException(SystemErrorCode.USER_DISABLED);
         }
         stpLogic.login(user.getId());
+        loginLogService.record(user.getUsername(), true, null);
         AuthSessionHolder.saveLoginUser(stpLogic,
                 new LoginUser(user.getId(), user.getUsername(), loginType, null));
         return new LoginVO(stpLogic.getTokenValue());

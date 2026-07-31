@@ -67,6 +67,13 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- 操作日志 @Log 切面（S26 2.1-F1）：SB4 BOM 已移除 spring-boot-starter-aop，
+             @Aspect 自动代理仅需 aspectjweaver（版本由 SB BOM 仲裁） -->
+        <dependency>
+            <groupId>org.aspectj</groupId>
+            <artifactId>aspectjweaver</artifactId>
+        </dependency>
+
         <!-- 测试 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

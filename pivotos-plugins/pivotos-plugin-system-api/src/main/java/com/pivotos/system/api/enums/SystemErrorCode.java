@@ -12,6 +12,7 @@ import com.pivotos.common.core.enums.error.ErrorCode;
  *   <li>2040-2059 部门</li>
  *   <li>2060-2079 字典与参数</li>
  *   <li>2080-2099 三方社交登录</li>
+ *   <li>2100-2119 通知公告</li>
  * </ul>
  */
 public enum SystemErrorCode implements ErrorCode {
@@ -50,7 +51,12 @@ public enum SystemErrorCode implements ErrorCode {
     SOCIAL_NOT_CONFIGURED(2080, "小程序登录未配置，请联系管理员"),
     SOCIAL_CODE_INVALID(2081, "微信授权码无效或已过期，请重试"),
     SOCIAL_API_FAILED(2082, "微信接口调用失败，请稍后重试"),
-    SOCIAL_ALREADY_BOUND(2083, "该微信已绑定其他账号");
+    SOCIAL_ALREADY_BOUND(2083, "该微信已绑定其他账号"),
+
+    // ---------- 通知公告 ----------
+    NOTICE_NOT_FOUND(2100, "公告不存在"),
+    NOTICE_STATUS_INVALID(2101, "公告当前状态不允许该操作"),
+    NOTICE_PUBLISHED_READONLY(2102, "已发布公告不允许编辑，请先撤回");
 
     private final int code;
     private final String msg;
