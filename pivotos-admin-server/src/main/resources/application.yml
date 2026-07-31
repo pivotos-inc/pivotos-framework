@@ -25,6 +25,9 @@ spring:
 sa-token:
   token-name: Authorization
   timeout: 86400
+  # 关闭 Cookie 写入/读取：三端均为 header 裸值传 token（axios/uni.request/fetch SSE），
+  # 默认 true 会在登录时 Set-Cookie，H5 登出只清 localStorage 后 Cookie 仍可兜底过鉴权（S23 坑 2）
+  is-read-cookie: false
   is-print: false
   is-log: false
 
