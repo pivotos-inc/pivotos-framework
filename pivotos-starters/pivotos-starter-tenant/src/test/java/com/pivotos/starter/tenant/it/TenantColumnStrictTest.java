@@ -19,9 +19,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "pivotos.tenant.mode=column",
         "pivotos.tenant.strict=true",
         "spring.datasource.dynamic.primary=master",
-        "spring.datasource.dynamic.datasource.master.url=jdbc:mysql://192.168.50.10:3306/test_tenant?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true",
+        "spring.datasource.dynamic.datasource.master.url=jdbc:mysql://175.24.176.176:3306/test_tenant?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true",
         "spring.datasource.dynamic.datasource.master.username=root",
-        "spring.datasource.dynamic.datasource.master.password=mysql_PBM2cc",
+        "spring.datasource.dynamic.datasource.master.password=mysql_DbHEfw",
         "spring.datasource.dynamic.datasource.master.driver-class-name=com.mysql.cj.jdbc.Driver"
 })
 @AutoConfigureMockMvc

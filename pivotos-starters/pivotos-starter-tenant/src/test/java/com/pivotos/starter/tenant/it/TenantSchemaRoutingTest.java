@@ -21,9 +21,9 @@ import static org.assertj.core.api.Assertions.assertThat;
         "pivotos.tenant.mode=schema",
         "pivotos.tenant.schema-map[2]=s2",
         "spring.datasource.dynamic.primary=master",
-        "spring.datasource.dynamic.datasource.master.url=jdbc:mysql://192.168.50.10:3306/test_tenant_s1?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true",
+        "spring.datasource.dynamic.datasource.master.url=jdbc:mysql://175.24.176.176:3306/test_tenant_s1?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true",
         "spring.datasource.dynamic.datasource.master.username=root",
-        "spring.datasource.dynamic.datasource.master.password=mysql_PBM2cc",
+        "spring.datasource.dynamic.datasource.master.password=mysql_DbHEfw",
         "spring.datasource.dynamic.datasource.master.driver-class-name=com.mysql.cj.jdbc.Driver"
 })
 @AutoConfigureMockMvc
@@ -31,9 +31,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TenantSchemaRoutingTest extends TenantRoutingITSupport {
 
     private static final String PRIMARY_URL =
-            "jdbc:mysql://192.168.50.10:3306/test_tenant_s1?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true";
+            "jdbc:mysql://175.24.176.176:3306/test_tenant_s1?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true";
     private static final String SECONDARY_URL =
-            "jdbc:mysql://192.168.50.10:3306/test_tenant_s2?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true";
+            "jdbc:mysql://175.24.176.176:3306/test_tenant_s2?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true";
 
     private static final String RUN = UUID.randomUUID().toString().substring(0, 8);
     private static final String TITLE_T1 = "S1-" + RUN;

@@ -2,9 +2,9 @@
 // 用法：jshell --class-path <mysql-connector.jar> rebuild-test-dbs.jsh
 import java.sql.*;
 
-var url = "jdbc:mysql://192.168.50.10:3306?useSSL=false&allowPublicKeyRetrieval=true";
+var url = "jdbc:mysql://175.24.176.176:3306?useSSL=false&allowPublicKeyRetrieval=true";
 var dbs = new String[]{"test", "test_message", "test_tenant", "test_tenant_s1", "test_tenant_s2", "test_tenant_d1", "test_tenant_d2"};
-try (var conn = DriverManager.getConnection(url, "root", "mysql_PBM2cc");
+try (var conn = DriverManager.getConnection(url, "root", "mysql_DbHEfw");
      var st = conn.createStatement()) {
     for (String db : dbs) {
         st.executeUpdate("DROP DATABASE IF EXISTS " + db);
