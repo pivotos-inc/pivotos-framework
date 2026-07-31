@@ -30,6 +30,9 @@ public class ProviderVO extends BaseDTO {
     /** 备注 */
     private String remark;
 
+    /** 租户ID（0=平台/默认租户，管理页区分平台配置与租户自有配置） */
+    private Long tenantId;
+
     /** 启用中的 Key 数量（管理页概览） */
     private Long activeKeyCount;
 }

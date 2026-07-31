@@ -4,15 +4,19 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.pivotos.starter.mybatis.crypto.FieldEncrypt;
 import com.pivotos.starter.mybatis.crypto.FieldEncryptTypeHandler;
-import com.pivotos.starter.mybatis.domain.BaseDO;
+import com.pivotos.starter.mybatis.domain.TenantBaseDO;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-/** AI API Key 实体（api_key AES 加密落库，autoResultMap 启用 TypeHandler 读路径） */
+/**
+ * AI API Key 实体（api_key AES 加密落库，autoResultMap 启用 TypeHandler 读路径）。
+ * 多租户：继承 TenantBaseDO 参与行级隔离，tenant_id 随归属供应商（0=平台）。
+ * 健康度：failCount 连续失败计数，达阈值自动停用 + 站内信告警。
+ */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName(value = "ai_api_key", autoResultMap = true)
-public class AiApiKey extends BaseDO {
+public class AiApiKey extends TenantBaseDO {
 
     /** 归属供应商ID */
     private Long providerId;
@@ -28,6 +32,6 @@ public class AiApiKey extends BaseDO {
     /** 状态（0启用 1停用） */
     private Integer status;
 
-    /** 租户ID（多租户预留） */
-    private Long tenantId;
+    /** 连续失败次数（成功清零，达 pivotos.ai.key-fail-threshold 自动停用） */
+    private Integer failCount;
 }

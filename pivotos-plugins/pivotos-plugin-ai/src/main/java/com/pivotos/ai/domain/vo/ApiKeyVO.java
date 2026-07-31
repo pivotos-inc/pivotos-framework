@@ -20,4 +20,7 @@ public class ApiKeyVO extends BaseDTO {
 
     /** 状态（0启用 1停用） */
     private Integer status;
+
+    /** 连续失败次数（健康度：成功清零，达阈值自动停用） */
+    private Integer failCount;
 }

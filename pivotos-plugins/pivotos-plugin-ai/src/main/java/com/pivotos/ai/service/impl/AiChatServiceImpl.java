@@ -85,6 +85,8 @@ public class AiChatServiceImpl implements AiChatService {
     @Override
     public SseEmitter stream(Long userId, ChatSendRequest request) {
         ChatTarget target = resolveTarget(request);
+        // 流式只用轮询起点 Key（不重试），回调里据此记健康度；静态目标无 Key 不记
+        AiApiKey streamKey = pickKey(target, 0);
         ChatClient chatClient = pickClient(target, 0);
         AiConversation conversation = resolveConversation(userId, request, target.model());
         List<Message> history = loadHistory(conversation.getId());
@@ -98,6 +100,11 @@ public class AiChatServiceImpl implements AiChatService {
                 "title", conversation.getTitle()));
 
         Long conversationId = conversation.getId();
+        if (streamKey != null) {
+            // 轮询分摊可审计：每次调用记录实际使用的 keyId
+            log.info("[PivotOS] AI 流式对话使用 Key：conversationId={} providerId={} keyId={}",
+                    conversationId, target.provider().getId(), streamKey.getId());
+        }
         StringBuilder answer = new StringBuilder();
         // 流式已发 meta，失败不换 Key 重试（半途换 Key 会重复输出），直接下发 error 事件
         Flux<String> flux = buildPrompt(chatClient, target, history, request.getContent())
@@ -109,13 +116,20 @@ public class AiChatServiceImpl implements AiChatService {
                     sendEvent(emitter, "delta", Map.of("content", delta));
                 },
                 error -> {
-                    log.error("[PivotOS] AI 流式对话失败：conversationId={}", conversationId, error);
+                    log.error("[PivotOS] AI 流式对话失败：conversationId={} keyId={}",
+                            conversationId, streamKey == null ? null : streamKey.getId(), error);
+                    if (streamKey != null) {
+                        aiProviderService.recordKeyFailure(streamKey.getId());
+                    }
                     sendEvent(emitter, "error", Map.of(
                             "code", AiErrorCode.CHAT_FAILED.getCode(),
                             "msg", AiErrorCode.CHAT_FAILED.getMsg()));
                     emitter.complete();
                 },
                 () -> {
+                    if (streamKey != null) {
+                        aiProviderService.recordKeySuccess(streamKey.getId());
+                    }
                     // 回调线程无 LoginContext，saveMessage 内已显式补齐审计字段
                     AiChatMessage assistant = saveMessage(conversation, userId, "assistant", answer.toString());
                     touchConversation(conversationId);
@@ -182,12 +196,20 @@ public class AiChatServiceImpl implements AiChatService {
                 environment.getProperty("spring.ai.openai.chat.options.model", ""), staticClient);
     }
 
+    /** 取第 attempt 次尝试对应的 Key（轮询偏移取模；静态目标无 Key 返回 null） */
+    private AiApiKey pickKey(ChatTarget target, int attempt) {
+        if (!target.dynamic()) {
+            return null;
+        }
+        return target.keys().get((target.startIndex() + attempt) % target.keys().size());
+    }
+
     /** 取第 attempt 次尝试对应的 ChatClient（动态走轮询偏移，静态恒为兜底 client） */
     private ChatClient pickClient(ChatTarget target, int attempt) {
-        if (!target.dynamic()) {
+        AiApiKey key = pickKey(target, attempt);
+        if (key == null) {
             return target.staticClient();
         }
-        AiApiKey key = target.keys().get((target.startIndex() + attempt) % target.keys().size());
         return clientRegistry.getChatClient(target.provider(), key);
     }
 
@@ -204,19 +226,32 @@ public class AiChatServiceImpl implements AiChatService {
         return spec;
     }
 
-    /** 同步调用：动态目标失败自动换下一 Key 重试一次（单 Key 或静态目标不重试） */
+    /** 同步调用：动态目标失败自动换下一 Key 重试一次（单 Key 或静态目标不重试），逐 Key 记健康度 */
     private String callWithFailover(ChatTarget target, List<Message> history, String content, Long conversationId) {
         int attempts = target.dynamic() ? Math.min(2, target.keys().size()) : 1;
         for (int i = 0; i < attempts; i++) {
+            AiApiKey key = pickKey(target, i);
+            if (key != null) {
+                // 轮询分摊可审计：每次尝试记录实际使用的 keyId
+                log.info("[PivotOS] AI 同步对话使用 Key：conversationId={} providerId={} keyId={} 第 {}/{} 次尝试",
+                        conversationId, target.provider().getId(), key.getId(), i + 1, attempts);
+            }
             try {
-                return buildPrompt(pickClient(target, i), target, history, content)
+                String reply = buildPrompt(pickClient(target, i), target, history, content)
                         .call()
                         .content();
+                if (key != null) {
+                    aiProviderService.recordKeySuccess(key.getId());
+                }
+                return reply;
             } catch (Exception e) {
                 boolean lastAttempt = i == attempts - 1;
-                log.error("[PivotOS] AI 同步对话失败：conversationId={} providerId={} 第 {}/{} 次尝试",
+                log.error("[PivotOS] AI 同步对话失败：conversationId={} providerId={} keyId={} 第 {}/{} 次尝试",
                         conversationId, target.dynamic() ? target.provider().getId() : null,
-                        i + 1, attempts, e);
+                        key == null ? null : key.getId(), i + 1, attempts, e);
+                if (key != null) {
+                    aiProviderService.recordKeyFailure(key.getId());
+                }
                 if (lastAttempt) {
                     throw new ServiceException(AiErrorCode.CHAT_FAILED);
                 }
