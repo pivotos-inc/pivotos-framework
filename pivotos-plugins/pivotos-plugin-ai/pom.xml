@@ -21,6 +21,12 @@
             <artifactId>pivotos-plugin-ai-api</artifactId>
         </dependency>
 
+        <!-- 跨插件契约：Key 健康度告警发站内信（只依赖 -api，禁依赖实现模块） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-message-api</artifactId>
+        </dependency>
+
         <!-- 底座契约与 Starter -->
         <dependency>
             <groupId>com.pivotos</groupId>

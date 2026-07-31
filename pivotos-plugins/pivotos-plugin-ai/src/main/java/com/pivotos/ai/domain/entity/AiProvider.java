@@ -1,15 +1,19 @@
 package com.pivotos.ai.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.pivotos.starter.mybatis.domain.BaseDO;
+import com.pivotos.starter.mybatis.domain.TenantBaseDO;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-/** AI 模型供应商实体（OpenAI 兼容协议，base_url 须含 /v1） */
+/**
+ * AI 模型供应商实体（OpenAI 兼容协议，base_url 须含 /v1）。
+ * 多租户：继承 TenantBaseDO 参与行级隔离，tenant_id=0 为平台/默认租户，
+ * 解析链按「租户自有配置优先 → 平台兜底」取用。
+ */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("ai_provider")
-public class AiProvider extends BaseDO {
+public class AiProvider extends TenantBaseDO {
 
     /** 供应商名称 */
     private String name;
@@ -31,7 +35,4 @@ public class AiProvider extends BaseDO {
 
     /** 备注 */
     private String remark;
-
-    /** 租户ID（多租户预留：租户级配置+平台兜底） */
-    private Long tenantId;
 }

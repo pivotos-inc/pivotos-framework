@@ -25,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * message 插件全链路集成测试（S13 验收：发消息 → 查询 → 已读 → 重发幂等）
  *
- * <p>中间件连内网 192.168.50.10（S1 环境结论），独立测试库 test，Flyway 自动建 msg_ 表。
+ * <p>中间件连公网服务器 175.24.176.176（2026-07-31 搬迁），独立测试库 test，Flyway 自动建 msg_ 表。
  * 跨插件契约 IUserFacade / 权限 SPI 由 MessageTestApplication 测试替身提供。
  */
 @SpringBootTest(classes = MessageTestApplication.class)

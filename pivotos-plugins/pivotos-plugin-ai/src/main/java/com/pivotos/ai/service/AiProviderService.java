@@ -29,20 +29,28 @@ public interface AiProviderService {
 
     // ---------- 对话侧只读 ----------
 
-    /** 启用供应商选项（对话页下拉，按 sort 正序） */
+    /** 启用供应商选项（对话页下拉，按 sort 正序；租户自有配置优先 → 平台兜底） */
     List<ProviderOptionVO> listOptions();
 
     /** 供应商可用模型（OpenAI 兼容 /models，5 分钟缓存） */
     List<String> listModels(Long providerId);
 
-    /** 校验并返回启用中的供应商（不存在/停用 → 5021） */
+    /** 校验并返回启用中的供应商（不存在/停用/非当前租户且非平台 → 5021） */
     AiProvider requireActiveProvider(Long providerId);
 
-    /** 默认供应商：启用中 sort 最靠前且有启用 Key 者，无则 null（回落静态 ChatClient） */
+    /** 默认供应商：租户自有启用配置优先，无则平台兜底；取 sort 最靠前且有启用 Key 者，无则 null */
     AiProvider findDefaultProvider();
 
     /** 供应商启用中的 Key 列表（解密实体，仅供调用链内部使用，严禁出接口） */
     List<AiApiKey> listActiveKeys(Long providerId);
+
+    // ---------- Key 健康度 ----------
+
+    /** 记一次 Key 调用失败：连续失败计数 +1，达阈值原子停用并站内信告警（回调线程可调，内部兼容无上下文） */
+    void recordKeyFailure(Long keyId);
+
+    /** 记一次 Key 调用成功：连续失败计数清零 */
+    void recordKeySuccess(Long keyId);
 
     // ---------- Key 管理 ----------
 

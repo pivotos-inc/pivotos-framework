@@ -17,4 +17,7 @@ public class AiProperties {
 
     /** 单次对话携带的历史消息条数上限（多轮记忆窗口） */
     private Integer maxHistory = 20;
+
+    /** Key 连续失败自动停用阈值（达到即停用并站内信告警，成功清零） */
+    private Integer keyFailThreshold = 3;
 }

@@ -13,7 +13,7 @@ import java.util.List;
 @ConfigurationProperties(prefix = "pivotos.file")
 public class FileProperties {
 
-    /** 对象存储 API 地址（如 http://192.168.50.10:9000） */
+    /** 对象存储 API 地址（如 http://175.24.176.176:9000） */
     private String endpoint;
 
     /** Access Key */
