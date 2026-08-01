@@ -65,4 +65,13 @@ public class DictDataServiceTranslator implements DictTranslator {
             return label;
         });
     }
+
+    @Override
+    public String[] allLabels(String dictType) {
+        List<SysDictData> list = dictDataService.listEnabledByType(dictType);
+        return list.stream()
+                .map(SysDictData::getDictLabel)
+                .distinct()
+                .toArray(String[]::new);
+    }
 }

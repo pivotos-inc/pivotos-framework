@@ -13,6 +13,7 @@ import com.pivotos.system.domain.vo.UserExcelVO;
 import com.pivotos.system.domain.vo.UserVO;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 
@@ -51,6 +52,9 @@ public interface UserService extends IService<SysUser> {
 
     /** 导入用户 Excel（单行校验 + 分批入库 + 错误行回执） */
     ExcelImportResult<UserExcelVO> importUsers(MultipartFile file) throws IOException;
+
+    /** 流式导入用户 Excel（SSE 逐行推送结果，适用于大数据量场景） */
+    SseEmitter importUsersStream(MultipartFile file);
 
     /** 下载用户导入模板 */
     void downloadUserTemplate(HttpServletResponse response) throws IOException;

@@ -15,6 +15,7 @@ import com.pivotos.system.domain.vo.UserVO;
 import com.pivotos.system.service.UserService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 
@@ -101,6 +103,14 @@ public class UserController {
     @Log(module = "用户管理", type = OperType.IMPORT)
     public R<ExcelImportResult<UserExcelVO>> importUsers(MultipartFile file) throws IOException {
         return R.ok(userService.importUsers(file));
+    }
+
+    /** 流式导入用户 Excel（SSE 逐行推送结果，适用于大数据量场景） */
+    @PostMapping(value = "/import/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @SaCheckPermission(value = "system:user:import", type = StpSysUtil.TYPE)
+    @Log(module = "用户管理", type = OperType.IMPORT)
+    public SseEmitter importUsersStream(MultipartFile file) {
+        return userService.importUsersStream(file);
     }
 
     /** 下载用户导入模板 */

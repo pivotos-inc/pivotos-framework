@@ -32,4 +32,16 @@ public interface DictTranslator {
     default String toValue(String dictType, String label) {
         return label;
     }
+
+    /**
+     * 获取指定字典类型的所有 label 列表，用于生成 Excel 模板下拉选项。
+     * 默认返回空数组，需要下拉功能时由实现类覆盖。
+     *
+     * @param dictType 字典类型
+     * @return 所有字典标签数组
+     * @since 2.1.0
+     */
+    default String[] allLabels(String dictType) {
+        return new String[0];
+    }
 }

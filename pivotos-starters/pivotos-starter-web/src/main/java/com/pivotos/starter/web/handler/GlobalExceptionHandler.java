@@ -19,6 +19,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Optional;
@@ -92,6 +93,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<R<Void>> handleBadRequest(Exception e) {
         log.warn("请求不合法: {}", e.getMessage());
         return fill(R.fail(GlobalErrorCode.PARAM_INVALID));
+    }
+
+    /**
+     * 上传文件大小超出限制
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<R<Void>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException e) {
+        log.warn("上传文件过大，超出限制: {} bytes", e.getMaxUploadSize());
+        return fill(R.fail(GlobalErrorCode.FILE_TOO_LARGE));
     }
 
     /**

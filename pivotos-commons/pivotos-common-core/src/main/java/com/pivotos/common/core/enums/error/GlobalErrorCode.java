@@ -21,6 +21,8 @@ public enum GlobalErrorCode implements ErrorCode {
     RATE_LIMITED(1006, "请求过于频繁，请稍后重试"),
     /** 加解密失败 */
     CRYPTO_ERROR(1007, "接口加解密处理失败"),
+    /** 文件大小超出限制 */
+    FILE_TOO_LARGE(1008, "上传文件大小超出限制"),
     /** 系统内部错误 */
     SYSTEM_ERROR(1500, "系统内部错误"),
     ;

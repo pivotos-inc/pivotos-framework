@@ -23,7 +23,7 @@ public class UserExcelVO {
     @ExcelProperty("昵称")
     private String nickname;
 
-    @DictExcelProperty(dictType = "sys_user_sex")
+    @DictExcelProperty(dictType = "sys_user_gender")
     @ExcelProperty("性别")
     private String gender;
 
@@ -33,7 +33,7 @@ public class UserExcelVO {
     @ExcelProperty("邮箱")
     private String email;
 
-    @DictExcelProperty(dictType = "common_status")
+    @DictExcelProperty(dictType = "sys_common_status")
     @ExcelProperty("状态")
     private String status;
 
