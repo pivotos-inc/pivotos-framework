@@ -1,5 +1,6 @@
 package com.pivotos.system.service.impl;
 
+import cn.dev33.satoken.session.SaSession;
 import cn.dev33.satoken.stp.StpLogic;
 import cn.hutool.crypto.digest.BCrypt;
 import com.pivotos.common.api.context.LoginUser;
@@ -89,12 +90,16 @@ public class SysLoginServiceImpl implements SysLoginService {
         }
         stpLogic.login(user.getId());
         loginLogService.record(user.getUsername(), true, null);
-        AuthSessionHolder.saveLoginUser(stpLogic,
+        String tokenValue = stpLogic.getTokenValue();
+        SaSession tokenSession = stpLogic.getTokenSessionByToken(tokenValue);
+        AuthSessionHolder.saveLoginUser(tokenSession,
                 new LoginUser(user.getId(), user.getUsername(), loginType, null));
         // S29：写入登录元信息（IP + 时间）到 Token Session，供在线用户列表使用
-        stpLogic.getTokenSession().set("LOGIN_IP", getClientIP(request));
-        stpLogic.getTokenSession().set("LOGIN_TIME", System.currentTimeMillis());
-        return new LoginVO(stpLogic.getTokenValue());
+        tokenSession.set("LOGIN_IP", getClientIP(request));
+        long now = System.currentTimeMillis();
+        tokenSession.set("LOGIN_TIME", now);
+        tokenSession.set("LAST_ACTIVE_TIME", now);
+        return new LoginVO(tokenValue);
     }
 
     /** 从 HttpServletRequest 提取客户端真实 IP */
