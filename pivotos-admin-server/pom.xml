@@ -71,6 +71,11 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-ai</artifactId>
         </dependency>
+        <!-- generator 插件（代码生成器） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-generator</artifactId>
+        </dependency>
 
         <!-- ===== API 文档 ===== -->
         <dependency>
