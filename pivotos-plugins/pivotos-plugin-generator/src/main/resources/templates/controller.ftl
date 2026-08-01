@@ -30,7 +30,7 @@ public class ${className}Controller {
     private final ${className}Service ${classVarName}Service;
 
     /** 分页查询${functionName} */
-    @GetMapping
+    @GetMapping("/page")
     @SaCheckPermission(value = "${moduleName}:${businessName}:list", type = StpSysUtil.TYPE)
     public R<IPage<${className}VO>> selectPage(@Valid ${className}QueryRequest query) {
         IPage<${className}> page = query.toPage();
