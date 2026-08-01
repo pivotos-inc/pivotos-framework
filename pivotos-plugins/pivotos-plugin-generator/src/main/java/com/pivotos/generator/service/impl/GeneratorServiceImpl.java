@@ -383,12 +383,23 @@ public class GeneratorServiceImpl implements GeneratorService {
             result.put("sql/" + toFlywayFileName(table.getTableName()) + ".sql",
                     render("flyway.ftl", model));
 
-            // 前端模板
+            // 前端 PC 模板
             String feDir = "pivotos-ui/apps/admin/src";
             result.put(feDir + "/api/" + table.getModuleName() + "/" + table.getBusinessName() + ".ts",
                     render("pc-api.ftl", model));
             result.put(feDir + "/views/" + table.getModuleName() + "/" + table.getBusinessName() + "/index.vue",
                     render("pc-page.ftl", model));
+
+            // 前端 uni-app 模板
+            String appDir = "pivotos-app/src";
+            result.put(appDir + "/api/" + table.getModuleName() + "/" + table.getBusinessName() + ".ts",
+                    render("uni-api.ftl", model));
+            result.put(appDir + "/pages-gen/" + table.getModuleName() + "/" + table.getBusinessName() + "/list.vue",
+                    render("uni-list.ftl", model));
+            result.put(appDir + "/pages-gen/" + table.getModuleName() + "/" + table.getBusinessName() + "/form.vue",
+                    render("uni-form.ftl", model));
+            result.put(appDir + "/pages-gen/" + table.getModuleName() + "/" + table.getBusinessName() + "/detail.vue",
+                    render("uni-detail.ftl", model));
         } catch (Exception e) {
             log.error("代码预览失败", e);
             throw new ServiceException(GeneratorErrorCode.GEN_TEMPLATE_RENDER_FAILED);
