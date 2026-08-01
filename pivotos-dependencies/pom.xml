@@ -50,6 +50,9 @@
         <okhttp.version>5.3.2</okhttp.version>
         <aws-sdk-v2.version>2.49.3</aws-sdk-v2.version>
 
+        <!-- ==================== Excel 导入导出（EasyExcel 4.x 流式） ==================== -->
+        <easyexcel.version>4.0.2</easyexcel.version>
+
         <!-- ==================== 搜索（Easy-ES 锁定 ES 7.17.28） ==================== -->
         <easy-es.version>3.0.2</easy-es.version>
         <elasticsearch.version>7.17.28</elasticsearch.version>
@@ -214,6 +217,13 @@
                 <version>${aws-sdk-v2.version}</version>
             </dependency>
 
+            <!-- ========== EasyExcel 4.x 流式 ========== -->
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>easyexcel</artifactId>
+                <version>${easyexcel.version}</version>
+            </dependency>
+
             <!-- ========== Easy-ES：锁定 ES 7.17.28，防止与 Spring Data ES 冲突 ========== -->
             <dependency>
                 <groupId>org.dromara.easy-es</groupId>
@@ -294,6 +304,11 @@
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-starter-tenant</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-excel</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
