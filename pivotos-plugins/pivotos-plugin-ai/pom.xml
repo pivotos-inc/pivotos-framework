@@ -44,6 +44,12 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-auth</artifactId>
         </dependency>
+        <!-- 任务调度（S34 2.2-F7）：AI Key 健康度巡检 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-job</artifactId>
+        </dependency>
+
         <!-- AI 底座：ChatClient / AiProperties -->
         <dependency>
             <groupId>com.pivotos</groupId>

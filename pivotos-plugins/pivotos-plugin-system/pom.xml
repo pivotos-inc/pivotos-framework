@@ -86,6 +86,12 @@
             <artifactId>pivotos-starter-datascope</artifactId>
         </dependency>
 
+        <!-- 任务调度（S34 2.2-F6/F7）：XXL-Job 自动装配 + 默认任务 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-job</artifactId>
+        </dependency>
+
         <!-- Redisson 客户端（在线用户会话扫描，transitive via sa-token-redisson） -->
         <dependency>
             <groupId>org.redisson</groupId>

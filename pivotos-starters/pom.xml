@@ -25,6 +25,7 @@
         <module>pivotos-starter-ai</module>
         <module>pivotos-starter-excel</module>
         <module>pivotos-starter-datascope</module>
+        <module>pivotos-starter-job</module>
     </modules>
 
     <dependencyManagement>
