@@ -21,6 +21,7 @@ import com.pivotos.system.service.MenuService;
 import com.pivotos.system.service.RoleService;
 import com.pivotos.system.service.SysLoginService;
 import com.pivotos.system.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -37,6 +38,7 @@ public class SysLoginServiceImpl implements SysLoginService {
     private final MenuService menuService;
     private final UserConvert userConvert;
     private final LoginLogService loginLogService;
+    private final HttpServletRequest request;
 
     @Override
     public LoginVO login(LoginBody body) {
@@ -89,6 +91,22 @@ public class SysLoginServiceImpl implements SysLoginService {
         loginLogService.record(user.getUsername(), true, null);
         AuthSessionHolder.saveLoginUser(stpLogic,
                 new LoginUser(user.getId(), user.getUsername(), loginType, null));
+        // S29：写入登录元信息（IP + 时间）到 Token Session，供在线用户列表使用
+        stpLogic.getTokenSession().set("LOGIN_IP", getClientIP(request));
+        stpLogic.getTokenSession().set("LOGIN_TIME", System.currentTimeMillis());
         return new LoginVO(stpLogic.getTokenValue());
+    }
+
+    /** 从 HttpServletRequest 提取客户端真实 IP */
+    private static String getClientIP(HttpServletRequest request) {
+        String[] headers = {"X-Forwarded-For", "Proxy-Client-IP", "WL-Proxy-Client-IP",
+                "HTTP_CLIENT_IP", "HTTP_X_FORWARDED_FOR"};
+        for (String header : headers) {
+            String ip = request.getHeader(header);
+            if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
+                return ip.split(",")[0].trim();
+            }
+        }
+        return request.getRemoteAddr();
     }
 }

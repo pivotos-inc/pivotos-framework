@@ -14,6 +14,7 @@ import com.pivotos.common.core.enums.error.ErrorCode;
  *   <li>2080-2099 三方社交登录</li>
  *   <li>2100-2119 通知公告</li>
  *   <li>2120-2129 岗位管理</li>
+ *   <li>2130-2139 在线用户</li>
  * </ul>
  */
 public enum SystemErrorCode implements ErrorCode {
@@ -62,7 +63,11 @@ public enum SystemErrorCode implements ErrorCode {
     // ---------- 岗位管理 ----------
     POST_NOT_FOUND(2120, "岗位不存在"),
     POST_CODE_EXISTS(2121, "岗位编码已存在"),
-    POST_HAS_USERS(2122, "岗位下存在用户，不允许删除");
+    POST_HAS_USERS(2122, "岗位下存在用户，不允许删除"),
+
+    // ---------- 在线用户 ----------
+    ONLINE_USER_NOT_FOUND(2130, "在线用户不存在或已下线"),
+    ONLINE_USER_KICKOUT_SELF(2131, "不能强退自己");
 
     private final int code;
     private final String msg;

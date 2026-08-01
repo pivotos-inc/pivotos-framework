@@ -80,6 +80,12 @@
             <artifactId>pivotos-starter-excel</artifactId>
         </dependency>
 
+        <!-- Redisson 客户端（在线用户会话扫描，transitive via sa-token-redisson） -->
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson-spring-boot-starter</artifactId>
+        </dependency>
+
         <!-- 测试 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
