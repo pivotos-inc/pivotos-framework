@@ -32,6 +32,9 @@ public class OnlineUserVO implements Serializable {
     /** 最后活跃时间（近似值，Token 未启用 activity-timeout） */
     private String lastActiveTime;
 
+    /** Token 剩余有效期（秒），-1 表示持久 */
+    private Long tokenTtl;
+
     public Long getUserId() {
         return userId;
     }
@@ -86,5 +89,13 @@ public class OnlineUserVO implements Serializable {
 
     public void setLastActiveTime(String lastActiveTime) {
         this.lastActiveTime = lastActiveTime;
+    }
+
+    public Long getTokenTtl() {
+        return tokenTtl;
+    }
+
+    public void setTokenTtl(Long tokenTtl) {
+        this.tokenTtl = tokenTtl;
     }
 }
