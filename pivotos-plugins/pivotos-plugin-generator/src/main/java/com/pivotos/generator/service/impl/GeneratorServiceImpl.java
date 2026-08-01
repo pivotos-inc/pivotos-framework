@@ -70,6 +70,22 @@ public class GeneratorServiceImpl implements GeneratorService {
             "id", "createBy", "createTime", "updateBy", "updateTime", "deleted"
     );
 
+    /** Java 类型 → TypeScript 类型映射 */
+    private static final Map<String, String> TS_TYPE_MAP = new LinkedHashMap<>();
+
+    static {
+        TS_TYPE_MAP.put("String", "string");
+        TS_TYPE_MAP.put("Integer", "number");
+        TS_TYPE_MAP.put("Long", "number");
+        TS_TYPE_MAP.put("BigDecimal", "number");
+        TS_TYPE_MAP.put("Float", "number");
+        TS_TYPE_MAP.put("Double", "number");
+        TS_TYPE_MAP.put("Boolean", "boolean");
+        TS_TYPE_MAP.put("LocalDateTime", "string");
+        TS_TYPE_MAP.put("LocalDate", "string");
+        TS_TYPE_MAP.put("LocalTime", "string");
+    }
+
     @Resource
     private GenTableMapper genTableMapper;
 
@@ -319,6 +335,27 @@ public class GeneratorServiceImpl implements GeneratorService {
         model.put("importTypes", importTypes);
         model.put("hasImportableTypes", !importTypes.isEmpty());
 
+        // 前端权限前缀、API 前缀
+        String permPrefix = genTable.getModuleName() + ":" + genTable.getBusinessName();
+        String apiPrefix = "/" + genTable.getModuleName() + "/" + genTable.getBusinessName();
+        model.put("permPrefix", permPrefix);
+        model.put("apiPrefix", apiPrefix);
+
+        // 每个字段的 TypeScript 类型
+        Map<String, String> tsTypeMap = new HashMap<>();
+        for (GenTableColumn col : columns) {
+            String tsType = TS_TYPE_MAP.getOrDefault(col.getJavaType(), "any");
+            tsTypeMap.put(col.getJavaField(), tsType);
+        }
+        model.put("tsTypeMap", tsTypeMap);
+
+        // TS 默认值映射
+        Map<String, String> tsDefaultMap = new HashMap<>();
+        tsDefaultMap.put("string", "''");
+        tsDefaultMap.put("number", "undefined");
+        tsDefaultMap.put("boolean", "false");
+        model.put("tsDefaultMap", tsDefaultMap);
+
         return model;
     }
 
@@ -332,6 +369,7 @@ public class GeneratorServiceImpl implements GeneratorService {
 
         Map<String, String> result = new LinkedHashMap<>();
         try {
+            // 后端模板
             result.put(javaDir + "/domain/entity/" + table.getClassName() + ".java",
                     render("domain.ftl", model));
             result.put(javaDir + "/mapper/" + table.getClassName() + "Mapper.java",
@@ -344,6 +382,13 @@ public class GeneratorServiceImpl implements GeneratorService {
                     render("controller.ftl", model));
             result.put("sql/" + toFlywayFileName(table.getTableName()) + ".sql",
                     render("flyway.ftl", model));
+
+            // 前端模板
+            String feDir = "pivotos-ui/apps/admin/src";
+            result.put(feDir + "/api/" + table.getModuleName() + "/" + table.getBusinessName() + ".ts",
+                    render("pc-api.ftl", model));
+            result.put(feDir + "/views/" + table.getModuleName() + "/" + table.getBusinessName() + "/index.vue",
+                    render("pc-page.ftl", model));
         } catch (Exception e) {
             log.error("代码预览失败", e);
             throw new ServiceException(GeneratorErrorCode.GEN_TEMPLATE_RENDER_FAILED);
