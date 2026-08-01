@@ -26,6 +26,8 @@
         <module>pivotos-plugin-ai</module>
         <module>pivotos-plugin-generator-api</module>
         <module>pivotos-plugin-generator</module>
+        <module>pivotos-plugin-ai-coding-api</module>
+        <module>pivotos-plugin-ai-coding</module>
     </modules>
 
     <dependencyManagement>
