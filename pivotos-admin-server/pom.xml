@@ -47,6 +47,11 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-tenant</artifactId>
         </dependency>
+        <!-- excel Starter：EasyExcel 4.x 流式导入导出 + 字典翻译 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-excel</artifactId>
+        </dependency>
 
         <!-- ===== 业务 Plugin（system-api/message-api 由 plugin 传递带入） ===== -->
         <dependency>

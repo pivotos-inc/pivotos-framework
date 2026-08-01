@@ -74,6 +74,12 @@
             <artifactId>aspectjweaver</artifactId>
         </dependency>
 
+        <!-- Excel 导入导出（S27 2.1-F8/F9）：@DictExcelProperty 注解 + ExcelHelper -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-excel</artifactId>
+        </dependency>
+
         <!-- 测试 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
