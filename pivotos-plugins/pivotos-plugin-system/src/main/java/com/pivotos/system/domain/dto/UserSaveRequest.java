@@ -26,6 +26,9 @@ public class UserSaveRequest {
     /** 部门ID */
     private Long deptId;
 
+    /** 岗位ID */
+    private Long postId;
+
     /** 邮箱 */
     private String email;
 

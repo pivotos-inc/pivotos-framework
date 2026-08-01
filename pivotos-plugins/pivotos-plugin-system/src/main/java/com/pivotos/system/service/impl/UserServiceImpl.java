@@ -1,6 +1,9 @@
 package com.pivotos.system.service.impl;
 
 import cn.hutool.crypto.digest.BCrypt;
+import com.alibaba.excel.EasyExcel;
+import com.alibaba.excel.context.AnalysisContext;
+import com.alibaba.excel.read.listener.ReadListener;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -8,6 +11,7 @@ import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.pivotos.common.core.constant.CommonConstants;
 import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.page.PageResult;
+import com.pivotos.starter.excel.function.RowValidator;
 import com.pivotos.starter.excel.util.ExcelHelper;
 import com.pivotos.starter.excel.util.ExcelImportResult;
 import com.pivotos.system.api.enums.SystemErrorCode;
@@ -31,22 +35,30 @@ import com.pivotos.system.service.UserService;
 import com.pivotos.system.support.PageUtils;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /** 用户服务实现 */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements UserService {
 
     private final UserConvert userConvert;
@@ -170,6 +182,10 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                 });
     }
 
+    // 手机号与邮箱正则（与前端保持一致）
+    private static final Pattern MOBILE_PATTERN = Pattern.compile("^1[3-9]\\d{9}$");
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+
     @Override
     public ExcelImportResult<UserExcelVO> importUsers(MultipartFile file) throws IOException {
         // 预加载部门名称→ID 映射（导入时需要反查）
@@ -178,9 +194,43 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         for (SysDept dept : allDepts) {
             deptNameToId.put(dept.getDeptName(), dept.getId());
         }
+        // 预加载全量用户名集合（用于导入去重检查）
+        Set<String> existingUsernames = this.lambdaQuery()
+                .select(SysUser::getUsername).list().stream()
+                .map(SysUser::getUsername)
+                .collect(Collectors.toSet());
+        // 本批次内已出现的用户名（防止文件内重复）
+        Set<String> batchUsernames = new HashSet<>();
+
         String defaultPassword = BCrypt.hashpw(
                 configService.getConfigValue(SystemConstants.CONFIG_INIT_PASSWORD, SystemConstants.DEFAULT_INIT_PASSWORD),
                 BCrypt.gensalt());
+
+        RowValidator<UserExcelVO> validator = vo -> {
+            String username = vo.getUsername();
+            // 1. 用户名必填
+            if (username == null || username.isBlank()) {
+                throw new ServiceException("用户名为必填项");
+            }
+            // 2. 手机号格式（如果有值）
+            if (vo.getMobile() != null && !vo.getMobile().isBlank()
+                    && !MOBILE_PATTERN.matcher(vo.getMobile()).matches()) {
+                throw new ServiceException("手机号格式不正确");
+            }
+            // 3. 邮箱格式（如果有值）
+            if (vo.getEmail() != null && !vo.getEmail().isBlank()
+                    && !EMAIL_PATTERN.matcher(vo.getEmail()).matches()) {
+                throw new ServiceException("邮箱格式不正确");
+            }
+            // 4. 用户名去重：已在数据库中存在
+            if (existingUsernames.contains(username)) {
+                throw new ServiceException("用户『" + username + "』已存在，导入失败");
+            }
+            // 5. 用户名去重：本批导入文件中重复
+            if (!batchUsernames.add(username)) {
+                throw new ServiceException("用户『" + username + "』在当前导入文件中重复");
+            }
+        };
 
         return excelHelper.importExcel(file, UserExcelVO.class,
                 batch -> {
@@ -200,15 +250,174 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                     }
                     saveBatch(entities);
                     return entities.size();
-                });
+                }, validator);
+    }
+
+    @Override
+    public SseEmitter importUsersStream(MultipartFile file) {
+        SseEmitter emitter = new SseEmitter(0L);
+
+        // 预加载：部门映射、已存在用户名、默认密码
+        List<SysDept> allDepts = deptMapper.selectList(null);
+        Map<String, Long> deptNameToId = new HashMap<>();
+        for (SysDept dept : allDepts) {
+            deptNameToId.put(dept.getDeptName(), dept.getId());
+        }
+        Set<String> existingUsernames = this.lambdaQuery()
+                .select(SysUser::getUsername).list().stream()
+                .map(SysUser::getUsername)
+                .collect(Collectors.toSet());
+        String defaultPassword = BCrypt.hashpw(
+                configService.getConfigValue(SystemConstants.CONFIG_INIT_PASSWORD, SystemConstants.DEFAULT_INIT_PASSWORD),
+                BCrypt.gensalt());
+
+        new Thread(() -> {
+            try (InputStream in = file.getInputStream()) {
+                Set<String> processedUsernames = new HashSet<>();
+                AtomicInteger successCount = new AtomicInteger(0);
+                AtomicInteger errorCount = new AtomicInteger(0);
+                AtomicInteger totalCount = new AtomicInteger(0);
+
+                EasyExcel.read(in, UserExcelVO.class, new ReadListener<UserExcelVO>() {
+                    @Override
+                    public void invoke(UserExcelVO vo, AnalysisContext ctx) {
+                        int rowNum = ctx.readRowHolder().getRowIndex() + 1;
+                        totalCount.incrementAndGet();
+                        String username = vo.getUsername();
+
+                        try {
+                            // 1. 用户名必填
+                            if (username == null || username.isBlank()) {
+                                throw new ServiceException("用户名为必填项");
+                            }
+                            // 2. 手机号格式（如果有值）
+                            if (vo.getMobile() != null && !vo.getMobile().isBlank()
+                                    && !MOBILE_PATTERN.matcher(vo.getMobile()).matches()) {
+                                throw new ServiceException("手机号格式不正确");
+                            }
+                            // 3. 邮箱格式（如果有值）
+                            if (vo.getEmail() != null && !vo.getEmail().isBlank()
+                                    && !EMAIL_PATTERN.matcher(vo.getEmail()).matches()) {
+                                throw new ServiceException("邮箱格式不正确");
+                            }
+                            // 4. 用户名去重：已在数据库中存在
+                            if (existingUsernames.contains(username)) {
+                                throw new ServiceException("用户『" + username + "』已存在，导入失败");
+                            }
+                            // 5. 用户名去重：前面已处理的行中重复
+                            if (!processedUsernames.add(username)) {
+                                throw new ServiceException("用户『" + username + "』在当前导入文件中重复");
+                            }
+
+                            // 字典翻译（男/女→1/2，正常/停用→0/1）
+                            excelHelper.translateForImport(vo, UserExcelVO.class);
+
+                            // 创建实体并单行入库
+                            SysUser user = new SysUser();
+                            user.setUsername(username);
+                            user.setNickname(vo.getNickname());
+                            user.setGender(Integer.parseInt(vo.getGender() != null && !vo.getGender().isEmpty() ? vo.getGender() : "0"));
+                            user.setMobile(vo.getMobile());
+                            user.setEmail(vo.getEmail());
+                            user.setStatus(Integer.parseInt(vo.getStatus() != null && !vo.getStatus().isEmpty() ? vo.getStatus() : "0"));
+                            user.setDeptId(deptNameToId.getOrDefault(vo.getDeptName(), 0L));
+                            user.setRemark(vo.getRemark());
+                            user.setPassword(defaultPassword);
+                            save(user);
+
+                            successCount.incrementAndGet();
+                            sendSse(emitter, "row",
+                                    buildRowJson(rowNum, "success", username, ""));
+                        } catch (Exception e) {
+                            errorCount.incrementAndGet();
+                            try {
+                                sendSse(emitter, "row",
+                                        buildRowJson(rowNum, "error",
+                                                username != null ? username : "",
+                                                e.getMessage()));
+                            } catch (Exception ignored) {
+                                // emitter 已关闭
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void doAfterAllAnalysed(AnalysisContext ctx) {
+                        try {
+                            sendSse(emitter, "done",
+                                    "{\"totalRows\":" + totalCount.get()
+                                    + ",\"successCount\":" + successCount.get()
+                                    + ",\"errorCount\":" + errorCount.get() + "}");
+                        } catch (Exception ignored) {
+                        }
+                        emitter.complete();
+                    }
+
+                    @Override
+                    public void onException(Exception e, AnalysisContext ctx) throws Exception {
+                        errorCount.incrementAndGet();
+                        try {
+                            int rowNum = ctx.readRowHolder() != null
+                                    ? ctx.readRowHolder().getRowIndex() + 1
+                                    : totalCount.get() + 1;
+                            sendSse(emitter, "row",
+                                    buildRowJson(rowNum, "error", "",
+                                            "行解析异常：" + e.getMessage()));
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }).sheet().doRead();
+            } catch (Exception e) {
+                log.error("流式导入异常", e);
+                try {
+                    sendSse(emitter, "error", "{\"message\":\"" + escapeJson(e.getMessage()) + "\"}");
+                } catch (Exception ignored) {
+                }
+                emitter.completeWithError(e);
+            }
+        }, "user-import-stream").start();
+
+        return emitter;
     }
 
     @Override
     public void downloadUserTemplate(HttpServletResponse response) throws IOException {
-        excelHelper.downloadTemplate(response, "用户导入模板", UserExcelVO.class);
+        excelHelper.downloadTemplate(response, "用户导入模板", UserExcelVO.class,
+                excelHelper.buildDictDropDownMap(UserExcelVO.class));
     }
 
     // ==================== 私有方法 ====================
+
+    /** SSE 发送一行 JSON 事件 */
+    private static void sendSse(SseEmitter emitter, String eventName, String data) throws IOException {
+        emitter.send(SseEmitter.event().name(eventName).data(data));
+    }
+
+    /** 构建单行结果的 JSON */
+    private static String buildRowJson(int rowNum, String status, String username, String message) {
+        return "{\"rowNum\":" + rowNum
+                + ",\"status\":\"" + status + "\""
+                + ",\"username\":\"" + escapeJson(username) + "\""
+                + ",\"message\":\"" + escapeJson(message) + "\"}";
+    }
+
+    /** JSON 字符串转义 */
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder(s.length() + 16);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"':  sb.append("\\\""); break;
+                case '\\': sb.append("\\\\"); break;
+                case '\n': sb.append("\\n");  break;
+                case '\r': sb.append("\\r");  break;
+                case '\t': sb.append("\\t");  break;
+                default:   sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
 
     /** 构建与 pageUsers 一致的查询条件 */
     private LambdaQueryWrapper<SysUser> buildQueryWrapper(UserQuery query) {
@@ -217,6 +426,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                 .like(StringUtils.hasText(query.getNickname()), SysUser::getNickname, query.getNickname())
                 .like(StringUtils.hasText(query.getMobile()), SysUser::getMobile, query.getMobile())
                 .eq(query.getDeptId() != null, SysUser::getDeptId, query.getDeptId())
+                .eq(query.getPostId() != null, SysUser::getPostId, query.getPostId())
                 .eq(query.getStatus() != null, SysUser::getStatus, query.getStatus());
     }
 

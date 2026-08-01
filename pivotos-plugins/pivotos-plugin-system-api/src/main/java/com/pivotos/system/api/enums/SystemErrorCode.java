@@ -13,6 +13,7 @@ import com.pivotos.common.core.enums.error.ErrorCode;
  *   <li>2060-2079 字典与参数</li>
  *   <li>2080-2099 三方社交登录</li>
  *   <li>2100-2119 通知公告</li>
+ *   <li>2120-2129 岗位管理</li>
  * </ul>
  */
 public enum SystemErrorCode implements ErrorCode {
@@ -56,7 +57,12 @@ public enum SystemErrorCode implements ErrorCode {
     // ---------- 通知公告 ----------
     NOTICE_NOT_FOUND(2100, "公告不存在"),
     NOTICE_STATUS_INVALID(2101, "公告当前状态不允许该操作"),
-    NOTICE_PUBLISHED_READONLY(2102, "已发布公告不允许编辑，请先撤回");
+    NOTICE_PUBLISHED_READONLY(2102, "已发布公告不允许编辑，请先撤回"),
+
+    // ---------- 岗位管理 ----------
+    POST_NOT_FOUND(2120, "岗位不存在"),
+    POST_CODE_EXISTS(2121, "岗位编码已存在"),
+    POST_HAS_USERS(2122, "岗位下存在用户，不允许删除");
 
     private final int code;
     private final String msg;
