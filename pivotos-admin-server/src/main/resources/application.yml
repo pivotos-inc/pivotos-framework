@@ -6,6 +6,10 @@ spring:
     name: pivotos-admin-server
   profiles:
     active: dev
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
   # Flyway：脚本在各 Plugin 自己的 jar 内 db/migration/，classpath 扫描会跨 jar 合并
   flyway:
     enabled: true

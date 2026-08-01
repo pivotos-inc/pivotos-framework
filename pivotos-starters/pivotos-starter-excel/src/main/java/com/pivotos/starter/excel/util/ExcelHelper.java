@@ -9,6 +9,8 @@ import com.pivotos.starter.excel.annotation.DictExcelProperty;
 import com.pivotos.starter.excel.config.ExcelProperties;
 import com.pivotos.starter.excel.function.BatchSaveFunction;
 import com.pivotos.starter.excel.function.PageFetchFunction;
+import com.pivotos.starter.excel.function.RowValidator;
+import com.pivotos.starter.excel.handler.DictDropDownWriteHandler;
 import com.pivotos.starter.excel.translator.DictTranslator;
 import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,6 +24,7 @@ import java.lang.reflect.Field;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -88,7 +91,7 @@ public final class ExcelHelper {
     // ==================== 导入 ====================
 
     /**
-     * 导入 Excel：EasyExcel 流式读取 → 逐行字典翻译 → 单行校验 → 分批次调用 saver 入库。
+     * 导入 Excel（无行级校验）：EasyExcel 流式读取 → 逐行字典翻译 → 分批次入库。
      *
      * @param file  上传的 Excel 文件
      * @param clazz 导入 DTO 的 Class
@@ -97,8 +100,26 @@ public final class ExcelHelper {
      */
     public <T> ExcelImportResult<T> importExcel(MultipartFile file, Class<T> clazz,
                                                  BatchSaveFunction<T> saver) throws IOException {
+        return importExcel(file, clazz, saver, null);
+    }
+
+    /**
+     * 导入 Excel（带行级校验）：EasyExcel 流式读取 → 逐行字典翻译 → 行校验 → 分批次入库。
+     * <p>
+     * 行校验在字典翻译之后、入库之前执行；校验不通过的行被计入 errors 不参与入库。
+     * </p>
+     *
+     * @param file      上传的 Excel 文件
+     * @param clazz     导入 DTO 的 Class
+     * @param saver     批量入库回调
+     * @param validator 单行校验器（可为 null，表示不做业务校验）
+     * @return 导入结果（成功行 + 错误行回执）
+     */
+    public <T> ExcelImportResult<T> importExcel(MultipartFile file, Class<T> clazz,
+                                                 BatchSaveFunction<T> saver,
+                                                 RowValidator<T> validator) throws IOException {
         try (InputStream in = file.getInputStream()) {
-            ImportListener<T> listener = new ImportListener<>(clazz, saver, translator, properties);
+            ImportListener<T> listener = new ImportListener<>(clazz, saver, translator, properties, validator);
             EasyExcel.read(in, clazz, listener).sheet().doRead();
             return new ExcelImportResult<>(listener.successRows, listener.errors);
         }
@@ -115,14 +136,60 @@ public final class ExcelHelper {
      */
     public void downloadTemplate(HttpServletResponse response, String filename,
                                   Class<?> clazz) throws IOException {
+        downloadTemplate(response, filename, clazz, null);
+    }
+
+    /**
+     * 下载 Excel 导入模板（仅列头 + 可选字典下拉验证）。
+     * <p>
+     * 若 dropDownMap 为空则仅输出表头；若不为空则按 colIndex 为目标列添加数据验证下拉框。
+     * 业务方可通过 {@link #buildDictDropDownMap(Class)} 自动生成下拉映射。
+     * </p>
+     *
+     * @param response    HttpServletResponse
+     * @param filename    文件名
+     * @param clazz       模板 DTO 的 Class（用于输出列头）
+     * @param dropDownMap 列索引 → 下拉选项（可为 null）
+     */
+    public void downloadTemplate(HttpServletResponse response, String filename,
+                                  Class<?> clazz, Map<Integer, String[]> dropDownMap) throws IOException {
         setExportResponseHeaders(response, filename);
-        try (ServletOutputStream out = response.getOutputStream();
-             ExcelWriter writer = EasyExcel.write(out, clazz).build()) {
-            WriteSheet sheet = EasyExcel.writerSheet(filename).build();
-            // 写空列表 → 仅输出表头
-            writer.write(List.of(), sheet);
-            writer.finish();
+        try (ServletOutputStream out = response.getOutputStream()) {
+            var builder = EasyExcel.write(out, clazz);
+            if (dropDownMap != null && !dropDownMap.isEmpty()) {
+                builder.registerWriteHandler(new DictDropDownWriteHandler(dropDownMap));
+            }
+            try (ExcelWriter writer = builder.build()) {
+                WriteSheet sheet = EasyExcel.writerSheet(filename).build();
+                writer.write(List.of(), sheet);
+                writer.finish();
+            }
         }
+    }
+
+    /**
+     * 扫描 clazz 的 {@link DictExcelProperty} 注解字段，构建列索引 → 下拉选项的映射。
+     * <p>
+     * 列索引按字段声明顺序分配（与 EasyExcel 默认列序一致）。
+     * 若未声明 {@code @ExcelProperty(index = N)}，则无需关心具体 index 值。
+     * </p>
+     *
+     * @param clazz 导出/导入 DTO 的 Class
+     * @return colIndex → 下拉选项数组（可能为空）
+     */
+    public Map<Integer, String[]> buildDictDropDownMap(Class<?> clazz) {
+        Map<Integer, String[]> map = new LinkedHashMap<>();
+        Field[] fields = clazz.getDeclaredFields();
+        for (int i = 0; i < fields.length; i++) {
+            DictExcelProperty dict = fields[i].getAnnotation(DictExcelProperty.class);
+            if (dict != null) {
+                String[] labels = translator.allLabels(dict.dictType());
+                if (labels != null && labels.length > 0) {
+                    map.put(i, labels);
+                }
+            }
+        }
+        return map;
     }
 
     // ==================== 内部工具 ====================
@@ -154,9 +221,10 @@ public final class ExcelHelper {
     }
 
     /**
+     * 公开的导入翻译方法，供流式导入等场景逐行调用。
      * 导入时翻译：遍历 DTO 上有 @DictExcelProperty 注解的字段，调用 translator.toValue 反查值
      */
-    private <T> void translateForImport(T row, Class<T> clazz) {
+    public <T> void translateForImport(T row, Class<T> clazz) {
         for (DictFieldInfo info : resolveDictFields(clazz)) {
             try {
                 Object value = info.field.get(row);
@@ -196,15 +264,18 @@ public final class ExcelHelper {
     private class ImportListener<T> extends AnalysisEventListener<T> {
         private final Class<T> clazz;
         private final BatchSaveFunction<T> saver;
+        private final RowValidator<T> validator;
         private final List<T> batch = new ArrayList<>();
         final List<T> successRows = new ArrayList<>();
         final List<ExcelImportResult.ImportError> errors = new ArrayList<>();
         private int totalRows = 0;
 
         ImportListener(Class<T> clazz, BatchSaveFunction<T> saver,
-                       DictTranslator translator, ExcelProperties properties) {
+                       DictTranslator translator, ExcelProperties properties,
+                       RowValidator<T> validator) {
             this.clazz = clazz;
             this.saver = saver;
+            this.validator = validator;
         }
 
         @Override
@@ -236,15 +307,18 @@ public final class ExcelHelper {
 
         private void flushBatch() {
             List<T> validRows = new ArrayList<>();
-            for (T row : batch) {
+            List<Integer> validRowNumbers = new ArrayList<>();
+            int baseRow = totalRows - batch.size();
+            for (int i = 0; i < batch.size(); i++) {
+                T row = batch.get(i);
                 try {
                     translateForImport(row, clazz);
-                    // 本轮总数 - 批内余量 = 当前行在 Excel 中的大致行号
-                    int excelRow = totalRows - batch.size() + validRows.size() + 1;
+                    int excelRow = baseRow + i + 1;
                     validateRow(row, excelRow);
                     validRows.add(row);
+                    validRowNumbers.add(excelRow);
                 } catch (Exception e) {
-                    int excelRow = totalRows - batch.size() + validRows.size() + 1;
+                    int excelRow = baseRow + i + 1;
                     errors.add(new ExcelImportResult.ImportError(excelRow, e.getMessage()));
                 }
             }
@@ -253,16 +327,30 @@ public final class ExcelHelper {
                     saver.save(validRows);
                     successRows.addAll(validRows);
                 } catch (Exception e) {
-                    errors.add(new ExcelImportResult.ImportError(0,
-                            "批量入库失败：" + e.getMessage()));
+                    trySaveOneByOne(validRows, validRowNumbers);
                 }
             }
             batch.clear();
         }
 
-        /** 单行校验钩子：默认不做额外校验，子类可扩展 */
+        /** 逐行保存：当批量入库失败时降级为逐行尝试，精确定位失败行 */
+        private void trySaveOneByOne(List<T> validRows, List<Integer> rowNumbers) {
+            for (int i = 0; i < validRows.size(); i++) {
+                try {
+                    saver.save(List.of(validRows.get(i)));
+                    successRows.add(validRows.get(i));
+                } catch (Exception e) {
+                    errors.add(new ExcelImportResult.ImportError(rowNumbers.get(i),
+                            "入库失败：" + e.getMessage()));
+                }
+            }
+        }
+
+        /** 单行校验：调用业务方 validator */
         private void validateRow(T row, int excelRow) {
-            // 预留：业务方可在此扩展校验逻辑
+            if (validator != null) {
+                validator.validate(row);
+            }
         }
     }
 }
