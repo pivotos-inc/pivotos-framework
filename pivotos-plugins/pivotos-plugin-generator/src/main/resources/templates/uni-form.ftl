@@ -3,15 +3,15 @@
  输出: pivotos-app/src/pages-gen/{moduleName}/{businessName}/form.vue
 ===================================================== -->
 <#function tsType javaType>
-  <#if javaType == "String">string
-  <#elseif javaType == "Integer" || javaType == "Long" || javaType == "BigDecimal" || javaType == "Float" || javaType == "Double">number
-  <#elseif javaType == "Boolean">boolean
-  <#elseif javaType == "LocalDateTime" || javaType == "LocalDate" || javaType == "LocalTime">string
-  <#else>any
+  <#if javaType == "String"><#return "string">
+  <#elseif javaType == "Integer" || javaType == "Long" || javaType == "BigDecimal" || javaType == "Float" || javaType == "Double"><#return "number">
+  <#elseif javaType == "Boolean"><#return "boolean">
+  <#elseif javaType == "LocalDateTime" || javaType == "LocalDate" || javaType == "LocalTime"><#return "string">
+  <#else><#return "any">
   </#if>
 </#function>
 <#function tsDefault javaType>
-  <#if javaType == "String">''<#elseif javaType == "Integer" || javaType == "Long" || javaType == "BigDecimal" || javaType == "Float" || javaType == "Double">undefined<#elseif javaType == "Boolean">false<#elseif javaType == "LocalDateTime" || javaType == "LocalDate" || javaType == "LocalTime">''<#else>''</#if>
+  <#if javaType == "String"><#return "''"><#elseif javaType == "Integer" || javaType == "Long" || javaType == "BigDecimal" || javaType == "Float" || javaType == "Double"><#return "undefined"><#elseif javaType == "Boolean"><#return "false"><#elseif javaType == "LocalDateTime" || javaType == "LocalDate" || javaType == "LocalTime"><#return "''"><#else><#return "''"></#if>
 </#function>
 <script setup lang="ts">
 import { onLoad } from '@dcloudio/uni-app';

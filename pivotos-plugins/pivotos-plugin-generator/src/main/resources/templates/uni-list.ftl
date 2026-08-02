@@ -4,7 +4,7 @@
  功能: 搜索 + 列表 + 下拉刷新 + 上拉加载更多
 ===================================================== -->
 <#function tsDefault javaType>
-  <#if javaType == "String">''<#elseif javaType == "Integer" || javaType == "Long" || javaType == "BigDecimal" || javaType == "Float" || javaType == "Double">undefined<#elseif javaType == "Boolean">false<#elseif javaType == "LocalDateTime" || javaType == "LocalDate" || javaType == "LocalTime">''<#else>''</#if>
+  <#if javaType == "String"><#return "''"><#elseif javaType == "Integer" || javaType == "Long" || javaType == "BigDecimal" || javaType == "Float" || javaType == "Double"><#return "undefined"><#elseif javaType == "Boolean"><#return "false"><#elseif javaType == "LocalDateTime" || javaType == "LocalDate" || javaType == "LocalTime"><#return "''"><#else><#return "''"></#if>
 </#function>
 <script setup lang="ts">
 import { onShow, onPullDownRefresh, onReachBottom } from '@dcloudio/uni-app';

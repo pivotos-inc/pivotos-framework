@@ -35,6 +35,16 @@ public class CodingController {
     }
 
     /**
+     * Page query coding sessions (list view, without generated files).
+     */
+    @GetMapping("/session/page")
+    public R<com.pivotos.common.core.page.PageResult<CodingSessionVO>> pageSessions(
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "10") Integer pageSize) {
+        return R.ok(codingService.pageSessions(pageNum, pageSize));
+    }
+
+    /**
      * Get session detail with generated file list.
      */
     @GetMapping("/session/{id}")

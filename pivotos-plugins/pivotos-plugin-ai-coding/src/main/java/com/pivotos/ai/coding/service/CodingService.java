@@ -1,6 +1,7 @@
 package com.pivotos.ai.coding.service;
 
 import com.pivotos.ai.coding.api.dto.CodingSessionVO;
+import com.pivotos.common.core.page.PageResult;
 
 /**
  * AI Coding service interface.
@@ -17,6 +18,15 @@ public interface CodingService {
      * @return coding session with generated files
      */
     CodingSessionVO parseAndGenerate(String description);
+
+    /**
+     * Page query coding sessions (without generated files, lightweight for list view).
+     *
+     * @param pageNum  page number
+     * @param pageSize page size
+     * @return session page
+     */
+    PageResult<CodingSessionVO> pageSessions(Integer pageNum, Integer pageSize);
 
     /**
      * Apply generated code to project (write files to disk).

@@ -47,7 +47,7 @@ public class CodingSessionVO implements Serializable {
     private Map<String, String> generatedFiles;
 
     /** 创建人 */
-    private String createBy;
+    private Long createBy;
 
     /** 创建时间 */
     private LocalDateTime createTime;
