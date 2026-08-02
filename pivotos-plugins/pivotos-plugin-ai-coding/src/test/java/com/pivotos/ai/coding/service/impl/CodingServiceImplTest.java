@@ -1,7 +1,7 @@
 package com.pivotos.ai.coding.service.impl;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.pivotos.ai.coding.api.constant.CodingErrorCode;
 import com.pivotos.ai.coding.api.dto.CodingSessionVO;
 import com.pivotos.ai.coding.domain.entity.CodingSession;
@@ -124,7 +124,7 @@ class CodingServiceImplTest {
 
     @Test
     @DisplayName("parseAndGenerate - happy path generates code and saves session")
-    void testParseAndGenerateSuccess() throws JsonProcessingException {
+    void testParseAndGenerateSuccess() throws JacksonException {
         when(objectMapper.writeValueAsString(any())).thenReturn("{\"entity/BizProduct.java\":\"test\"}");
         when(intentParseService.parse(anyString())).thenReturn(mockIntent);
         when(generatorFacade.importTable(anyString(), anyString(), anyString(), anyString(), anyString(), any()))
@@ -164,7 +164,7 @@ class CodingServiceImplTest {
     void testGetSessionFound() throws Exception {
         CodingSession session = buildMockSession();
         when(sessionMapper.selectById(1L)).thenReturn(session);
-        when(objectMapper.readValue(anyString(), any(com.fasterxml.jackson.core.type.TypeReference.class)))
+        when(objectMapper.readValue(anyString(), any(tools.jackson.core.type.TypeReference.class)))
                 .thenReturn(mockGeneratedFiles);
 
         CodingSessionVO vo = codingService.getSession(1L);
