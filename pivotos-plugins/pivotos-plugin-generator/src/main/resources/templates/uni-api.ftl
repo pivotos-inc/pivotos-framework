@@ -3,11 +3,11 @@
  输出: pivotos-app/src/api/{moduleName}/{businessName}.ts
 ===================================================== -->
 <#function tsType javaType>
-  <#if javaType == "String">string
-  <#elseif javaType == "Integer" || javaType == "Long" || javaType == "BigDecimal" || javaType == "Float" || javaType == "Double">number
-  <#elseif javaType == "Boolean">boolean
-  <#elseif javaType == "LocalDateTime" || javaType == "LocalDate" || javaType == "LocalTime">string
-  <#else>any
+  <#if javaType == "String"><#return "string">
+  <#elseif javaType == "Integer" || javaType == "Long" || javaType == "BigDecimal" || javaType == "Float" || javaType == "Double"><#return "number">
+  <#elseif javaType == "Boolean"><#return "boolean">
+  <#elseif javaType == "LocalDateTime" || javaType == "LocalDate" || javaType == "LocalTime"><#return "string">
+  <#else><#return "any">
   </#if>
 </#function>
 /**

@@ -1,9 +1,9 @@
 package com.pivotos.ai.coding.domain.entity;
 
-import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.annotation.TableName;
+import com.pivotos.starter.mybatis.domain.BaseDO;
 import lombok.Data;
-
-import java.time.LocalDateTime;
+import lombok.EqualsAndHashCode;
 
 /**
  * AI Coding session: stores generated code preview before applying to project.
@@ -12,11 +12,9 @@ import java.time.LocalDateTime;
  * @since 2.2.0
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("sys_coding_session")
-public class CodingSession {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class CodingSession extends BaseDO {
 
     /** User's natural language description */
     private String description;
@@ -38,16 +36,4 @@ public class CodingSession {
 
     /** Generated files JSON: filePath -> content */
     private String generatedFilesJson;
-
-    @TableField(fill = FieldFill.INSERT)
-    private String createBy;
-
-    @TableField(fill = FieldFill.INSERT)
-    private LocalDateTime createTime;
-
-    @TableField(fill = FieldFill.UPDATE)
-    private String updateBy;
-
-    @TableField(fill = FieldFill.UPDATE)
-    private LocalDateTime updateTime;
 }

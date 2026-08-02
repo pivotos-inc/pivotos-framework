@@ -2,12 +2,15 @@ package com.pivotos.ai.coding.service.impl;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.pivotos.ai.coding.api.dto.CodingSessionVO;
 import com.pivotos.ai.coding.domain.entity.CodingSession;
 import com.pivotos.ai.coding.mapper.CodingSessionMapper;
 import com.pivotos.ai.coding.service.CodingService;
 import com.pivotos.ai.coding.service.IntentParseService;
 import com.pivotos.common.core.exception.ServiceException;
+import com.pivotos.common.core.page.PageResult;
 import com.pivotos.generator.service.IGeneratorFacade;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -120,6 +123,18 @@ public class CodingServiceImpl implements CodingService {
         generatorFacade.generateToProject(session.getTableName());
         session.setStatus(2); // applied
         sessionMapper.updateById(session);
+    }
+
+    @Override
+    public PageResult<CodingSessionVO> pageSessions(Integer pageNum, Integer pageSize) {
+        LambdaQueryWrapper<CodingSession> wrapper = new LambdaQueryWrapper<CodingSession>()
+                // 列表视图不取大字段 generatedFilesJson
+                .select(CodingSession.class, f -> !"generated_files_json".equals(f.getColumn()))
+                .orderByDesc(CodingSession::getCreateTime);
+        Page<CodingSession> page = sessionMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
+        return new PageResult<>(
+                page.getRecords().stream().map(s -> toVO(s, null)).toList(),
+                page.getTotal(), pageNum, pageSize);
     }
 
     @Override
