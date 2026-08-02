@@ -1,8 +1,8 @@
 package com.pivotos.ai.coding.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import com.pivotos.ai.client.AiClientRegistry;
 import com.pivotos.ai.domain.entity.AiApiKey;
 import com.pivotos.ai.domain.entity.AiProvider;
