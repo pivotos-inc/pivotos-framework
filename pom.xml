@@ -51,6 +51,9 @@
                         <encoding>${project.build.sourceEncoding}</encoding>
                         <!-- 保留方法参数名（@RequestParam 省略 name、Lock4j/SpEL 参数引用依赖此项） -->
                         <parameters>true</parameters>
+                        <!-- fork 独立 javac 进程编译：in-process 模式下 Maven JVM 内存在间歇性污染，
+                             会导致 MapStruct 生成的类被编译成 throw new Error(Unresolved compilation problems) 的坏字节码 -->
+                        <fork>true</fork>
                         <!-- JDK 23+ javac 不再默认扫描 classpath 上的注解处理器，必须显式声明 -->
                         <annotationProcessorPaths>
                             <path>
