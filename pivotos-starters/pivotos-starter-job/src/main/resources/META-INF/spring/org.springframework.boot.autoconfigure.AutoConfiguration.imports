@@ -1,1 +1,2 @@
 com.pivotos.starter.job.config.JobAutoConfiguration
+com.pivotos.starter.job.config.JobSupportAutoConfiguration
