@@ -32,9 +32,22 @@ pivotos:
   tenant:
     enabled: true        # 默认 false，不写=单租户
     mode: column         # column / schema / datasource
+  # 文件存储：腾讯云 COS（测试环境）
   file:
-    endpoint: http://175.24.176.176:9000
-    access-key: minio_zJfsQb
-    secret-key: minio_zp7xx4
-    bucket: huweilong
-    # public-url 缺省回落 endpoint（公网直连场景两者相同）
+    storage-type: s3
+    vendor: cos
+    endpoint: https://cos.ap-shanghai.myqcloud.com
+    access-key: AKIDKhrqb9UbVCg3D9B9AA4qPuENXUJvJUSC
+    secret-key: ayBIG1aw51jEVlqiNtDKOL7i5HJ8k9LO
+    bucket: huweilong-1440252518
+    region: ap-shanghai
+    public-url: https://cos.293242.com
+  # XXL-Job 调度中心（测试环境本地）
+  job:
+    admin-addresses: http://localhost:8100
+    app-name: pivotos-executor
+    port: 9999
+  # 微信小程序（测试号）
+  wechat:
+    miniapp:
+      appid: wx0a426f6d4bce0b5c
