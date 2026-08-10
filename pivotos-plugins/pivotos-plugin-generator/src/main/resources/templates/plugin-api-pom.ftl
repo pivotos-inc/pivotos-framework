@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-plugins</artifactId>
+        <version>${projectVersion}</version>
+    </parent>
+
+    <artifactId>pivotos-plugin-${pluginName}-api</artifactId>
+    <name>pivotos-plugin-${pluginName}-api</name>
+    <description>PivotOS ${displayName}插件契约层（Facade 接口 / DTO / ${errorCodeBase?c}xx 错误码，禁框架依赖）——AI Coding 骨架生成</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-common-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-common-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>

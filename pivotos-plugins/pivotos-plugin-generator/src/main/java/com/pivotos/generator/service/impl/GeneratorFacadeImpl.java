@@ -110,6 +110,11 @@ public class GeneratorFacadeImpl implements IGeneratorFacade {
         generatorService.generateToProject(genTable.getId());
     }
 
+    @Override
+    public Map<String, String> previewPluginSkeleton(Map<String, Object> params) {
+        return generatorService.previewPluginSkeleton(params);
+    }
+
     private static String toClassName(String businessName) {
         if (businessName == null || businessName.isBlank()) return "Unknown";
         return businessName.substring(0, 1).toUpperCase() + businessName.substring(1);

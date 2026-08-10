@@ -40,4 +40,17 @@ public interface IGeneratorFacade {
      * @param tableName table name to generate for
      */
     void generateToProject(String tableName);
+
+    /**
+     * Preview a new plugin skeleton (S42 / 2.2-F12): dual-module poms, error-code
+     * enum, facade placeholder, package-info, Flyway placeholder README, menu SQL template.
+     * <p>
+     * Paths are relative to the pivotos-framework root (pivotos-plugins/...);
+     * no gen_table involvement. Params: pluginName, className, displayName,
+     * tablePrefix, moduleDesc, errorCodeBase(int).
+     *
+     * @param params skeleton params
+     * @return map of file path to file content
+     */
+    Map<String, String> previewPluginSkeleton(Map<String, Object> params);
 }

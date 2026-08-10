@@ -45,4 +45,12 @@ public interface CodingService {
      * @return session VO
      */
     CodingSessionVO getSession(Long userId, Long sessionId);
+
+    /**
+     * Parse natural language and generate a new plugin skeleton (S42 / 2.2-F12).
+     *
+     * @param description business domain description
+     * @return coding session with skeleton files
+     */
+    CodingSessionVO parseAndGeneratePlugin(String description);
 }

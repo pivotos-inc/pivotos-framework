@@ -34,6 +34,12 @@ public class CodingSession extends BaseDO {
     /** 0=parsing, 1=pending review, 2=applied, 3=failed */
     private Integer status;
 
+    /** 1=单表CRUD, 2=Plugin骨架 */
+    private Integer taskType;
+
     /** Generated files JSON: filePath -> content */
     private String generatedFilesJson;
+
+    /** Task-type specific params JSON (e.g. plugin skeleton params) */
+    private String extraJson;
 }

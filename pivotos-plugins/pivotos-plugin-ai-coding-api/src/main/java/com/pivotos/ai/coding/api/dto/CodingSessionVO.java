@@ -43,6 +43,12 @@ public class CodingSessionVO implements Serializable {
     /** 状态：0=解析中 1=待评审 2=已应用 3=失败 */
     private Integer status;
 
+    /** 任务类型：1=单表CRUD 2=Plugin骨架 */
+    private Integer taskType;
+
+    /** 任务类型特定参数（如骨架 pluginName/errorCodeBase/tablePrefix） */
+    private Map<String, Object> extra;
+
     /** 生成的文件列表（文件路径 → 文件内容） */
     private Map<String, String> generatedFiles;
 

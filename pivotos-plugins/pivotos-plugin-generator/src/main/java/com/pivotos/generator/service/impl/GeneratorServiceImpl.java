@@ -443,6 +443,60 @@ public class GeneratorServiceImpl implements GeneratorService {
         log.info("代码已生成到路径: {}", genPath);
     }
 
+    // ==================== Plugin 骨架（S42 / 2.2-F12） ====================
+
+    /**
+     * 渲染 Plugin 双模块骨架（不碰 gen_table）。
+     * params: pluginName, className, displayName, tablePrefix, moduleDesc, errorCodeBase(int)
+     */
+    public Map<String, String> previewPluginSkeleton(Map<String, Object> params) {
+        String pluginName = String.valueOf(params.get("pluginName"));
+        String className = String.valueOf(params.get("className"));
+        String base = "pivotos-plugins/pivotos-plugin-" + pluginName;
+        String apiBase = base + "-api";
+        String apiJava = apiBase + "/src/main/java/com/pivotos/" + pluginName + "/api";
+        String implJava = base + "/src/main/java/com/pivotos/" + pluginName;
+
+        Map<String, Object> model = new HashMap<>(params);
+        model.put("projectVersion", resolveProjectVersion());
+
+        Map<String, String> result = new LinkedHashMap<>();
+        try {
+            result.put(apiBase + "/pom.xml", render("plugin-api-pom.ftl", model));
+            result.put(base + "/pom.xml", render("plugin-pom.ftl", model));
+            result.put(apiJava + "/constant/" + className + "ErrorCode.java",
+                    render("plugin-errorcode.ftl", model));
+            result.put(apiJava + "/facade/I" + className + "Facade.java",
+                    render("plugin-facade.ftl", model));
+            result.put(implJava + "/package-info.java", render("plugin-package-info.ftl", model));
+            result.put(base + "/src/main/resources/db/migration/README.md",
+                    render("plugin-flyway-readme.ftl", model));
+            result.put(base + "/docs/menu.sql.template", render("plugin-menu-sql.ftl", model));
+        } catch (Exception e) {
+            log.error("Plugin 骨架渲染失败: pluginName={}", pluginName, e);
+            throw new ServiceException(GeneratorErrorCode.GEN_TEMPLATE_RENDER_FAILED);
+        }
+        return result;
+    }
+
+    /** 当前工程版本（读自身 jar 的 pom.properties，供骨架 pom parent version；dev 环境回落 2.1.0） */
+    private String resolveProjectVersion() {
+        try (var in = getClass().getClassLoader().getResourceAsStream(
+                "META-INF/maven/com.pivotos/pivotos-plugin-generator/pom.properties")) {
+            if (in != null) {
+                Properties props = new Properties();
+                props.load(in);
+                String v = props.getProperty("version");
+                if (v != null && !v.isBlank()) {
+                    return v;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("读取工程版本失败，回落默认值", e);
+        }
+        return "2.1.0";
+    }
+
     // ==================== 工具方法 ====================
 
     /** FreeMarker 模板渲染 */
