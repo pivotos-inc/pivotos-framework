@@ -21,6 +21,9 @@ public class UserQuery extends PageQuery {
     /** 部门ID */
     private Long deptId;
 
+    /** 岗位ID */
+    private Long postId;
+
     /** 状态 */
     private Integer status;
 }

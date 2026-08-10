@@ -7,6 +7,7 @@ import com.pivotos.system.domain.entity.SysDept;
 import com.pivotos.system.domain.vo.DeptVO;
 
 import java.util.List;
+import java.util.Set;
 
 /** 部门服务 */
 public interface DeptService extends IService<SysDept> {
@@ -25,4 +26,7 @@ public interface DeptService extends IService<SysDept> {
 
     /** 删除部门（有子部门或部门下有用户则拒绝） */
     void deleteDept(Long deptId);
+
+    /** 获取部门所有子孙部门 ID 集合（不含自身），用于数据权限子树查询 */
+    Set<Long> getSubtreeDeptIds(Long deptId);
 }

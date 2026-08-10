@@ -2,13 +2,20 @@ package com.pivotos.system.service;
 
 import com.baomidou.mybatisplus.spring.service.IService;
 import com.pivotos.common.core.page.PageResult;
+import com.pivotos.starter.excel.util.ExcelImportResult;
 import com.pivotos.system.domain.dto.ResetPasswordBody;
 import com.pivotos.system.domain.dto.ChangePasswordBody;
 import com.pivotos.system.domain.dto.ProfileUpdateRequest;
 import com.pivotos.system.domain.dto.UserQuery;
 import com.pivotos.system.domain.dto.UserSaveRequest;
 import com.pivotos.system.domain.entity.SysUser;
+import com.pivotos.system.domain.vo.UserExcelVO;
 import com.pivotos.system.domain.vo.UserVO;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
 
 /** 用户服务 */
 public interface UserService extends IService<SysUser> {
@@ -39,4 +46,16 @@ public interface UserService extends IService<SysUser> {
 
     /** 修改本人密码（旧密码校验通过才允许重置） */
     void changePassword(Long userId, ChangePasswordBody body);
+
+    /** 导出用户列表为 Excel（分页流式写入 response） */
+    void exportUsers(HttpServletResponse response, UserQuery query) throws IOException;
+
+    /** 导入用户 Excel（单行校验 + 分批入库 + 错误行回执） */
+    ExcelImportResult<UserExcelVO> importUsers(MultipartFile file) throws IOException;
+
+    /** 流式导入用户 Excel（SSE 逐行推送结果，适用于大数据量场景） */
+    SseEmitter importUsersStream(MultipartFile file);
+
+    /** 下载用户导入模板 */
+    void downloadUserTemplate(HttpServletResponse response) throws IOException;
 }

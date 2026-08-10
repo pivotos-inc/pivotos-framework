@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-plugins</artifactId>
-        <version>2.0.0</version>
+        <version>2.1.0</version>
     </parent>
 
     <artifactId>pivotos-plugin-ai</artifactId>
@@ -44,6 +44,12 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-auth</artifactId>
         </dependency>
+        <!-- 任务调度（S34 2.2-F7）：AI Key 健康度巡检 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-job</artifactId>
+        </dependency>
+
         <!-- AI 底座：ChatClient / AiProperties -->
         <dependency>
             <groupId>com.pivotos</groupId>

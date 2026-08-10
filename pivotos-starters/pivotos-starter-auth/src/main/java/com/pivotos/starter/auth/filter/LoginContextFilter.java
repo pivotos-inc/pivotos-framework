@@ -65,6 +65,12 @@ public class LoginContextFilter extends OncePerRequestFilter {
             }
             Object stored = logic.getTokenSession().get(AuthSessionHolder.LOGIN_USER_KEY);
             if (stored instanceof LoginUser loginUser) {
+                // 记录最后活跃时间（供在线用户列表精确展示）
+                try {
+                    logic.getTokenSession().set("LAST_ACTIVE_TIME", System.currentTimeMillis());
+                } catch (Exception ignored) {
+                    // 非关键路径，静默忽略
+                }
                 return loginUser;
             }
             // 会话数据缺失（如 Redis 被清）时的兜底重建

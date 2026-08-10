@@ -6,13 +6,13 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-plugins</artifactId>
-        <version>2.0.0</version>
+        <version>2.1.0</version>
     </parent>
 
     <artifactId>pivotos-plugin-file</artifactId>
 
     <name>pivotos-plugin-file</name>
-    <description>PivotOS file 插件实现（对象存储预签名直传，一期 MinIO 实现）</description>
+    <description>PivotOS file 插件实现（对象存储预签名直传，S25 多云双实现 MinIO / S3 兼容 + sys_file 元数据）</description>
 
     <dependencies>
         <!-- 本插件契约 -->
@@ -34,6 +34,10 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-auth</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-mybatis</artifactId>
+        </dependency>
 
         <!-- 对象存储 SDK（BOM 已仲裁） -->
         <dependency>
@@ -44,6 +48,11 @@
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp-jvm</artifactId>
+        </dependency>
+        <!-- S3 兼容实现（OSS/COS/OBS 兼容 API，BOM 已仲裁 aws-sdk-v2） -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
         </dependency>
 
         <dependency>

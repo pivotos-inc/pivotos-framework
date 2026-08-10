@@ -5,7 +5,7 @@
 
     <groupId>com.pivotos</groupId>
     <artifactId>pivotos-framework</artifactId>
-    <version>2.0.0</version>
+    <version>2.1.0</version>
     <packaging>pom</packaging>
 
     <name>pivotos-framework</name>
@@ -95,6 +95,16 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+
+        <!-- 显式声明 maven-compiler-plugin 使所有子模块继承：
+             IDEA 对 pluginManagement 中的 annotationProcessorPaths 导入支持不佳，
+             显式声明后 IDEA 才能正确启用 Lombok/MapStruct 注解处理，避免生成坏字节码 -->
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+        </plugins>
     </build>
 
 </project>

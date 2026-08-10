@@ -25,6 +25,7 @@ public class TenantProperties {
             "sys_user_role", "sys_user_post", "sys_role_menu",
             "sys_dict_type", "sys_dict_data", "sys_config",
             "sys_social_user",
+            "sys_login_log", "sys_oper_log", "sys_notice", "sys_job_log",
             "flyway_schema_history");
 
     /** 总开关（条件装配锚点），默认关闭 */

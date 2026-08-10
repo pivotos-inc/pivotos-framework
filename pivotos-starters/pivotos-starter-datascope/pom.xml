@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-starters</artifactId>
+        <version>2.1.0</version>
+    </parent>
+
+    <artifactId>pivotos-starter-datascope</artifactId>
+    <name>pivotos-starter-datascope</name>
+    <description>PivotOS 数据权限 Starter - 基于 MyBatis 的行级数据过滤拦截器（@DataScope 注解）</description>
+
+    <dependencies>
+        <!-- 基础公共模块（@DataScope 注解 + 枚举常量等） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-common-core</artifactId>
+        </dependency>
+
+        <!-- MyBatis-Plus（SqlSessionFactory / MetaObject / 拦截器基础设施） -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot4-starter</artifactId>
+        </dependency>
+
+        <!-- JSqlParser（SQL 语义解析，用于注入 WHERE 条件） -->
+        <dependency>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+        </dependency>
+
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <!-- 测试 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

@@ -159,6 +159,13 @@ public class DeptServiceImpl extends ServiceImpl<SysDeptMapper, SysDept> impleme
         }
     }
 
+    @Override
+    public Set<Long> getSubtreeDeptIds(Long deptId) {
+        List<SysDept> all = list();
+        Map<Long, List<SysDept>> childrenMap = buildChildrenMap(all);
+        return collectSubtreeIds(deptId, childrenMap);
+    }
+
     /** 平铺部门 VO → 树 */
     private List<DeptVO> buildDeptTree(List<DeptVO> flat) {
         Map<Long, DeptVO> byId = flat.stream()
