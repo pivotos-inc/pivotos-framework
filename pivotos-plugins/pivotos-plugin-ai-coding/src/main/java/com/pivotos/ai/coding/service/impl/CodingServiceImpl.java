@@ -10,6 +10,7 @@ import com.pivotos.ai.coding.mapper.CodingSessionMapper;
 import com.pivotos.ai.coding.service.ArtifactLinter;
 import com.pivotos.ai.coding.service.AssemblyPatcher;
 import com.pivotos.ai.coding.service.CodingService;
+import com.pivotos.ai.coding.service.CrudApplyService;
 import com.pivotos.ai.coding.service.ErrorCodeSegmentAllocator;
 import com.pivotos.ai.coding.service.IntentParseService;
 import com.pivotos.common.core.exception.ServiceException;
@@ -48,6 +49,7 @@ public class CodingServiceImpl implements CodingService {
     private final ErrorCodeSegmentAllocator segmentAllocator;
     private final ArtifactLinter artifactLinter;
     private final AssemblyPatcher assemblyPatcher;
+    private final CrudApplyService crudApplyService;
 
     /** 骨架任务类型 */
     private static final int TASK_TYPE_CRUD = 1;
@@ -66,7 +68,8 @@ public class CodingServiceImpl implements CodingService {
                              ObjectMapper objectMapper,
                              ErrorCodeSegmentAllocator segmentAllocator,
                              ArtifactLinter artifactLinter,
-                             AssemblyPatcher assemblyPatcher) {
+                             AssemblyPatcher assemblyPatcher,
+                             CrudApplyService crudApplyService) {
         this.intentParseService = intentParseService;
         this.generatorFacade = generatorFacade;
         this.sessionMapper = sessionMapper;
@@ -74,6 +77,7 @@ public class CodingServiceImpl implements CodingService {
         this.segmentAllocator = segmentAllocator;
         this.artifactLinter = artifactLinter;
         this.assemblyPatcher = assemblyPatcher;
+        this.crudApplyService = crudApplyService;
     }
 
     @Override
@@ -146,8 +150,8 @@ public class CodingServiceImpl implements CodingService {
             applyPluginSkeleton(session);
             return;
         }
-        // Generate directly to project
-        generatorFacade.generateToProject(session.getTableName());
+        // S43：CRUD 产物走 CrudApplyService（落盘路径修正 + Flyway 版本分配 + pages.json 注册）
+        crudApplyService.apply(session);
         session.setStatus(2); // applied
         sessionMapper.updateById(session);
     }

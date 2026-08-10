@@ -6,9 +6,7 @@
 import { onLoad } from '@dcloudio/uni-app';
 import { ref } from 'vue';
 import { delete${className}, get${className}, type ${className}VO } from '@/api/${moduleName}/${businessName}';
-import { useUserStore } from '@/store/user';
 
-const hasPerm = (perm: string) => useUserStore().hasPermission(perm);
 
 const detail = ref<${className}VO>();
 const loading = ref(false);
@@ -74,7 +72,6 @@ async function onDelete() {
 
       <view class="action-bar">
         <wd-button
-          v-if="hasPerm('${permPrefix}:edit')"
           type="primary"
           block
           @click="toEdit"
@@ -82,7 +79,6 @@ async function onDelete() {
           编辑
         </wd-button>
         <wd-button
-          v-if="hasPerm('${permPrefix}:remove')"
           type="danger"
           block
           :loading="loading"

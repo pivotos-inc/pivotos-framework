@@ -1,7 +1,6 @@
 package ${packageName}.service;
 
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import ${packageName}.domain.entity.${className};
+import com.pivotos.common.core.page.PageResult;
 import ${packageName}.domain.dto.${className}CreateRequest;
 import ${packageName}.domain.dto.${className}UpdateRequest;
 import ${packageName}.domain.dto.${className}QueryRequest;
@@ -20,7 +19,7 @@ public interface ${className}Service {
     /**
      * 分页查询${functionName}
      */
-    IPage<${className}VO> selectPage(IPage<${className}> page, ${className}QueryRequest query);
+    PageResult<${className}VO> selectPage(${className}QueryRequest query);
 
     /**
      * 查询${functionName}详情

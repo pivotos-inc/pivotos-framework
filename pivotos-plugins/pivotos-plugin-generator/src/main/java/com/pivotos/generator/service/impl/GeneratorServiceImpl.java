@@ -335,6 +335,24 @@ public class GeneratorServiceImpl implements GeneratorService {
         model.put("importTypes", importTypes);
         model.put("hasImportableTypes", !importTypes.isEmpty());
 
+        // 全限定 import 路径（dto/vo 模板用）
+        Set<String> importPaths = new LinkedHashSet<>();
+        for (String t : importTypes) {
+            switch (t) {
+                case "BigDecimal" -> importPaths.add("java.math.BigDecimal");
+                case "LocalDateTime" -> importPaths.add("java.time.LocalDateTime");
+                case "LocalDate" -> importPaths.add("java.time.LocalDate");
+                case "LocalTime" -> importPaths.add("java.time.LocalTime");
+                default -> { }
+            }
+        }
+        model.put("importPaths", importPaths);
+
+        // VO 字段（BaseDTO 已有 id/审计字段，剔除）
+        Set<String> baseDtoFields = Set.of("id", "createBy", "createTime", "updateBy", "updateTime", "deleted");
+        model.put("voColumns", columns.stream()
+                .filter(c -> !baseDtoFields.contains(c.getJavaField())).toList());
+
         // 前端权限前缀、API 前缀
         String permPrefix = genTable.getModuleName() + ":" + genTable.getBusinessName();
         String apiPrefix = "/" + genTable.getModuleName() + "/" + genTable.getBusinessName();
@@ -378,6 +396,14 @@ public class GeneratorServiceImpl implements GeneratorService {
                     render("service.ftl", model));
             result.put(javaDir + "/service/impl/" + table.getClassName() + "ServiceImpl.java",
                     render("serviceImpl.ftl", model));
+            result.put(javaDir + "/domain/dto/" + table.getClassName() + "CreateRequest.java",
+                    render("dto-create.ftl", model));
+            result.put(javaDir + "/domain/dto/" + table.getClassName() + "UpdateRequest.java",
+                    render("dto-update.ftl", model));
+            result.put(javaDir + "/domain/dto/" + table.getClassName() + "QueryRequest.java",
+                    render("dto-query.ftl", model));
+            result.put(javaDir + "/domain/vo/" + table.getClassName() + "VO.java",
+                    render("vo.ftl", model));
             result.put(javaDir + "/controller/" + table.getClassName() + "Controller.java",
                     render("controller.ftl", model));
             result.put("sql/" + toFlywayFileName(table.getTableName()) + ".sql",

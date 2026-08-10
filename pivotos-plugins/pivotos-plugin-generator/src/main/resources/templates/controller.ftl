@@ -1,14 +1,13 @@
 package ${packageName}.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
-import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.pivotos.common.core.page.PageResult;
 import com.pivotos.common.core.result.R;
 import com.pivotos.starter.auth.account.StpSysUtil;
 import ${packageName}.domain.dto.${className}CreateRequest;
 import ${packageName}.domain.dto.${className}UpdateRequest;
 import ${packageName}.domain.dto.${className}QueryRequest;
 import ${packageName}.domain.vo.${className}VO;
-import ${packageName}.domain.entity.${className};
 import ${packageName}.service.${className}Service;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -32,9 +31,8 @@ public class ${className}Controller {
     /** 分页查询${functionName} */
     @GetMapping("/page")
     @SaCheckPermission(value = "${moduleName}:${businessName}:list", type = StpSysUtil.TYPE)
-    public R<IPage<${className}VO>> selectPage(@Valid ${className}QueryRequest query) {
-        IPage<${className}> page = query.toPage();
-        return R.ok(${classVarName}Service.selectPage(page, query));
+    public R<PageResult<${className}VO>> selectPage(@Valid ${className}QueryRequest query) {
+        return R.ok(${classVarName}Service.selectPage(query));
     }
 
     /** 查询${functionName}详情 */

@@ -56,6 +56,28 @@ public class ArtifactLinter {
                     Pattern.compile("(^|/)\\.\\.(/|$)"), ANY, true)
     );
 
+    /** 产物路径 → 所属插件名（pivotos-plugins/pivotos-plugin-xxx(-api)/…） */
+    private static final Pattern OWN_PLUGIN_PATTERN =
+            Pattern.compile("^pivotos-plugins/pivotos-plugin-([a-z0-9]+?)(-api)?/");
+
+    /**
+     * R6 判定：import 的目标插件 ≠ 产物自身所属插件才算跨插件依赖。
+     * S43 踩坑：CRUD 产物落在既有插件内（如 system），同插件跨包引用
+     * （controller → service → domain）被旧实现误报。
+     */
+    private boolean isCrossPluginImport(String path, String content, Rule rule) {
+        java.util.regex.Matcher ownMatcher = OWN_PLUGIN_PATTERN.matcher(path);
+        String ownPlugin = ownMatcher.find() ? ownMatcher.group(1) : null;
+        java.util.regex.Matcher importMatcher = rule.pattern().matcher(content);
+        while (importMatcher.find()) {
+            String targetPlugin = importMatcher.group(1);
+            if (ownPlugin == null || !ownPlugin.equals(targetPlugin)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * 扫描产物（路径 + 内容），返回违规报告条目；空列表 = 全绿。
      *
@@ -71,7 +93,9 @@ public class ArtifactLinter {
                 if (!rule.appliesTo(path)) {
                     continue;
                 }
-                boolean hit = rule.checkPath() ? rule.match(path) : rule.match(content);
+                boolean hit = rule.checkPath() ? rule.match(path)
+                        : "R6".equals(rule.id()) ? isCrossPluginImport(path, content, rule)
+                        : rule.match(content);
                 if (hit) {
                     violations.add(rule.id() + " " + path + ": " + rule.label());
                 }

@@ -10,9 +10,7 @@
 import { onShow, onPullDownRefresh, onReachBottom } from '@dcloudio/uni-app';
 import { ref, reactive, computed } from 'vue';
 import { select${className}Page, type ${className}VO, type ${className}Query } from '@/api/${moduleName}/${businessName}';
-import { useUserStore } from '@/store/user';
 
-const hasPerm = (perm: string) => useUserStore().hasPermission(perm);
 
 // ========== 搜索条件 ==========
 const query = reactive<${className}Query>({
@@ -127,7 +125,7 @@ onReachBottom(() => {
         </#list>
         </view>
         <view class="item-actions">
-          <wd-button v-if="hasPerm('${permPrefix}:edit')" type="primary" size="small" @click.stop="toEdit(item.id)">
+          <wd-button type="primary" size="small" @click.stop="toEdit(item.id)">
             编辑
           </wd-button>
         </view>
@@ -141,7 +139,7 @@ onReachBottom(() => {
     <wd-status-tip v-if="!loading && list.length === 0" image="content" tip="暂无${functionName}数据" />
 
     <!-- 新增按钮 -->
-    <view v-if="hasPerm('${permPrefix}:add')" class="fab" @click="toAdd">
+    <view class="fab" @click="toAdd">
       <wd-icon name="add" size="28px" color="#fff" />
     </view>
   </view>
