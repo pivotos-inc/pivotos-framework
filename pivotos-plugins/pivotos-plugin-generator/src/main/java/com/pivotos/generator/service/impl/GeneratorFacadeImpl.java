@@ -64,7 +64,7 @@ public class GeneratorFacadeImpl implements IGeneratorFacade {
         genTable.setFunctionName(functionName);
         genTable.setBusinessName(businessName);
         genTable.setClassName(toClassName(businessName));
-        genTable.setPackageName("com.pivotos." + moduleName);
+        genTable.setPackageName(resolvePackageName(moduleName));
         genTable.setFunctionAuthor("AI Coding");
         genTableMapper.insert(genTable);
 
@@ -80,9 +80,9 @@ public class GeneratorFacadeImpl implements IGeneratorFacade {
             column.setJavaField((String) col.get("javaField"));
             column.setIsPk(Integer.valueOf(col.getOrDefault("isPk", 0).toString()));
             column.setIsRequired(Integer.valueOf(col.getOrDefault("isRequired", 0).toString()));
-            column.setIsInsert(1);
-            column.setIsEdit(1);
-            column.setIsList(1);
+            column.setIsInsert(Integer.valueOf(col.getOrDefault("isInsert", 1).toString()));
+            column.setIsEdit(Integer.valueOf(col.getOrDefault("isEdit", 1).toString()));
+            column.setIsList(Integer.valueOf(col.getOrDefault("isList", 1).toString()));
             column.setIsQuery(Integer.valueOf(col.getOrDefault("isQuery", 0).toString()));
             column.setQueryType((String) col.getOrDefault("queryType", "EQ"));
             column.setHtmlType((String) col.getOrDefault("htmlType", "input"));
@@ -110,8 +110,46 @@ public class GeneratorFacadeImpl implements IGeneratorFacade {
         generatorService.generateToProject(genTable.getId());
     }
 
+    @Override
+    public Map<String, String> previewPluginSkeleton(Map<String, Object> params) {
+        return generatorService.previewPluginSkeleton(params);
+    }
+
     private static String toClassName(String businessName) {
         if (businessName == null || businessName.isBlank()) return "Unknown";
         return businessName.substring(0, 1).toUpperCase() + businessName.substring(1);
+    }
+
+    /**
+     * 包名解析：优先 com.pivotos.{moduleName}，但对应插件目录
+     * （pivotos-plugins/pivotos-plugin-{moduleName}）不存在时回落 com.pivotos.system，
+     * 避免产物落进不存在/不被扫描的模块成为死代码。
+     */
+    static String resolvePackageName(String moduleName) {
+        String candidate = "com.pivotos." + moduleName;
+        try {
+            java.nio.file.Path pluginDir = resolveFrameworkRoot()
+                    .resolve("pivotos-plugins/pivotos-plugin-" + moduleName);
+            if (!java.nio.file.Files.isDirectory(pluginDir)) {
+                log.warn("[Generator] 插件目录不存在，包名回落 com.pivotos.system: module={}", moduleName);
+                return "com.pivotos.system";
+            }
+        } catch (Exception e) {
+            log.warn("[Generator] 插件目录探测失败，按原包名继续: module={}", moduleName, e);
+        }
+        return candidate;
+    }
+
+    /** 从 user.dir 上溯定位 framework 根（含 pivotos-plugins/pom.xml 的目录） */
+    private static java.nio.file.Path resolveFrameworkRoot() {
+        java.nio.file.Path dir = java.nio.file.Path.of(System.getProperty("user.dir"))
+                .toAbsolutePath().normalize();
+        while (dir != null) {
+            if (java.nio.file.Files.exists(dir.resolve("pivotos-plugins/pom.xml"))) {
+                return dir;
+            }
+            dir = dir.getParent();
+        }
+        return java.nio.file.Path.of(System.getProperty("user.dir"));
     }
 }

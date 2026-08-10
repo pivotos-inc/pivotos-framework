@@ -335,6 +335,24 @@ public class GeneratorServiceImpl implements GeneratorService {
         model.put("importTypes", importTypes);
         model.put("hasImportableTypes", !importTypes.isEmpty());
 
+        // 全限定 import 路径（dto/vo 模板用）
+        Set<String> importPaths = new LinkedHashSet<>();
+        for (String t : importTypes) {
+            switch (t) {
+                case "BigDecimal" -> importPaths.add("java.math.BigDecimal");
+                case "LocalDateTime" -> importPaths.add("java.time.LocalDateTime");
+                case "LocalDate" -> importPaths.add("java.time.LocalDate");
+                case "LocalTime" -> importPaths.add("java.time.LocalTime");
+                default -> { }
+            }
+        }
+        model.put("importPaths", importPaths);
+
+        // VO 字段（BaseDTO 已有 id/审计字段，剔除）
+        Set<String> baseDtoFields = Set.of("id", "createBy", "createTime", "updateBy", "updateTime", "deleted");
+        model.put("voColumns", columns.stream()
+                .filter(c -> !baseDtoFields.contains(c.getJavaField())).toList());
+
         // 前端权限前缀、API 前缀
         String permPrefix = genTable.getModuleName() + ":" + genTable.getBusinessName();
         String apiPrefix = "/" + genTable.getModuleName() + "/" + genTable.getBusinessName();
@@ -378,6 +396,14 @@ public class GeneratorServiceImpl implements GeneratorService {
                     render("service.ftl", model));
             result.put(javaDir + "/service/impl/" + table.getClassName() + "ServiceImpl.java",
                     render("serviceImpl.ftl", model));
+            result.put(javaDir + "/domain/dto/" + table.getClassName() + "CreateRequest.java",
+                    render("dto-create.ftl", model));
+            result.put(javaDir + "/domain/dto/" + table.getClassName() + "UpdateRequest.java",
+                    render("dto-update.ftl", model));
+            result.put(javaDir + "/domain/dto/" + table.getClassName() + "QueryRequest.java",
+                    render("dto-query.ftl", model));
+            result.put(javaDir + "/domain/vo/" + table.getClassName() + "VO.java",
+                    render("vo.ftl", model));
             result.put(javaDir + "/controller/" + table.getClassName() + "Controller.java",
                     render("controller.ftl", model));
             result.put("sql/" + toFlywayFileName(table.getTableName()) + ".sql",
@@ -441,6 +467,60 @@ public class GeneratorServiceImpl implements GeneratorService {
             FileUtil.writeString(entry.getValue(), file, StandardCharsets.UTF_8);
         }
         log.info("代码已生成到路径: {}", genPath);
+    }
+
+    // ==================== Plugin 骨架（S42 / 2.2-F12） ====================
+
+    /**
+     * 渲染 Plugin 双模块骨架（不碰 gen_table）。
+     * params: pluginName, className, displayName, tablePrefix, moduleDesc, errorCodeBase(int)
+     */
+    public Map<String, String> previewPluginSkeleton(Map<String, Object> params) {
+        String pluginName = String.valueOf(params.get("pluginName"));
+        String className = String.valueOf(params.get("className"));
+        String base = "pivotos-plugins/pivotos-plugin-" + pluginName;
+        String apiBase = base + "-api";
+        String apiJava = apiBase + "/src/main/java/com/pivotos/" + pluginName + "/api";
+        String implJava = base + "/src/main/java/com/pivotos/" + pluginName;
+
+        Map<String, Object> model = new HashMap<>(params);
+        model.put("projectVersion", resolveProjectVersion());
+
+        Map<String, String> result = new LinkedHashMap<>();
+        try {
+            result.put(apiBase + "/pom.xml", render("plugin-api-pom.ftl", model));
+            result.put(base + "/pom.xml", render("plugin-pom.ftl", model));
+            result.put(apiJava + "/constant/" + className + "ErrorCode.java",
+                    render("plugin-errorcode.ftl", model));
+            result.put(apiJava + "/facade/I" + className + "Facade.java",
+                    render("plugin-facade.ftl", model));
+            result.put(implJava + "/package-info.java", render("plugin-package-info.ftl", model));
+            result.put(base + "/src/main/resources/db/migration/README.md",
+                    render("plugin-flyway-readme.ftl", model));
+            result.put(base + "/docs/menu.sql.template", render("plugin-menu-sql.ftl", model));
+        } catch (Exception e) {
+            log.error("Plugin 骨架渲染失败: pluginName={}", pluginName, e);
+            throw new ServiceException(GeneratorErrorCode.GEN_TEMPLATE_RENDER_FAILED);
+        }
+        return result;
+    }
+
+    /** 当前工程版本（读自身 jar 的 pom.properties，供骨架 pom parent version；dev 环境回落 2.1.0） */
+    private String resolveProjectVersion() {
+        try (var in = getClass().getClassLoader().getResourceAsStream(
+                "META-INF/maven/com.pivotos/pivotos-plugin-generator/pom.properties")) {
+            if (in != null) {
+                Properties props = new Properties();
+                props.load(in);
+                String v = props.getProperty("version");
+                if (v != null && !v.isBlank()) {
+                    return v;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("读取工程版本失败，回落默认值", e);
+        }
+        return "2.1.0";
     }
 
     // ==================== 工具方法 ====================
