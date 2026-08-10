@@ -155,7 +155,7 @@ class CodingServiceImplTest {
     void testGetSessionNotFound() {
         when(sessionMapper.selectById(999L)).thenReturn(null);
         ServiceException ex = assertThrows(ServiceException.class,
-                () -> codingService.getSession(999L));
+                () -> codingService.getSession(1L, 999L));
         assertEquals(CodingErrorCode.CODING_SESSION_NOT_FOUND.getCode(), ex.getCode());
     }
 
@@ -167,12 +167,35 @@ class CodingServiceImplTest {
         when(objectMapper.readValue(anyString(), any(tools.jackson.core.type.TypeReference.class)))
                 .thenReturn(mockGeneratedFiles);
 
-        CodingSessionVO vo = codingService.getSession(1L);
+        CodingSessionVO vo = codingService.getSession(1L, 1L);
 
         assertNotNull(vo);
         assertEquals(1L, vo.getId());
         assertEquals("Create a product management module", vo.getDescription());
         assertEquals(mockGeneratedFiles, vo.getGeneratedFiles());
+    }
+
+    @Test
+    @DisplayName("getSession - cross-user access throws 7004 (row-level isolation)")
+    void testGetSessionCrossUser() {
+        CodingSession session = buildMockSession(); // createBy = 1
+        when(sessionMapper.selectById(1L)).thenReturn(session);
+
+        ServiceException ex = assertThrows(ServiceException.class,
+                () -> codingService.getSession(2L, 1L));
+        assertEquals(CodingErrorCode.CODING_SESSION_NOT_FOUND.getCode(), ex.getCode());
+    }
+
+    @Test
+    @DisplayName("getSession - null createBy treated as not owned")
+    void testGetSessionNullCreateBy() {
+        CodingSession session = buildMockSession();
+        session.setCreateBy(null);
+        when(sessionMapper.selectById(1L)).thenReturn(session);
+
+        ServiceException ex = assertThrows(ServiceException.class,
+                () -> codingService.getSession(1L, 1L));
+        assertEquals(CodingErrorCode.CODING_SESSION_NOT_FOUND.getCode(), ex.getCode());
     }
 
     // ==================== applyToProject ====================
@@ -182,7 +205,7 @@ class CodingServiceImplTest {
     void testApplyToProjectNotFound() {
         when(sessionMapper.selectById(999L)).thenReturn(null);
         ServiceException ex = assertThrows(ServiceException.class,
-                () -> codingService.applyToProject(999L));
+                () -> codingService.applyToProject(1L, 999L));
         assertEquals(CodingErrorCode.CODING_SESSION_NOT_FOUND.getCode(), ex.getCode());
     }
 
@@ -193,10 +216,23 @@ class CodingServiceImplTest {
         when(sessionMapper.selectById(1L)).thenReturn(session);
         when(sessionMapper.updateById(any(CodingSession.class))).thenReturn(1);
 
-        codingService.applyToProject(1L);
+        codingService.applyToProject(1L, 1L);
 
         verify(generatorFacade).generateToProject("biz_product");
         assertEquals(2, session.getStatus());
+    }
+
+    @Test
+    @DisplayName("applyToProject - cross-user apply rejected, no code written")
+    void testApplyToProjectCrossUser() {
+        CodingSession session = buildMockSession(); // createBy = 1
+        when(sessionMapper.selectById(1L)).thenReturn(session);
+
+        ServiceException ex = assertThrows(ServiceException.class,
+                () -> codingService.applyToProject(2L, 1L));
+        assertEquals(CodingErrorCode.CODING_SESSION_NOT_FOUND.getCode(), ex.getCode());
+        verify(generatorFacade, never()).generateToProject(anyString());
+        verify(sessionMapper, never()).updateById(any(CodingSession.class));
     }
 
     // ==================== Helper ====================
@@ -204,6 +240,7 @@ class CodingServiceImplTest {
     private CodingSession buildMockSession() {
         CodingSession session = new CodingSession();
         session.setId(1L);
+        session.setCreateBy(1L);
         session.setDescription("Create a product management module");
         session.setModuleName("system");
         session.setTableName("biz_product");

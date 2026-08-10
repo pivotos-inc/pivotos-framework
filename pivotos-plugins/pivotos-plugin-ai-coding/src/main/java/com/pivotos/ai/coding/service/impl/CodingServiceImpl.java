@@ -114,11 +114,8 @@ public class CodingServiceImpl implements CodingService {
 
     @Override
     @Transactional
-    public void applyToProject(Long sessionId) {
-        CodingSession session = sessionMapper.selectById(sessionId);
-        if (session == null) {
-            throw new ServiceException(CODING_SESSION_NOT_FOUND);
-        }
+    public void applyToProject(Long userId, Long sessionId) {
+        CodingSession session = requireOwned(userId, sessionId);
         // Generate directly to project
         generatorFacade.generateToProject(session.getTableName());
         session.setStatus(2); // applied
@@ -126,8 +123,10 @@ public class CodingServiceImpl implements CodingService {
     }
 
     @Override
-    public PageResult<CodingSessionVO> pageSessions(Integer pageNum, Integer pageSize) {
+    public PageResult<CodingSessionVO> pageSessions(Long userId, Integer pageNum, Integer pageSize) {
         LambdaQueryWrapper<CodingSession> wrapper = new LambdaQueryWrapper<CodingSession>()
+                // 行级隔离：仅本人创建的会话（create_by = 当前登录用户）
+                .eq(CodingSession::getCreateBy, userId)
                 // 列表视图不取大字段 generatedFilesJson
                 .select(CodingSession.class, f -> !"generated_files_json".equals(f.getColumn()))
                 .orderByDesc(CodingSession::getCreateTime);
@@ -138,13 +137,19 @@ public class CodingServiceImpl implements CodingService {
     }
 
     @Override
-    public CodingSessionVO getSession(Long sessionId) {
-        CodingSession session = sessionMapper.selectById(sessionId);
-        if (session == null) {
-            throw new ServiceException(CODING_SESSION_NOT_FOUND);
-        }
+    public CodingSessionVO getSession(Long userId, Long sessionId) {
+        CodingSession session = requireOwned(userId, sessionId);
         Map<String, String> files = parseGeneratedFiles(session.getGeneratedFilesJson());
         return toVO(session, files);
+    }
+
+    /** 归属校验：不存在或非本人一律 7004（不泄露资源存在性），对齐 AI 对话 requireOwned 范式 */
+    private CodingSession requireOwned(Long userId, Long sessionId) {
+        CodingSession session = sessionMapper.selectById(sessionId);
+        if (session == null || session.getCreateBy() == null || !session.getCreateBy().equals(userId)) {
+            throw new ServiceException(CODING_SESSION_NOT_FOUND);
+        }
+        return session;
     }
 
     // ======================== Private helpers ========================
