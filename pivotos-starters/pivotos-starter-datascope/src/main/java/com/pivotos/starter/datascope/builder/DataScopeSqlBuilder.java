@@ -62,9 +62,7 @@ public final class DataScopeSqlBuilder {
             return new EqualsTo(new LongValue(1), new LongValue(0));
         }
         ExpressionList<LongValue> list = new ExpressionList<>();
-        for (Long id : ids) {
-            list.add(new LongValue(id));
-        }
+        ids.stream().sorted().forEach(id -> list.add(new LongValue(id)));
         return new InExpression(new Column(column), new ParenthesedExpressionList<>(list));
     }
 }
