@@ -16,6 +16,7 @@
  * @date ${datetime}
  */
 import { request } from '../request';
+import type { PageQuery } from '@pivotos/types';
 
 /** ${functionName} VO */
 export interface ${className}VO {
@@ -37,13 +38,11 @@ export interface ${className}SaveRequest {
 }
 
 /** ${functionName} 查询参数 */
-export interface ${className}Query {
+export interface ${className}Query extends PageQuery {
 <#list queryColumns as col>
   /** ${col.columnComment} */
   ${col.javaField}?: ${tsType(col.javaType)};
 </#list>
-  pageNum?: number;
-  pageSize?: number;
 }
 
 /** 查询${functionName}详情 */

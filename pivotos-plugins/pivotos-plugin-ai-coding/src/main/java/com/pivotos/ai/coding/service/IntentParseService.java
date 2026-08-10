@@ -46,8 +46,11 @@ public class IntentParseService {
             6. columns: array of {columnName, columnType(MySQL), columnComment,
                javaType(String/Integer/Long/BigDecimal/LocalDateTime/Boolean),
                javaField(camelCase), isPk(0|1), isRequired(0|1),
-               isQuery(0|1), queryType(EQ|LIKE), htmlType(input|textarea|datetime|switch)}
+               isQuery(0|1), queryType(EQ|LIKE), htmlType(input|textarea|datetime|switch),
+               isList(0|1, show in table), isInsert(0|1, show in create form), isEdit(0|1, show in edit form)}
             7. Do NOT include id/createBy/createTime in columns (auto-generated)
+            8. isList/isInsert/isEdit default to 1; set 0 for fields that should be hidden
+               (e.g. long text hidden from list via isList=0)
             Output ONLY JSON, no markdown:
             {"moduleName":"...","functionName":"...","tableName":"...","businessName":"...","tableComment":"...","columns":[...]}
             """;

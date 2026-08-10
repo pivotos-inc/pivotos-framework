@@ -58,6 +58,9 @@ class CodingServiceImplTest {
     @Mock
     private com.pivotos.ai.coding.service.AssemblyPatcher assemblyPatcher;
 
+    @Mock
+    private com.pivotos.ai.coding.service.CrudApplyService crudApplyService;
+
     @InjectMocks
     private CodingServiceImpl codingService;
 
@@ -230,7 +233,7 @@ class CodingServiceImplTest {
 
         codingService.applyToProject(1L, 1L);
 
-        verify(generatorFacade).generateToProject("biz_product");
+        verify(crudApplyService).apply(session);
         assertEquals(2, session.getStatus());
     }
 
@@ -243,7 +246,7 @@ class CodingServiceImplTest {
         ServiceException ex = assertThrows(ServiceException.class,
                 () -> codingService.applyToProject(2L, 1L));
         assertEquals(CodingErrorCode.CODING_SESSION_NOT_FOUND.getCode(), ex.getCode());
-        verify(generatorFacade, never()).generateToProject(anyString());
+        verify(crudApplyService, never()).apply(any(CodingSession.class));
         verify(sessionMapper, never()).updateById(any(CodingSession.class));
     }
 

@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS `${tableName}` (
     `id`              BIGINT        NOT NULL COMMENT '编号',
-<#list insertColumns as col>
+<#list columns as col>
 <#if col.javaField != "id" && col.javaField != "createBy" && col.javaField != "createTime" && col.javaField != "updateBy" && col.javaField != "updateTime" && col.javaField != "deleted">
     `${col.columnName}` ${col.columnType} <#if col.isRequired == 1>NOT NULL<#else>DEFAULT NULL</#if> COMMENT '${col.columnComment!}',
 </#if>
@@ -18,20 +18,16 @@ CREATE TABLE IF NOT EXISTS `${tableName}` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='${tableComment!}';
 
 -- =====================================================
--- 菜单数据
+-- 菜单数据（系统工具 1100 下；id 取当前最大值 +10 起避让，
+-- super_admin 走通配权限，无需 sys_role_menu 授权数据）
 -- =====================================================
-INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `perms`, `menu_type`, `path`, `component`, `icon`, `sort`, `status`, `visible`)
-VALUES
-(
-    UNIX_TIMESTAMP(NOW())*1000 + FLOOR(RAND()*1000),
-    (SELECT id FROM sys_menu WHERE perms = 'system:${businessName}' LIMIT 1),
-    '${functionName}',
-    '${moduleName}:${businessName}:list',
-    'C',
-    '${businessName}',
-    '${moduleName}/${businessName}/index',
-    'system',
-    1,
-    1,
-    1
-);
+SET @gen_menu_id := (SELECT COALESCE(MAX(id), 0) + 10 FROM sys_menu);
+
+INSERT INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_by, create_time, deleted) VALUES
+    (@gen_menu_id, 1100, '${functionName}', 'C', '${businessName}', '${moduleName}/${businessName}/index', '${moduleName}:${businessName}:list', 'tool', 9, 0, 0, 1, NOW(), 0);
+
+INSERT INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_by, create_time, deleted) VALUES
+    (@gen_menu_id + 1, @gen_menu_id, '${functionName}查询', 'F', '', '', '${moduleName}:${businessName}:query',  '', 1, 0, 0, 1, NOW(), 0),
+    (@gen_menu_id + 2, @gen_menu_id, '${functionName}新增', 'F', '', '', '${moduleName}:${businessName}:add',    '', 2, 0, 0, 1, NOW(), 0),
+    (@gen_menu_id + 3, @gen_menu_id, '${functionName}修改', 'F', '', '', '${moduleName}:${businessName}:edit',   '', 3, 0, 0, 1, NOW(), 0),
+    (@gen_menu_id + 4, @gen_menu_id, '${functionName}删除', 'F', '', '', '${moduleName}:${businessName}:remove', '', 4, 0, 0, 1, NOW(), 0);

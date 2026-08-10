@@ -2,8 +2,9 @@ package ${packageName}.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.pivotos.common.core.page.PageResult;
 import ${packageName}.domain.entity.${className};
 import ${packageName}.domain.dto.${className}CreateRequest;
 import ${packageName}.domain.dto.${className}UpdateRequest;
@@ -32,7 +33,7 @@ public class ${className}ServiceImpl implements ${className}Service {
     private ${className}Mapper ${classVarName}Mapper;
 
     @Override
-    public IPage<${className}VO> selectPage(IPage<${className}> page, ${className}QueryRequest query) {
+    public PageResult<${className}VO> selectPage(${className}QueryRequest query) {
         LambdaQueryWrapper<${className}> wq = Wrappers.lambdaQuery();
 <#list queryColumns as col>
 <#if col.queryType == "LIKE">
@@ -46,12 +47,14 @@ public class ${className}ServiceImpl implements ${className}Service {
 </#list>
         wq.orderByDesc(${className}::getCreateTime);
 
-        IPage<${className}> resultPage = ${classVarName}Mapper.selectPage(page, wq);
-        return resultPage.convert(entity -> {
+        Page<${className}> page = ${classVarName}Mapper.selectPage(
+                new Page<>(query.getPageNum(), query.getPageSize()), wq);
+        List<${className}VO> voList = page.getRecords().stream().map(entity -> {
             ${className}VO vo = new ${className}VO();
             BeanUtil.copyProperties(entity, vo);
             return vo;
-        });
+        }).toList();
+        return new PageResult<>(voList, page.getTotal(), query.getPageNum(), query.getPageSize());
     }
 
     @Override

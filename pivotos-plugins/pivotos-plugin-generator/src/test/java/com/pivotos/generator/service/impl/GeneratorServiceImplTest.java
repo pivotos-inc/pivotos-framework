@@ -161,6 +161,79 @@ class GeneratorServiceImplTest {
         assertEquals(GeneratorErrorCode.GEN_TABLE_NOT_FOUND.getCode(), ex.getCode());
     }
 
+    // ==================== previewCode 渲染（S43：dto/vo 模板 + 菜单 SQL） ====================
+
+    @Test
+    @DisplayName("previewCode - 产物含 dto/vo 四件套且可编译形态正确")
+    void testPreviewCodeContainsDtoVo() {
+        when(genTableMapper.selectById(1L)).thenReturn(mockTable);
+        when(genTableColumnMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(mockColumns);
+
+        Map<String, String> files = generatorService.previewCode(1L);
+
+        String javaBase = "pivotos-plugins/pivotos-plugin-system/src/main/java/com/pivotos/system";
+        String createReq = files.get(javaBase + "/domain/dto/BizProductCreateRequest.java");
+        String updateReq = files.get(javaBase + "/domain/dto/BizProductUpdateRequest.java");
+        String queryReq = files.get(javaBase + "/domain/dto/BizProductQueryRequest.java");
+        String vo = files.get(javaBase + "/domain/vo/BizProductVO.java");
+        assertNotNull(createReq);
+        assertNotNull(updateReq);
+        assertNotNull(queryReq);
+        assertNotNull(vo);
+
+        // CreateRequest：必填校验 + 无 id/审计字段
+        assertTrue(createReq.contains("class BizProductCreateRequest"));
+        assertTrue(createReq.contains("@NotBlank(message = \"product_name不能为空\")"));
+        assertFalse(createReq.contains("createTime"));
+        // UpdateRequest：带 @NotNull id
+        assertTrue(updateReq.contains("@NotNull(message = \"id 不能为空\")"));
+        assertTrue(updateReq.contains("private Long id;"));
+        // QueryRequest：继承 PageQuery + LIKE 字段
+        assertTrue(queryReq.contains("extends PageQuery"));
+        assertTrue(queryReq.contains("private String productName;"));
+        // Controller/ServiceImpl：PageResult 形态（对齐手写分层 + useTablePage 的 list/total 约定）
+        String controller = files.get(javaBase + "/controller/BizProductController.java");
+        String serviceImpl = files.get(javaBase + "/service/impl/BizProductServiceImpl.java");
+        assertNotNull(controller);
+        assertNotNull(serviceImpl);
+        assertTrue(controller.contains("R<PageResult<BizProductVO>> selectPage"));
+        assertTrue(serviceImpl.contains("new PageResult<>(voList, page.getTotal()"));
+        // PC api：Query 继承 PageQuery（useTablePage 泛型约束，S43 typecheck 实测）
+        String pcApi = files.get("pivotos-ui/apps/admin/src/api/system/product.ts");
+        assertNotNull(pcApi);
+        assertTrue(pcApi.contains("export interface BizProductQuery extends PageQuery"));
+        // VO：继承 BaseDTO、剔除审计字段、含 BigDecimal import
+        assertTrue(vo.contains("class BizProductVO extends BaseDTO"));
+        assertTrue(vo.contains("private BigDecimal price;"));
+        assertTrue(vo.contains("import java.math.BigDecimal;"));
+        assertFalse(vo.contains("private LocalDateTime createTime;"));
+    }
+
+    @Test
+    @DisplayName("previewCode - flyway 菜单段重写为 1100 + C/F 按钮 + 动态 id")
+    void testPreviewCodeFlywayMenu() {
+        when(genTableMapper.selectById(1L)).thenReturn(mockTable);
+        when(genTableColumnMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(mockColumns);
+
+        Map<String, String> files = generatorService.previewCode(1L);
+        String sqlKey = files.keySet().stream().filter(k -> k.startsWith("sql/")).findFirst().orElseThrow();
+        String sql = files.get(sqlKey);
+
+        assertTrue(sql.contains("SET @gen_menu_id :="));
+        assertTrue(sql.contains("@gen_menu_id, 1100,"));
+        assertTrue(sql.contains("'system:product:list'"));
+        assertTrue(sql.contains("'system:product:add'"));
+        assertTrue(sql.contains("'system:product:edit'"));
+        assertTrue(sql.contains("'system:product:remove'"));
+        assertTrue(sql.contains("'system:product:query'"));
+        // 本仓约定 0=正常/可见，禁止 UNIX_TIMESTAMP 随机 id
+        assertFalse(sql.contains("UNIX_TIMESTAMP"));
+        // DDL 覆盖全部业务字段（不随 isInsert 变化丢列）
+        assertTrue(sql.contains("`price` decimal(10,2)"));
+    }
+
     // ==================== Helper ====================
 
     private GenTableColumn buildColumn(Long id, Long tableId, String columnName,
