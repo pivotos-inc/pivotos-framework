@@ -29,6 +29,21 @@ public enum CodingErrorCode implements ErrorCode {
     /** 表名冲突 */
     CODING_TABLE_EXISTS(7005, "目标表已存在，请修改表名"),
 
+    /** 插件名非法（格式/保留名冲突） */
+    CODING_PLUGIN_NAME_INVALID(7006, "插件名非法或与既有模块冲突"),
+
+    /** 插件目录已存在 */
+    CODING_PLUGIN_EXISTS(7007, "目标插件目录已存在，请更换插件名"),
+
+    /** 红线 lint 未通过 */
+    CODING_LINT_FAILED(7008, "产物红线检查未通过，请查看检查报告"),
+
+    /** 落盘路径越界 */
+    CODING_PATH_REJECTED(7009, "产物路径越出白名单，已拒绝落盘"),
+
+    /** 装配补丁失败 */
+    CODING_ASSEMBLY_FAILED(7010, "装配补丁失败（pom/扫描登记），请检查工程文件"),
+
     ;
 
     private final int code;

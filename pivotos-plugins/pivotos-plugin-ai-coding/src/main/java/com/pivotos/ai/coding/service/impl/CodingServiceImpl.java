@@ -7,7 +7,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.pivotos.ai.coding.api.dto.CodingSessionVO;
 import com.pivotos.ai.coding.domain.entity.CodingSession;
 import com.pivotos.ai.coding.mapper.CodingSessionMapper;
+import com.pivotos.ai.coding.service.ArtifactLinter;
+import com.pivotos.ai.coding.service.AssemblyPatcher;
 import com.pivotos.ai.coding.service.CodingService;
+import com.pivotos.ai.coding.service.ErrorCodeSegmentAllocator;
 import com.pivotos.ai.coding.service.IntentParseService;
 import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.page.PageResult;
@@ -17,8 +20,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import java.nio.file.Path;
 
 import static com.pivotos.ai.coding.api.constant.CodingErrorCode.*;
 
@@ -39,15 +45,35 @@ public class CodingServiceImpl implements CodingService {
     private final IGeneratorFacade generatorFacade;
     private final CodingSessionMapper sessionMapper;
     private final ObjectMapper objectMapper;
+    private final ErrorCodeSegmentAllocator segmentAllocator;
+    private final ArtifactLinter artifactLinter;
+    private final AssemblyPatcher assemblyPatcher;
+
+    /** 骨架任务类型 */
+    private static final int TASK_TYPE_CRUD = 1;
+    private static final int TASK_TYPE_PLUGIN = 2;
+
+    /** 保留插件名（与既有模块/组件冲突） */
+    private static final java.util.Set<String> RESERVED_PLUGIN_NAMES = java.util.Set.of(
+            "system", "message", "file", "ai", "generator", "server", "common", "starter");
+
+    private static final java.util.regex.Pattern PLUGIN_NAME_PATTERN =
+            java.util.regex.Pattern.compile("^[a-z][a-z0-9]{1,15}$");
 
     public CodingServiceImpl(IntentParseService intentParseService,
                              IGeneratorFacade generatorFacade,
                              CodingSessionMapper sessionMapper,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper,
+                             ErrorCodeSegmentAllocator segmentAllocator,
+                             ArtifactLinter artifactLinter,
+                             AssemblyPatcher assemblyPatcher) {
         this.intentParseService = intentParseService;
         this.generatorFacade = generatorFacade;
         this.sessionMapper = sessionMapper;
         this.objectMapper = objectMapper;
+        this.segmentAllocator = segmentAllocator;
+        this.artifactLinter = artifactLinter;
+        this.assemblyPatcher = assemblyPatcher;
     }
 
     @Override
@@ -116,10 +142,177 @@ public class CodingServiceImpl implements CodingService {
     @Transactional
     public void applyToProject(Long userId, Long sessionId) {
         CodingSession session = requireOwned(userId, sessionId);
+        if (Integer.valueOf(TASK_TYPE_PLUGIN).equals(session.getTaskType())) {
+            applyPluginSkeleton(session);
+            return;
+        }
         // Generate directly to project
         generatorFacade.generateToProject(session.getTableName());
         session.setStatus(2); // applied
         sessionMapper.updateById(session);
+    }
+
+    // ==================== Plugin 骨架（S42 / 2.2-F12） ====================
+
+    @Override
+    @Transactional
+    public CodingSessionVO parseAndGeneratePlugin(String description) {
+        if (description == null || description.isBlank()) {
+            throw new ServiceException(CODING_DESC_EMPTY);
+        }
+
+        // Step 1: LLM 骨架意图（只推断命名类参数）
+        Map<String, Object> intent;
+        try {
+            intent = intentParseService.parsePluginIntent(description);
+        } catch (Exception e) {
+            log.error("[AI Coding] Plugin intent parse failed: description={}", description, e);
+            throw new ServiceException(CODING_INTENT_PARSE_FAILED);
+        }
+        String pluginName = asString(intent.get("pluginName"));
+        String displayName = asString(intent.get("displayName"));
+        String tablePrefix = asString(intent.get("tablePrefix"));
+        String moduleDesc = asString(intent.get("moduleDesc"));
+
+        // Step 2: 确定性校验/分配（LLM 输出不可信）
+        if (pluginName == null || !PLUGIN_NAME_PATTERN.matcher(pluginName).matches()
+                || RESERVED_PLUGIN_NAMES.contains(pluginName)) {
+            log.warn("[AI Coding] Invalid plugin name from LLM: {}", pluginName);
+            throw new ServiceException(CODING_PLUGIN_NAME_INVALID);
+        }
+        if (displayName == null || displayName.isBlank()) {
+            displayName = pluginName + " 管理";
+        }
+        if (tablePrefix == null || !tablePrefix.matches("^[a-z][a-z0-9]*_$")) {
+            tablePrefix = pluginName + "_";
+        }
+        if (moduleDesc == null || moduleDesc.isBlank()) {
+            moduleDesc = displayName + "（AI Coding 骨架生成）";
+        }
+        // 目录冲突前置检查（评审前拦一次，apply 时再拦一次防竞态）
+        Path frameworkRoot = assemblyPatcher.resolveFrameworkRoot();
+        if (java.nio.file.Files.exists(frameworkRoot.resolve("pivotos-plugins/pivotos-plugin-" + pluginName))) {
+            throw new ServiceException(CODING_PLUGIN_EXISTS);
+        }
+        int errorCodeBase = segmentAllocator.allocateFreeSegment() * 1000;
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("pluginName", pluginName);
+        params.put("className", Character.toUpperCase(pluginName.charAt(0)) + pluginName.substring(1));
+        params.put("displayName", displayName);
+        params.put("tablePrefix", tablePrefix);
+        params.put("moduleDesc", moduleDesc);
+        params.put("errorCodeBase", errorCodeBase);
+        log.info("[AI Coding] Plugin skeleton parsed: name={}, display={}, codeBase={}",
+                pluginName, displayName, errorCodeBase);
+
+        // Step 3: 生成器骨架渲染
+        Map<String, String> generatedFiles;
+        try {
+            generatedFiles = generatorFacade.previewPluginSkeleton(params);
+        } catch (Exception e) {
+            log.error("[AI Coding] Plugin skeleton render failed: pluginName={}", pluginName, e);
+            throw new ServiceException(CODING_GENERATE_FAILED);
+        }
+
+        // Step 4: 红线 lint（报告随会话留存，apply 时强校验）
+        List<String> violations = artifactLinter.lint(generatedFiles);
+        if (!violations.isEmpty()) {
+            log.warn("[AI Coding] Plugin skeleton lint violations: {}", violations);
+        }
+
+        // Step 5: 暂存会话
+        CodingSession session = new CodingSession();
+        session.setDescription(description);
+        session.setModuleName(pluginName);
+        session.setFunctionName(displayName);
+        session.setStatus(1);
+        session.setTaskType(TASK_TYPE_PLUGIN);
+        try {
+            session.setGeneratedFilesJson(objectMapper.writeValueAsString(generatedFiles));
+            Map<String, Object> extra = new LinkedHashMap<>(params);
+            extra.put("lintReport", violations);
+            session.setExtraJson(objectMapper.writeValueAsString(extra));
+        } catch (Exception e) {
+            log.error("[AI Coding] Serialize plugin skeleton failed", e);
+            throw new ServiceException(CODING_GENERATE_FAILED);
+        }
+        sessionMapper.insert(session);
+
+        return toVO(session, generatedFiles);
+    }
+
+    /** 骨架应用：lint 强校验 → 路径白名单 → 落盘 → 装配三处登记 */
+    private void applyPluginSkeleton(CodingSession session) {
+        Map<String, String> files = parseGeneratedFiles(session.getGeneratedFilesJson());
+        Map<String, Object> extra = parseExtra(session.getExtraJson());
+        String pluginName = asString(extra.get("pluginName"));
+        String displayName = asString(extra.get("displayName"));
+        if (pluginName == null) {
+            throw new ServiceException(CODING_GENERATE_FAILED);
+        }
+
+        // ① 红线 lint 门禁（落盘前拦截，D4）
+        List<String> violations = artifactLinter.lint(files);
+        if (!violations.isEmpty()) {
+            log.warn("[AI Coding] Apply rejected by lint: session={}, violations={}", session.getId(), violations);
+            throw new ServiceException(CODING_LINT_FAILED);
+        }
+
+        // ② 路径白名单：仅 pivotos-plugins/pivotos-plugin-{name}(-api)/**
+        java.util.regex.Pattern allowed = java.util.regex.Pattern.compile(
+                "^pivotos-plugins/pivotos-plugin-" + java.util.regex.Pattern.quote(pluginName)
+                        + "(-api)?/.+");
+        for (String path : files.keySet()) {
+            if (path.contains("..") || !allowed.matcher(path).matches()) {
+                log.warn("[AI Coding] Path rejected: {}", path);
+                throw new ServiceException(CODING_PATH_REJECTED);
+            }
+        }
+
+        // ③ 目录冲突复查（apply 时防竞态/重复应用）
+        Path frameworkRoot = assemblyPatcher.resolveFrameworkRoot();
+        Path pluginDir = frameworkRoot.resolve("pivotos-plugins/pivotos-plugin-" + pluginName);
+        if (java.nio.file.Files.exists(pluginDir)) {
+            throw new ServiceException(CODING_PLUGIN_EXISTS);
+        }
+
+        // ④ 落盘
+        try {
+            for (Map.Entry<String, String> entry : files.entrySet()) {
+                Path target = frameworkRoot.resolve(entry.getKey()).normalize();
+                if (!target.startsWith(frameworkRoot)) {
+                    throw new ServiceException(CODING_PATH_REJECTED);
+                }
+                java.nio.file.Files.createDirectories(target.getParent());
+                java.nio.file.Files.writeString(target, entry.getValue(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+        } catch (java.io.IOException e) {
+            log.error("[AI Coding] Write skeleton files failed", e);
+            throw new ServiceException(CODING_GENERATE_FAILED);
+        }
+
+        // ⑤ 装配登记（pom modules / admin-server 依赖 / scanBasePackages，幂等）
+        assemblyPatcher.patch(frameworkRoot, pluginName, displayName);
+
+        session.setStatus(2);
+        sessionMapper.updateById(session);
+        log.info("[AI Coding] Plugin skeleton applied: session={}, plugin={}", session.getId(), pluginName);
+    }
+
+    private Map<String, Object> parseExtra(String json) {
+        if (json == null || json.isBlank()) return Map.of();
+        try {
+            Map<String, Object> parsed = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+            return parsed == null ? Map.of() : parsed;
+        } catch (Exception e) {
+            log.warn("[AI Coding] Failed to parse extra JSON", e);
+            return Map.of();
+        }
+    }
+
+    private static String asString(Object o) {
+        return o == null ? null : String.valueOf(o);
     }
 
     @Override
@@ -184,6 +377,8 @@ public class CodingServiceImpl implements CodingService {
                 .functionName(session.getFunctionName())
                 .businessName(session.getBusinessName())
                 .status(session.getStatus())
+                .taskType(session.getTaskType())
+                .extra(parseExtra(session.getExtraJson()))
                 .generatedFiles(files)
                 .createBy(session.getCreateBy())
                 .createTime(session.getCreateTime())

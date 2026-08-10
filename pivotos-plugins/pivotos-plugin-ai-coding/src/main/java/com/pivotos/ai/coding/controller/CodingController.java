@@ -49,6 +49,15 @@ public class CodingController {
     }
 
     /**
+     * Parse natural language and generate a new plugin skeleton (S42 / 2.2-F12).
+     */
+    @PostMapping("/plugin/parse")
+    @SaCheckPermission(value = "ai:coding:parse", type = StpSysUtil.TYPE)
+    public R<CodingSessionVO> parsePlugin(@RequestBody CodingRequest request) {
+        return R.ok(codingService.parseAndGeneratePlugin(request.getDescription()));
+    }
+
+    /**
      * Page query coding sessions (list view, without generated files).
      */
     @GetMapping("/session/page")

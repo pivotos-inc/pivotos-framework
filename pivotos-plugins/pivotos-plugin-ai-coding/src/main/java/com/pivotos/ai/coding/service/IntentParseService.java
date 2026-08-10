@@ -52,6 +52,21 @@ public class IntentParseService {
             {"moduleName":"...","functionName":"...","tableName":"...","businessName":"...","tableComment":"...","columns":[...]}
             """;
 
+    /** Plugin 骨架意图（S42）：LLM 只推断命名类参数，错误码段由 ErrorCodeSegmentAllocator 确定性分配 */
+    private static final String PLUGIN_SYSTEM_PROMPT = """
+            You are a Java plugin architect for the PivotOS platform. Given a business domain description,
+            output a plugin skeleton plan in JSON.
+            Rules:
+            1. pluginName: lowercase english identifier, ^[a-z][a-z0-9]{1,15}$, single word or
+               concatenated words (e.g. asset, contract, assetloan); must NOT be one of the
+               reserved names: system, message, file, ai, generator, server, common, starter
+            2. displayName: Chinese plugin display name (max 10 chars, e.g. 资产管理)
+            3. tablePrefix: database table prefix, usually pluginName + "_" (e.g. asset_)
+            4. moduleDesc: one-sentence Chinese module description for pom <description>
+            Output ONLY JSON, no markdown:
+            {"pluginName":"...","displayName":"...","tablePrefix":"...","moduleDesc":"..."}
+            """;
+
     public IntentParseService(ObjectMapper objectMapper, AiClientRegistry registry,
                               AiProviderMapper providerMapper, AiApiKeyMapper keyMapper) {
         this.objectMapper = objectMapper;
@@ -62,6 +77,17 @@ public class IntentParseService {
 
     public Map<String, Object> parse(String description) {
         log.info("[AI Coding] Intent parse: description={}", description);
+        return callLlm(SYSTEM_PROMPT, "Business description: " + description + "\n\nOutput JSON schema:");
+    }
+
+    /** Plugin 骨架意图解析（S42）：返回 pluginName/displayName/tablePrefix/moduleDesc */
+    public Map<String, Object> parsePluginIntent(String description) {
+        log.info("[AI Coding] Plugin intent parse: description={}", description);
+        return callLlm(PLUGIN_SYSTEM_PROMPT, "Business domain description: " + description + "\n\nOutput JSON plan:");
+    }
+
+    /** 共用：取首个启用供应商 + 首个启用 Key → LLM 调用 → JSON 解析 */
+    private Map<String, Object> callLlm(String systemPrompt, String userPrompt) {
 
         // Get first enabled provider
         List<AiProvider> providers = providerMapper.selectList(
@@ -84,8 +110,8 @@ public class IntentParseService {
         // Intent parse via LLM
         String response = registry.getChatClient(provider, key)
                 .prompt()
-                .system(SYSTEM_PROMPT)
-                .user("Business description: " + description + "\n\nOutput JSON schema:")
+                .system(systemPrompt)
+                .user(userPrompt)
                 .call()
                 .content();
 
