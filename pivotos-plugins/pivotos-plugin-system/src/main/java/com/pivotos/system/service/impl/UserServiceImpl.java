@@ -36,6 +36,7 @@ import com.pivotos.system.support.PageUtils;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -51,6 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -66,6 +68,9 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     private final ConfigService configService;
     private final ExcelHelper excelHelper;
     private final SysDeptMapper deptMapper;
+    /** 上下文感知虚拟线程执行器（红线：禁裸线程，异步任务必须走本执行器透传 Login/Tenant/Trace 上下文） */
+    @Qualifier("contextExecutor")
+    private final ExecutorService contextExecutor;
 
     @Override
     public PageResult<UserVO> pageUsers(UserQuery query) {
@@ -271,7 +276,9 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                 configService.getConfigValue(SystemConstants.CONFIG_INIT_PASSWORD, SystemConstants.DEFAULT_INIT_PASSWORD),
                 BCrypt.gensalt());
 
-        new Thread(() -> {
+        // 提交即捕获当前 Login/Tenant/Trace 上下文（ScopedValue），在虚拟线程中重绑定，
+        // 保证异步导入时审计字段（createBy/tenantId）填充与链路追踪不断线
+        contextExecutor.execute(() -> {
             try (InputStream in = file.getInputStream()) {
                 Set<String> processedUsernames = new HashSet<>();
                 AtomicInteger successCount = new AtomicInteger(0);
@@ -375,7 +382,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                 }
                 emitter.completeWithError(e);
             }
-        }, "user-import-stream").start();
+        });
 
         return emitter;
     }
