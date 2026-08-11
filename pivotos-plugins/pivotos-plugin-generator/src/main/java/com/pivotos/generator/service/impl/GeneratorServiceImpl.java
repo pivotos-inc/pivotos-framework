@@ -305,6 +305,12 @@ public class GeneratorServiceImpl implements GeneratorService {
         validateIdentifier(table.getTreeName(), "树名称字段");
         validateIdentifier(table.getSubTableName(), "子表名");
         validateIdentifier(table.getSubTableFkName(), "子表外键列名");
+        // S51（2.4-F3）：主子模板必填子表名 + 外键列
+        if ("sub".equals(table.getTplCategory())
+                && (table.getSubTableName() == null || table.getSubTableName().isBlank()
+                || table.getSubTableFkName() == null || table.getSubTableFkName().isBlank())) {
+            throw new ServiceException(GeneratorErrorCode.GEN_SUB_TABLE_NOT_FOUND);
+        }
         genTableMapper.updateById(table);
     }
 
@@ -372,6 +378,13 @@ public class GeneratorServiceImpl implements GeneratorService {
             }
         }
         model.put("fkDeletedFields", fkDeletedFields);
+
+        // S51（2.4-F3）：主子表——tpl_category=sub 时加载子表 gen 记录并构建子模型
+        boolean isSub = "sub".equals(genTable.getTplCategory());
+        model.put("hasSub", isSub);
+        if (isSub) {
+            buildSubModel(genTable, model);
+        }
 
         // 主键字段
         model.put("pkColumn", columns.stream()
@@ -448,6 +461,89 @@ public class GeneratorServiceImpl implements GeneratorService {
         return model;
     }
 
+    /**
+     * 主子表子模型（S51 / 2.4-F3）。
+     * 子表须已导入生成器（独立 gen_table 行）；fk 列由后端按主表 id 回写，
+     * 不进表单/DTO/VO；子实体/子 VO 渲染复用 domain.ftl / vo.ftl（subModel 键名对齐主模型）。
+     */
+    private void buildSubModel(GenTable genTable, Map<String, Object> model) {
+        String subTableName = genTable.getSubTableName();
+        String subFkName = genTable.getSubTableFkName();
+        if (subTableName == null || subTableName.isBlank() || subFkName == null || subFkName.isBlank()) {
+            throw new ServiceException(GeneratorErrorCode.GEN_SUB_TABLE_NOT_FOUND);
+        }
+        GenTable subTable = genTableMapper.selectOne(
+                Wrappers.<GenTable>lambdaQuery().eq(GenTable::getTableName, subTableName));
+        if (subTable == null) {
+            log.warn("[Generator] 子表未导入生成器: {}", subTableName);
+            throw new ServiceException(GeneratorErrorCode.GEN_SUB_TABLE_NOT_FOUND);
+        }
+        List<GenTableColumn> subColumns = selectGenTableColumnListByTableId(subTable.getId());
+        String subFkField = toCamelCase(subFkName);
+        boolean fkExists = subColumns.stream().anyMatch(c -> subFkName.equals(c.getColumnName()));
+        if (!fkExists) {
+            log.warn("[Generator] 子表外键列不存在: {}.{}", subTableName, subFkName);
+            throw new ServiceException(GeneratorErrorCode.GEN_SUB_TABLE_NOT_FOUND);
+        }
+
+        model.put("subClassName", subTable.getClassName());
+        model.put("subClassVarName", StrUtil.lowerFirst(subTable.getClassName()));
+        model.put("subFunctionName", subTable.getFunctionName());
+        model.put("subTableName", subTable.getTableName());
+        model.put("subTableComment", subTable.getTableComment());
+        model.put("subFkField", subFkField);
+        model.put("subFkColumn", subFkName);
+        model.put("subColumns", subColumns);
+        // 子表内嵌编辑录入列 / 展示列 / VO 列均剔除 fk 与审计字段
+        model.put("subInsertColumns", subColumns.stream()
+                .filter(c -> c.getIsInsert() == 1 && !subFkField.equals(c.getJavaField()))
+                .filter(c -> !BASE_DO_FIELDS.contains(c.getJavaField()) && !"id".equals(c.getJavaField()))
+                .toList());
+        model.put("subListColumns", subColumns.stream()
+                .filter(c -> c.getIsList() == 1 && !subFkField.equals(c.getJavaField()))
+                .toList());
+        Set<String> subBase = Set.of("id", "createBy", "createTime", "updateBy", "updateTime", "deleted");
+        model.put("subVoColumns", subColumns.stream()
+                .filter(c -> !subBase.contains(c.getJavaField()) && !subFkField.equals(c.getJavaField()))
+                .toList());
+
+        // 子表需要 import 的类型（与主模型同映射）
+        Set<String> subImportTypes = new LinkedHashSet<>();
+        for (GenTableColumn col : subColumns) {
+            if (col.getJavaType() != null && IMPORTABLE_TYPES.contains(col.getJavaType())) {
+                subImportTypes.add(col.getJavaType());
+            }
+        }
+        Set<String> subImportPaths = new LinkedHashSet<>();
+        for (String t : subImportTypes) {
+            switch (t) {
+                case "BigDecimal" -> subImportPaths.add("java.math.BigDecimal");
+                case "LocalDateTime" -> subImportPaths.add("java.time.LocalDateTime");
+                case "LocalDate" -> subImportPaths.add("java.time.LocalDate");
+                case "LocalTime" -> subImportPaths.add("java.time.LocalTime");
+                default -> { }
+            }
+        }
+        model.put("subImportPaths", subImportPaths);
+
+        // 子实体/子 VO 复用 domain.ftl / vo.ftl 的子模型（键名对齐主模型）
+        Map<String, Object> subModel = new HashMap<>();
+        subModel.put("packageName", genTable.getPackageName());
+        subModel.put("functionName", subTable.getFunctionName());
+        subModel.put("className", subTable.getClassName());
+        subModel.put("tableName", subTable.getTableName());
+        subModel.put("author", genTable.getFunctionAuthor());
+        subModel.put("datetime", model.get("datetime"));
+        subModel.put("columns", subColumns);
+        subModel.put("pkColumn", subColumns.stream()
+                .filter(c -> c.getIsPk() == 1).findFirst().orElse(null));
+        subModel.put("importTypes", subImportTypes);
+        subModel.put("hasImportableTypes", !subImportTypes.isEmpty());
+        subModel.put("importPaths", subImportPaths);
+        subModel.put("voColumns", model.get("subVoColumns"));
+        model.put("subModel", subModel);
+    }
+
     @Override
     public Map<String, String> previewCode(Long tableId) {
         Map<String, Object> model = buildModel(tableId);
@@ -466,7 +562,9 @@ public class GeneratorServiceImpl implements GeneratorService {
             result.put(javaDir + "/service/" + table.getClassName() + "Service.java",
                     render("service.ftl", model));
             result.put(javaDir + "/service/impl/" + table.getClassName() + "ServiceImpl.java",
-                    render("serviceImpl.ftl", model));
+                    Boolean.TRUE.equals(model.get("hasSub"))
+                            ? render("serviceImpl-sub.ftl", model)
+                            : render("serviceImpl.ftl", model));
             result.put(javaDir + "/domain/dto/" + table.getClassName() + "CreateRequest.java",
                     render("dto-create.ftl", model));
             result.put(javaDir + "/domain/dto/" + table.getClassName() + "UpdateRequest.java",
@@ -488,7 +586,9 @@ public class GeneratorServiceImpl implements GeneratorService {
             result.put(feDir + "/api/" + table.getModuleName() + "/" + table.getBusinessName() + ".ts",
                     render("pc-api.ftl", model));
             result.put(feDir + "/views/" + table.getModuleName() + "/" + table.getBusinessName() + "/index.vue",
-                    render("pc-page.ftl", model));
+                    Boolean.TRUE.equals(model.get("hasSub"))
+                            ? render("pc-page-sub.ftl", model)
+                            : render("pc-page.ftl", model));
 
             // 前端 uni-app 模板
             String appDir = "pivotos-app/src";
@@ -497,9 +597,26 @@ public class GeneratorServiceImpl implements GeneratorService {
             result.put(appDir + "/pages-gen/" + table.getModuleName() + "/" + table.getBusinessName() + "/list.vue",
                     render("uni-list.ftl", model));
             result.put(appDir + "/pages-gen/" + table.getModuleName() + "/" + table.getBusinessName() + "/form.vue",
-                    render("uni-form.ftl", model));
+                    Boolean.TRUE.equals(model.get("hasSub"))
+                            ? render("uni-form-sub.ftl", model)
+                            : render("uni-form.ftl", model));
             result.put(appDir + "/pages-gen/" + table.getModuleName() + "/" + table.getBusinessName() + "/detail.vue",
                     render("uni-detail.ftl", model));
+
+            // S51（2.4-F3）：子表产物——子实体/子 Mapper 复用 domain.ftl/mapper.ftl + 子 VO + 子项 DTO
+            if (Boolean.TRUE.equals(model.get("hasSub"))) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> subModel = (Map<String, Object>) model.get("subModel");
+                String subClassName = String.valueOf(model.get("subClassName"));
+                result.put(javaDir + "/domain/entity/" + subClassName + ".java",
+                        render("domain.ftl", subModel));
+                result.put(javaDir + "/mapper/" + subClassName + "Mapper.java",
+                        render("mapper.ftl", subModel));
+                result.put(javaDir + "/domain/vo/" + subClassName + "VO.java",
+                        render("vo.ftl", subModel));
+                result.put(javaDir + "/domain/dto/" + subClassName + "ItemRequest.java",
+                        render("sub-item-dto.ftl", model));
+            }
         } catch (Exception e) {
             log.error("代码预览失败", e);
             throw new ServiceException(GeneratorErrorCode.GEN_TEMPLATE_RENDER_FAILED);

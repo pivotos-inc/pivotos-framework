@@ -13,6 +13,7 @@ public enum GeneratorErrorCode implements ErrorCode {
     GEN_TABLE_IMPORT_FAILED(6003, "表结构导入失败"),
     GEN_COLUMN_QUERY_FAILED(6004, "字段信息查询失败"),
     GEN_TABLE_LIST_FAILED(6005, "表列表查询失败"),
+    GEN_SUB_TABLE_NOT_FOUND(6006, "子表未导入生成器或子表外键列不存在"),
 
     // ---------- 代码生成 ----------
     GEN_CODE_FAILED(6101, "代码生成失败"),

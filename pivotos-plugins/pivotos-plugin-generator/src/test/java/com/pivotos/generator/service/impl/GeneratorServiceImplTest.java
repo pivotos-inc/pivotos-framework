@@ -335,6 +335,136 @@ class GeneratorServiceImplTest {
         assertFalse(serviceImpl.contains("FK_CONFIG"));
     }
 
+    // ==================== S51：主子表模板族（2.4-F3） ====================
+
+    private GenTable buildSubTable() {
+        GenTable sub = new GenTable();
+        sub.setId(2L);
+        sub.setTableName("biz_order_item");
+        sub.setTableComment("Order item table");
+        sub.setClassName("BizOrderItem");
+        sub.setPackageName("com.pivotos.system");
+        sub.setModuleName("system");
+        sub.setBusinessName("orderitem");
+        sub.setFunctionName("Order Item");
+        sub.setFunctionAuthor("PivotOS");
+        return sub;
+    }
+
+    private List<GenTableColumn> buildSubColumns() {
+        return List.of(
+                buildColumn(11L, 2L, "id", "id", "bigint", "Long", 1, 0, 0, 0, 0, 0, "id", "EQ", "input", 1),
+                buildColumn(12L, 2L, "order_id", "orderId", "bigint", "Long", 0, 0, 1, 1, 0, 0, "order_id", "EQ", "input", 2),
+                buildColumn(13L, 2L, "product_name", "productName", "varchar(100)", "String", 0, 1, 1, 1, 1, 0, "product_name", "EQ", "input", 3),
+                buildColumn(14L, 2L, "quantity", "quantity", "int", "Integer", 0, 0, 1, 1, 1, 0, "quantity", "EQ", "input", 4),
+                buildColumn(15L, 2L, "price", "price", "decimal(10,2)", "BigDecimal", 0, 0, 1, 1, 1, 0, "price", "EQ", "input", 5),
+                buildColumn(16L, 2L, "create_time", "createTime", "datetime", "LocalDateTime", 0, 0, 0, 0, 0, 0, "create_time", "BETWEEN", "datetime", 6)
+        );
+    }
+
+    @Test
+    @DisplayName("previewCode - 主子表产出子四件套 + 事务主子 ServiceImpl + 双端明细编辑")
+    void testPreviewCodeSubTable() {
+        mockTable.setTplCategory("sub");
+        mockTable.setSubTableName("biz_order_item");
+        mockTable.setSubTableFkName("order_id");
+
+        when(genTableMapper.selectById(1L)).thenReturn(mockTable);
+        when(genTableMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<GenTable>>any()))
+                .thenReturn(buildSubTable());
+        // 第 1 次取主表字段、第 2 次取子表字段（buildModel 顺序）
+        when(genTableColumnMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(mockColumns, buildSubColumns());
+
+        Map<String, String> files = generatorService.previewCode(1L);
+        String javaBase = "pivotos-plugins/pivotos-plugin-system/src/main/java/com/pivotos/system";
+
+        // 子表四件套：子实体 / 子 Mapper / 子 VO / 子项 DTO
+        String subEntity = files.get(javaBase + "/domain/entity/BizOrderItem.java");
+        String subMapper = files.get(javaBase + "/mapper/BizOrderItemMapper.java");
+        String subVo = files.get(javaBase + "/domain/vo/BizOrderItemVO.java");
+        String subItemDto = files.get(javaBase + "/domain/dto/BizOrderItemItemRequest.java");
+        assertNotNull(subEntity);
+        assertNotNull(subMapper);
+        assertNotNull(subVo);
+        assertNotNull(subItemDto);
+        assertTrue(subEntity.contains("class BizOrderItem"));
+        // 子 VO 剔除 fk 与审计字段
+        assertTrue(subVo.contains("private String productName;"));
+        assertFalse(subVo.contains("orderId"));
+        assertFalse(subVo.contains("createTime"));
+
+        // 主 DTO / VO 携带 items
+        String createReq = files.get(javaBase + "/domain/dto/BizProductCreateRequest.java");
+        String vo = files.get(javaBase + "/domain/vo/BizProductVO.java");
+        assertTrue(createReq.contains("List<BizOrderItemItemRequest> items"));
+        assertTrue(createReq.contains("@Valid"));
+        assertTrue(vo.contains("List<BizOrderItemVO> items"));
+
+        // ServiceImpl：事务主子——批量插入 + fk 回写 + 全量替换语义
+        String serviceImpl = files.get(javaBase + "/service/impl/BizProductServiceImpl.java");
+        assertTrue(serviceImpl.contains("Db.saveBatch"));
+        assertTrue(serviceImpl.contains("sub.setOrderId(mainId)"));
+        assertTrue(serviceImpl.contains("BizOrderItemMapper"));
+
+        // flyway SQL：双表 DDL
+        String sqlKey = files.keySet().stream().filter(k -> k.startsWith("sql/")).findFirst().orElseThrow();
+        String sql = files.get(sqlKey);
+        assertTrue(sql.contains("biz_product"));
+        assertTrue(sql.contains("biz_order_item"));
+
+        // PC：主从页内嵌明细编辑
+        String pcPage = files.get("pivotos-ui/apps/admin/src/views/system/product/index.vue");
+        assertTrue(pcPage.contains("添加行"));
+        assertTrue(pcPage.contains("subRows"));
+        assertTrue(pcPage.contains("items: subRows.value"));
+        // PC API：子项类型
+        String pcApi = files.get("pivotos-ui/apps/admin/src/api/system/product.ts");
+        assertTrue(pcApi.contains("BizOrderItemItem"));
+        assertTrue(pcApi.contains("items?: BizOrderItemItem[];"));
+
+        // uni：明细卡片 + 提交携带 items
+        String uniForm = files.get("pivotos-app/src/pages-gen/system/product/form.vue");
+        assertTrue(uniForm.contains("添加明细"));
+        assertTrue(uniForm.contains("form.items = items.value"));
+    }
+
+    @Test
+    @DisplayName("previewCode - 子表未导入生成器报 GEN_SUB_TABLE_NOT_FOUND")
+    void testPreviewCodeSubTableNotImported() {
+        mockTable.setTplCategory("sub");
+        mockTable.setSubTableName("biz_order_item");
+        mockTable.setSubTableFkName("order_id");
+
+        when(genTableMapper.selectById(1L)).thenReturn(mockTable);
+        when(genTableColumnMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(mockColumns);
+        when(genTableMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<GenTable>>any()))
+                .thenReturn(null);
+
+        ServiceException ex = assertThrows(ServiceException.class,
+                () -> generatorService.previewCode(1L));
+        assertEquals(GeneratorErrorCode.GEN_SUB_TABLE_NOT_FOUND.getCode(), ex.getCode());
+    }
+
+    @Test
+    @DisplayName("previewCode - 子表外键列不存在报 GEN_SUB_TABLE_NOT_FOUND")
+    void testPreviewCodeSubFkColumnMissing() {
+        mockTable.setTplCategory("sub");
+        mockTable.setSubTableName("biz_order_item");
+        mockTable.setSubTableFkName("not_exist_fk");
+
+        when(genTableMapper.selectById(1L)).thenReturn(mockTable);
+        when(genTableMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<GenTable>>any()))
+                .thenReturn(buildSubTable());
+        when(genTableColumnMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(mockColumns, buildSubColumns());
+
+        ServiceException ex = assertThrows(ServiceException.class,
+                () -> generatorService.previewCode(1L));
+        assertEquals(GeneratorErrorCode.GEN_SUB_TABLE_NOT_FOUND.getCode(), ex.getCode());
+    }
+
     // ==================== Helper ====================
 
     private GenTableColumn buildColumn(Long id, Long tableId, String columnName,

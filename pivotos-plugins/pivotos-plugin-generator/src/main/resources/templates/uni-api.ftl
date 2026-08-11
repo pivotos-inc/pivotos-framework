@@ -29,7 +29,30 @@ export interface ${className}VO {
 </#if>
 </#list>
   createTime?: string;
+<#if hasSub>
+  /** ${subFunctionName}明细（详情返回，S51 / 2.4-F3） */
+  items?: ${subClassName}VO[];
+</#if>
 }
+<#if hasSub>
+
+/** ${subFunctionName} VO（子表） */
+export interface ${subClassName}VO {
+  id: number;
+<#list subVoColumns as col>
+  /** ${col.columnComment} */
+  ${col.javaField}?: ${tsType(col.javaType)};
+</#list>
+}
+
+/** ${subFunctionName}子项（保存请求明细行） */
+export interface ${subClassName}Item {
+<#list subInsertColumns as col>
+  /** ${col.columnComment} */
+  ${col.javaField}?: ${tsType(col.javaType)};
+</#list>
+}
+</#if>
 
 /** ${functionName} 保存请求 */
 export interface ${className}SaveRequest {
@@ -38,6 +61,10 @@ export interface ${className}SaveRequest {
   /** ${col.columnComment} */
   ${col.javaField}?: ${tsType(col.javaType)};
 </#list>
+<#if hasSub>
+  /** ${subFunctionName}明细（全量替换语义） */
+  items?: ${subClassName}Item[];
+</#if>
 }
 
 /** ${functionName} 查询参数 */

@@ -3,6 +3,9 @@ package ${packageName}.domain.vo;
 import com.pivotos.common.api.dto.BaseDTO;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+<#if hasSub?? && hasSub>
+import java.util.List;
+</#if>
 <#list importPaths as p>
 import ${p};
 </#list>
@@ -29,4 +32,8 @@ public class ${className}VO extends BaseDTO {
 
 </#if>
 </#list>
+<#if hasSub?? && hasSub>
+    /** ${subFunctionName}明细（S51 / 2.4-F3；详情时填充） */
+    private List<${subClassName}VO> items;
+</#if>
 }
