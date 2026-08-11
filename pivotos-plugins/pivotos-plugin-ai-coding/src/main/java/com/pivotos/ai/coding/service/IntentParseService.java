@@ -70,6 +70,36 @@ public class IntentParseService {
             {"pluginName":"...","displayName":"...","tablePrefix":"...","moduleDesc":"..."}
             """;
 
+    /** 主子表意图（S52 / 2.4-F5）：LLM 输出主子双表+关系；关系闭合由 SubIntentValidator 确定性校验 */
+    private static final String SUB_SYSTEM_PROMPT = """
+            You are a database designer. Given a business description of a MASTER-DETAIL feature
+            (e.g. order + order items), output a TWO-table schema in JSON.
+            Rules:
+            1. moduleName: business domain (system/business/cms/etc.), lowercase
+            2. functionName: Chinese feature name (max 10 chars)
+            3. main: master table; sub: detail table. Each has:
+               tableName (snake_case with domain prefix, e.g. biz_order / biz_order_item),
+               businessName (camelCase of core entity, e.g. order / orderItem),
+               tableComment, columns
+            4. relation.subFkName: the foreign-key column in the SUB table pointing to the
+               master id (e.g. order_id); it MUST also appear in sub.columns
+            5. columns: array of {columnName, columnType(MySQL), columnComment,
+               javaType(String/Integer/Long/BigDecimal/LocalDateTime/Boolean),
+               javaField(camelCase), isPk(0|1), isRequired(0|1),
+               isQuery(0|1), queryType(EQ|LIKE), htmlType(input|textarea|datetime|switch),
+               isList(0|1), isInsert(0|1), isEdit(0|1)}
+            6. Do NOT include id/createBy/createTime/updateBy/updateTime/deleted in columns
+               (auto-generated). Exception: relation.subFkName column MUST be listed in sub.columns
+            7. Optional: a column may carry fkTable/fkValueColumn/fkLabelColumn when it references
+               an existing platform table (e.g. sys_dept.id/dept_name) for dropdown binding
+            8. isList/isInsert/isEdit default to 1; set 0 for fields that should be hidden
+            Output ONLY JSON, no markdown:
+            {"moduleName":"...","functionName":"...",
+             "main":{"tableName":"...","businessName":"...","tableComment":"...","columns":[...]},
+             "sub":{"tableName":"...","businessName":"...","tableComment":"...","columns":[...]},
+             "relation":{"subFkName":"..."}}
+            """;
+
     public IntentParseService(ObjectMapper objectMapper, AiClientRegistry registry,
                               AiProviderMapper providerMapper, AiApiKeyMapper keyMapper) {
         this.objectMapper = objectMapper;
@@ -87,6 +117,12 @@ public class IntentParseService {
     public Map<String, Object> parsePluginIntent(String description) {
         log.info("[AI Coding] Plugin intent parse: description={}", description);
         return callLlm(PLUGIN_SYSTEM_PROMPT, "Business domain description: " + description + "\n\nOutput JSON plan:");
+    }
+
+    /** 主子表意图解析（S52 / 2.4-F5）：返回 main/sub/relation 结构，闭合性由 SubIntentValidator 校验 */
+    public Map<String, Object> parseSubIntent(String description) {
+        log.info("[AI Coding] Sub intent parse: description={}", description);
+        return callLlm(SUB_SYSTEM_PROMPT, "Master-detail business description: " + description + "\n\nOutput JSON schema:");
     }
 
     /** 共用：取首个启用供应商 + 首个启用 Key → LLM 调用 → JSON 解析 */

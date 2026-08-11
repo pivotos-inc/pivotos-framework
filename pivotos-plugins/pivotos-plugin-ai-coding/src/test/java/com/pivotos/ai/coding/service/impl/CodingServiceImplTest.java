@@ -61,6 +61,9 @@ class CodingServiceImplTest {
     @Mock
     private com.pivotos.ai.coding.service.CrudApplyService crudApplyService;
 
+    @Mock
+    private com.pivotos.ai.coding.service.SubIntentValidator subIntentValidator;
+
     @InjectMocks
     private CodingServiceImpl codingService;
 
@@ -161,6 +164,98 @@ class CodingServiceImplTest {
         verify(sessionMapper).insert(captor.capture());
         assertEquals("Create a product management module", captor.getValue().getDescription());
         assertEquals(1, captor.getValue().getStatus()); // pending review
+    }
+
+    // ==================== parseAndGenerateSub（S52 / 2.4-F5） ====================
+
+    private Map<String, Object> mockSubIntent() {
+        return Map.of(
+                "moduleName", "system",
+                "functionName", "订单管理",
+                "main", Map.of(
+                        "tableName", "biz_order",
+                        "businessName", "order",
+                        "tableComment", "订单主表",
+                        "columns", List.of(Map.of(
+                                "columnName", "order_no", "columnType", "varchar(64)",
+                                "columnComment", "订单号", "javaType", "String", "javaField", "orderNo"))),
+                "sub", Map.of(
+                        "tableName", "biz_order_item",
+                        "businessName", "orderItem",
+                        "tableComment", "订单明细子表",
+                        "columns", List.of(
+                                Map.of("columnName", "order_id", "columnType", "bigint",
+                                        "columnComment", "订单id", "javaType", "Long", "javaField", "orderId"),
+                                Map.of("columnName", "product_name", "columnType", "varchar(128)",
+                                        "columnComment", "商品名称", "javaType", "String", "javaField", "productName"))),
+                "relation", Map.of("subFkName", "order_id")
+        );
+    }
+
+    @Test
+    @DisplayName("parseAndGenerateSub - happy path：先导子再导主+主子配置+taskType=3 会话")
+    void testParseAndGenerateSubSuccess() throws JacksonException {
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(intentParseService.parseSubIntent(anyString())).thenReturn(mockSubIntent());
+        when(generatorFacade.importTable(anyString(), anyString(), anyString(), anyString(), anyString(), any()))
+                .thenReturn(20L, 10L); // 先子后主
+        when(generatorFacade.previewCode(10L)).thenReturn(mockGeneratedFiles);
+        when(artifactLinter.lint(any())).thenReturn(List.of());
+        when(sessionMapper.insert(any(CodingSession.class))).thenReturn(1);
+
+        CodingSessionVO vo = codingService.parseAndGenerateSub("订单和订单明细，明细含商品名称和数量");
+
+        assertNotNull(vo);
+        assertEquals(3, vo.getTaskType());
+        assertEquals("biz_order", vo.getTableName());
+        assertEquals("order", vo.getBusinessName());
+
+        // 导入顺序：子表在前、主表在后；主子配置强制写入
+        var order = inOrder(generatorFacade);
+        order.verify(generatorFacade).importTable(eq("biz_order_item"), anyString(), anyString(), eq("orderItem"), anyString(), any());
+        order.verify(generatorFacade).importTable(eq("biz_order"), anyString(), eq("订单管理"), eq("order"), anyString(), any());
+        order.verify(generatorFacade).configureSubTable("biz_order", "biz_order_item", "order_id");
+        order.verify(generatorFacade).previewCode(10L);
+
+        // 校验器被调用（不信 LLM）
+        verify(subIntentValidator).validate(any());
+
+        ArgumentCaptor<CodingSession> captor = ArgumentCaptor.forClass(CodingSession.class);
+        verify(sessionMapper).insert(captor.capture());
+        assertEquals(3, captor.getValue().getTaskType());
+        assertEquals(1, captor.getValue().getStatus());
+    }
+
+    @Test
+    @DisplayName("parseAndGenerateSub - 校验拒绝（关系不闭合）抛 7011")
+    void testParseAndGenerateSubValidationRejected() {
+        when(intentParseService.parseSubIntent(anyString())).thenReturn(mockSubIntent());
+        doThrow(new ServiceException(CodingErrorCode.CODING_RELATION_INVALID))
+                .when(subIntentValidator).validate(any());
+
+        ServiceException ex = assertThrows(ServiceException.class,
+                () -> codingService.parseAndGenerateSub("订单主子"));
+        assertEquals(CodingErrorCode.CODING_RELATION_INVALID.getCode(), ex.getCode());
+        // 校验不过不得触达生成器
+        verifyNoInteractions(generatorFacade);
+    }
+
+    @Test
+    @DisplayName("parseAndGenerateSub - 空描述抛 7001")
+    void testParseAndGenerateSubEmptyDesc() {
+        ServiceException ex = assertThrows(ServiceException.class,
+                () -> codingService.parseAndGenerateSub(" "));
+        assertEquals(CodingErrorCode.CODING_DESC_EMPTY.getCode(), ex.getCode());
+    }
+
+    @Test
+    @DisplayName("parseAndGenerateSub - LLM 解析失败抛 7002")
+    void testParseAndGenerateSubParseFailure() {
+        when(intentParseService.parseSubIntent(anyString()))
+                .thenThrow(new RuntimeException("AI service unavailable"));
+        ServiceException ex = assertThrows(ServiceException.class,
+                () -> codingService.parseAndGenerateSub("订单主子"));
+        assertEquals(CodingErrorCode.CODING_INTENT_PARSE_FAILED.getCode(), ex.getCode());
     }
 
     // ==================== getSession ====================

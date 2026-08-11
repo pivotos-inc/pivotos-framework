@@ -58,6 +58,15 @@ public class CodingController {
     }
 
     /**
+     * Parse natural language and generate master-detail (主子表) code (S52 / 2.4-F5).
+     */
+    @PostMapping("/sub/parse")
+    @SaCheckPermission(value = "ai:coding:parse", type = StpSysUtil.TYPE)
+    public R<CodingSessionVO> parseSub(@RequestBody CodingRequest request) {
+        return R.ok(codingService.parseAndGenerateSub(request.getDescription()));
+    }
+
+    /**
      * Page query coding sessions (list view, without generated files).
      */
     @GetMapping("/session/page")

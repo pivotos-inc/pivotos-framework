@@ -120,6 +120,21 @@ public class GeneratorFacadeImpl implements IGeneratorFacade {
         return generatorService.previewPluginSkeleton(params);
     }
 
+    @Override
+    public void configureSubTable(String mainTableName, String subTableName, String subFkName) {
+        GenTable main = genTableMapper.selectOne(
+                new LambdaQueryWrapper<GenTable>().eq(GenTable::getTableName, mainTableName));
+        if (main == null) {
+            throw new ServiceException(GeneratorErrorCode.GEN_TABLE_NOT_FOUND);
+        }
+        // 强制覆盖：importTable 幂等可能返回旧记录，主子配置必须刷新（S52 / 2.4-F5）
+        main.setTplCategory("sub");
+        main.setSubTableName(subTableName);
+        main.setSubTableFkName(subFkName);
+        genTableMapper.updateById(main);
+        log.info("[Generator] 主子配置已写入: main={}, sub={}, fk={}", mainTableName, subTableName, subFkName);
+    }
+
     private static String toClassName(String businessName) {
         if (businessName == null || businessName.isBlank()) return "Unknown";
         return businessName.substring(0, 1).toUpperCase() + businessName.substring(1);
