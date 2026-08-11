@@ -24,7 +24,6 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
@@ -223,15 +222,16 @@ public class AiChatServiceImpl implements AiChatService {
         return clientRegistry.getChatClient(target.provider(), key);
     }
 
-    /** 组装 prompt：动态目标按请求/供应商模型覆盖 options（静态 client 用其自带默认模型） */
+    /** 组装 prompt：动态目标按请求/供应商模型覆盖 options（按 provider.code 分派工厂产出；静态 client 用其自带默认模型） */
     private ChatClient.ChatClientRequestSpec buildPrompt(
             ChatClient client, ChatTarget target, List<Message> history, String content) {
         ChatClient.ChatClientRequestSpec spec = client.prompt()
                 .messages(history)
                 .user(content);
         if (target.dynamic() && target.model() != null && !target.model().isBlank()) {
-            // Spring AI 2.0 options() 收 Builder 本体，内部与 client 默认 options 合并
-            spec = spec.options(OpenAiChatOptions.builder().model(target.model()));
+            // Spring AI 2.0 options() 收 Builder 本体，内部与 client 默认 options 合并；
+            // 工厂按 code 产出对应 SDK 的 options Builder 上转型，屏蔽供应商类型差异
+            spec = spec.options(clientRegistry.buildChatOptions(target.provider(), target.model()));
         }
         return spec;
     }

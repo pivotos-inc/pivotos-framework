@@ -18,6 +18,11 @@ spring:
   # AI 模型接入（阿里云百炼 DashScope · OpenAI 兼容模式）
   # Key 只走环境变量（export DASHSCOPE_API_KEY=sk-xxx），严禁写死提交
   ai:
+    # S46：anthropic/gemini starter 的自动装配以 spring.ai.model.chat 为开关且 matchIfMissing=true，
+    # 不关会激活出 3 个 ChatModel Bean 顶掉 ChatClient 自动装配。动态供应商由 plugin-ai 的
+    # ChatModelFactory 按 provider.code 手工装配，这里只保留 openai 静态兜底（starter-ai 单一职责）
+    model:
+      chat: openai
     openai:
       api-key: ${DASHSCOPE_API_KEY:}
       # Spring AI 2.0 底层为官方 openai-java SDK，base-url 须含 /v1（SDK 直接追加 /chat/completions）

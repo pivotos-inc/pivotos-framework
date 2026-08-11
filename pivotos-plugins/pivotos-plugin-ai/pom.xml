@@ -56,6 +56,17 @@
             <artifactId>pivotos-starter-ai</artifactId>
         </dependency>
 
+        <!-- S46 2.3-F2：非 OpenAI 供应商接入（按 provider.code 分派，落点 plugin-ai，
+             starter-ai 保持「静态兜底 openai」单一职责；版本由 spring-ai-bom 托管） -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-anthropic</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-google-genai</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
