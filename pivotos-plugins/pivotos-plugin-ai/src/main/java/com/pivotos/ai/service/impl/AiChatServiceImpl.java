@@ -167,6 +167,16 @@ public class AiChatServiceImpl implements AiChatService {
                 .eq(AiChatMessage::getConversationId, conversationId));
     }
 
+    @Override
+    public void renameConversation(Long userId, Long conversationId, String title) {
+        requireOwned(userId, conversationId);
+        // 用 UpdateWrapper 只改 title：updateById 会触发审计填充刷新 update_time，
+        // 而重命名不算活跃行为，不应让会话在「最近活跃倒序」列表里上浮
+        conversationMapper.update(null, Wrappers.<AiConversation>lambdaUpdate()
+                .eq(AiConversation::getId, conversationId)
+                .set(AiConversation::getTitle, title.strip()));
+    }
+
     /**
      * 解析调用目标（三级兜底链）：
      * ① 请求指定 providerId → 校验启用 + 有可用 Key；

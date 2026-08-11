@@ -1,5 +1,6 @@
 package com.pivotos.ai.controller;
 
+import com.pivotos.ai.domain.dto.ConversationRenameRequest;
 import com.pivotos.ai.domain.vo.ChatMessageVO;
 import com.pivotos.ai.domain.vo.ConversationVO;
 import com.pivotos.ai.service.AiChatService;
@@ -8,9 +9,12 @@ import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.result.R;
 import com.pivotos.starter.core.context.LoginContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -42,6 +46,13 @@ public class AiConversationController {
     @DeleteMapping("/{id}")
     public R<Void> remove(@PathVariable Long id) {
         aiChatService.deleteConversation(requireUserId(), id);
+        return R.ok();
+    }
+
+    /** 重命名会话（title 非空且 ≤128，DTO 层校验） */
+    @PutMapping("/{id}")
+    public R<Void> rename(@PathVariable Long id, @Validated @RequestBody ConversationRenameRequest request) {
+        aiChatService.renameConversation(requireUserId(), id, request.getTitle());
         return R.ok();
     }
 

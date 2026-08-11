@@ -40,4 +40,7 @@ public interface AiChatService {
 
     /** 删除会话（连带其全部消息，逻辑删除） */
     void deleteConversation(Long userId, Long conversationId);
+
+    /** 重命名会话（非空/长度在 DTO 层校验，此处去首尾空白后落库） */
+    void renameConversation(Long userId, Long conversationId, String title);
 }
