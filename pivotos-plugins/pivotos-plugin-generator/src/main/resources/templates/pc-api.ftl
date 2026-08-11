@@ -34,6 +34,10 @@ export interface ${className}VO {
   /** ${subFunctionName}明细（详情返回，S51 / 2.4-F3） */
   items?: ${subClassName}VO[];
 </#if>
+<#if hasTree?? && hasTree>
+  /** 子节点（S53 / 2.4-F4；树查询返回） */
+  children?: ${className}VO[];
+</#if>
 }
 <#if hasSub>
 
@@ -80,6 +84,13 @@ export interface ${className}Query extends PageQuery {
 export function get${className}(id: number): Promise<${className}VO> {
   return request.get<unknown, ${className}VO>('/${moduleName}/${businessName}/' + id);
 }
+<#if hasTree?? && hasTree>
+
+/** 全量树查询${functionName}（S53 / 2.4-F4，不分页） */
+export function select${className}TreeList(params?: Record<string, unknown>): Promise<${className}VO[]> {
+  return request.get<unknown, ${className}VO[]>('/${moduleName}/${businessName}/list', { params });
+}
+</#if>
 
 /** 新增${functionName} */
 export function create${className}(body: ${className}SaveRequest): Promise<void> {

@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS `${tableName}` (
     `update_by`       BIGINT        DEFAULT NULL COMMENT '更新者',
     `update_time`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `deleted`         TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除（0正常 1删除）',
-    PRIMARY KEY (`id`) USING BTREE
+    PRIMARY KEY (`id`) USING BTREE<#if hasTree?? && hasTree>,
+    KEY `idx_${treeParentColumn}` (`${treeParentColumn}`)</#if>
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='${tableComment!}';
 <#if hasSub>
 

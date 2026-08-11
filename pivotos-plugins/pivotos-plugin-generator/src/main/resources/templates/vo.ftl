@@ -3,7 +3,7 @@ package ${packageName}.domain.vo;
 import com.pivotos.common.api.dto.BaseDTO;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-<#if hasSub?? && hasSub>
+<#if (hasSub?? && hasSub) || (hasTree?? && hasTree)>
 import java.util.List;
 </#if>
 <#list importPaths as p>
@@ -35,5 +35,9 @@ public class ${className}VO extends BaseDTO {
 <#if hasSub?? && hasSub>
     /** ${subFunctionName}明细（S51 / 2.4-F3；详情时填充） */
     private List<${subClassName}VO> items;
+</#if>
+<#if hasTree?? && hasTree>
+    /** 子节点（S53 / 2.4-F4；树组装时填充） */
+    private List<${className}VO> children;
 </#if>
 }

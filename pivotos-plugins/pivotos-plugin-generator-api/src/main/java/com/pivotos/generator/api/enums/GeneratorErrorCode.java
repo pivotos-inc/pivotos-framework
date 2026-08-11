@@ -14,7 +14,7 @@ public enum GeneratorErrorCode implements ErrorCode {
     GEN_COLUMN_QUERY_FAILED(6004, "字段信息查询失败"),
     GEN_TABLE_LIST_FAILED(6005, "表列表查询失败"),
     GEN_SUB_TABLE_NOT_FOUND(6006, "子表未导入生成器或子表外键列不存在"),
-
+    GEN_TREE_CONFIG_MISSING(6007, "树表配置缺失或树字段不在表字段中"),
     // ---------- 代码生成 ----------
     GEN_CODE_FAILED(6101, "代码生成失败"),
     GEN_TEMPLATE_RENDER_FAILED(6102, "模板渲染失败"),

@@ -311,6 +311,13 @@ public class GeneratorServiceImpl implements GeneratorService {
                 || table.getSubTableFkName() == null || table.getSubTableFkName().isBlank())) {
             throw new ServiceException(GeneratorErrorCode.GEN_SUB_TABLE_NOT_FOUND);
         }
+        // S53（2.4-F4）：树模板必填树编码/父编码/名称三列
+        if ("tree".equals(table.getTplCategory())
+                && (table.getTreeCode() == null || table.getTreeCode().isBlank()
+                || table.getTreeParentCode() == null || table.getTreeParentCode().isBlank()
+                || table.getTreeName() == null || table.getTreeName().isBlank())) {
+            throw new ServiceException(GeneratorErrorCode.GEN_TREE_CONFIG_MISSING);
+        }
         genTableMapper.updateById(table);
     }
 
@@ -386,6 +393,13 @@ public class GeneratorServiceImpl implements GeneratorService {
             buildSubModel(genTable, model);
         }
 
+        // S53（2.4-F4）：树表——tpl_category=tree 时校验三列存在并输出驼峰字段
+        boolean isTree = "tree".equals(genTable.getTplCategory());
+        model.put("hasTree", isTree);
+        if (isTree) {
+            buildTreeModel(genTable, columns, model);
+        }
+
         // 主键字段
         model.put("pkColumn", columns.stream()
                 .filter(c -> c.getIsPk() == 1).findFirst().orElse(null));
@@ -459,6 +473,32 @@ public class GeneratorServiceImpl implements GeneratorService {
         model.put("tsDefaultMap", tsDefaultMap);
 
         return model;
+    }
+
+    /**
+     * 树表模型（S53 / 2.4-F4）。
+     * treeCode/treeParentCode/treeName 三列必须真实存在于表字段，否则 6007；
+     * 输出驼峰字段名供 serviceImpl-tree.ftl / pc-page-tree.ftl 使用。
+     */
+    private void buildTreeModel(GenTable genTable, List<GenTableColumn> columns, Map<String, Object> model) {
+        String treeCode = genTable.getTreeCode();
+        String treeParentCode = genTable.getTreeParentCode();
+        String treeName = genTable.getTreeName();
+        if (treeCode == null || treeCode.isBlank() || treeParentCode == null || treeParentCode.isBlank()
+                || treeName == null || treeName.isBlank()) {
+            throw new ServiceException(GeneratorErrorCode.GEN_TREE_CONFIG_MISSING);
+        }
+        for (String col : List.of(treeCode, treeParentCode, treeName)) {
+            boolean exists = columns.stream().anyMatch(c -> col.equals(c.getColumnName()));
+            if (!exists) {
+                log.warn("[Generator] 树字段不在表字段中: {}.{}", genTable.getTableName(), col);
+                throw new ServiceException(GeneratorErrorCode.GEN_TREE_CONFIG_MISSING);
+            }
+        }
+        model.put("treeCodeField", toCamelCase(treeCode));
+        model.put("treeParentField", toCamelCase(treeParentCode));
+        model.put("treeNameField", toCamelCase(treeName));
+        model.put("treeParentColumn", treeParentCode);
     }
 
     /**
@@ -564,6 +604,8 @@ public class GeneratorServiceImpl implements GeneratorService {
             result.put(javaDir + "/service/impl/" + table.getClassName() + "ServiceImpl.java",
                     Boolean.TRUE.equals(model.get("hasSub"))
                             ? render("serviceImpl-sub.ftl", model)
+                            : Boolean.TRUE.equals(model.get("hasTree"))
+                            ? render("serviceImpl-tree.ftl", model)
                             : render("serviceImpl.ftl", model));
             result.put(javaDir + "/domain/dto/" + table.getClassName() + "CreateRequest.java",
                     render("dto-create.ftl", model));
@@ -588,6 +630,8 @@ public class GeneratorServiceImpl implements GeneratorService {
             result.put(feDir + "/views/" + table.getModuleName() + "/" + table.getBusinessName() + "/index.vue",
                     Boolean.TRUE.equals(model.get("hasSub"))
                             ? render("pc-page-sub.ftl", model)
+                            : Boolean.TRUE.equals(model.get("hasTree"))
+                            ? render("pc-page-tree.ftl", model)
                             : render("pc-page.ftl", model));
 
             // 前端 uni-app 模板

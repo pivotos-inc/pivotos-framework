@@ -23,6 +23,13 @@ public interface ${className}Service {
      * 分页查询${functionName}
      */
     PageResult<${className}VO> selectPage(${className}QueryRequest query);
+<#if hasTree?? && hasTree>
+
+    /**
+     * 全量查询并组装树（S53 / 2.4-F4；千行内内存组装，PC tree-table 用）
+     */
+    List<${className}VO> selectTreeList(${className}QueryRequest query);
+</#if>
 
     /**
      * 查询${functionName}详情

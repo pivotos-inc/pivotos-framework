@@ -44,7 +44,7 @@ pivotos:
     public-url: https://cos.293242.com
   # XXL-Job 调度中心（测试环境本地）
   job:
-    admin-addresses: http://localhost:8100
+    admin-addresses: http://175.24.176.176:8100
     app-name: pivotos-executor
     port: 9999
   # 微信小程序（测试号）

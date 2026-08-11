@@ -37,6 +37,15 @@ public class ${className}Controller {
     public R<PageResult<${className}VO>> selectPage(@Valid ${className}QueryRequest query) {
         return R.ok(${classVarName}Service.selectPage(query));
     }
+<#if hasTree?? && hasTree>
+
+    /** 全量树查询${functionName}（S53 / 2.4-F4；沿 list 权限） */
+    @GetMapping("/list")
+    @SaCheckPermission(value = "${moduleName}:${businessName}:list", type = StpSysUtil.TYPE)
+    public R<List<${className}VO>> selectTreeList(@Valid ${className}QueryRequest query) {
+        return R.ok(${classVarName}Service.selectTreeList(query));
+    }
+</#if>
 
     /** 查询${functionName}详情 */
     @GetMapping("/{id}")

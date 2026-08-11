@@ -465,6 +465,74 @@ class GeneratorServiceImplTest {
         assertEquals(GeneratorErrorCode.GEN_SUB_TABLE_NOT_FOUND.getCode(), ex.getCode());
     }
 
+    // ==================== S53：树表模板族（2.4-F4） ====================
+
+    @Test
+    @DisplayName("previewCode - 树表产出树组装/有子禁删/父节点 TreeSelect/双端产物")
+    void testPreviewCodeTreeTable() {
+        mockTable.setTplCategory("tree");
+        mockTable.setTreeCode("id");
+        mockTable.setTreeParentCode("parent_id");
+        mockTable.setTreeName("product_name");
+        List<GenTableColumn> cols = new java.util.ArrayList<>(mockColumns);
+        cols.add(buildColumn(9L, 1L, "parent_id", "parentId", "bigint", "Long",
+                0, 1, 1, 1, 1, 0, "parent_id", "EQ", "input", 0));
+
+        when(genTableMapper.selectById(1L)).thenReturn(mockTable);
+        when(genTableColumnMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(cols);
+
+        Map<String, String> files = generatorService.previewCode(1L);
+        String javaBase = "pivotos-plugins/pivotos-plugin-system/src/main/java/com/pivotos/system";
+
+        // ServiceImpl：树组装 + 有子禁删 + 父节点校验 + selectPage 保留（app 端兼容）
+        String serviceImpl = files.get(javaBase + "/service/impl/BizProductServiceImpl.java");
+        assertTrue(serviceImpl.contains("selectTreeList"));
+        assertTrue(serviceImpl.contains("assembleTree"));
+        assertTrue(serviceImpl.contains("存在子节点，不允许删除"));
+        assertTrue(serviceImpl.contains("父节点不能是自身"));
+        assertTrue(serviceImpl.contains("checkParentExists"));
+        assertTrue(serviceImpl.contains("selectPage"));
+        // 业务拦截走 ServiceException：文案经全局异常处理器透出（S53 决策，RuntimeException 会被 1500 吞掉）
+        assertTrue(serviceImpl.contains("import com.pivotos.common.core.exception.ServiceException;"));
+        assertTrue(serviceImpl.contains("throw new ServiceException(\"存在子节点，不允许删除\")"));
+        // VO：children
+        String vo = files.get(javaBase + "/domain/vo/BizProductVO.java");
+        assertTrue(vo.contains("List<BizProductVO> children"));
+        // Service/Controller：/list 端点
+        String service = files.get(javaBase + "/service/BizProductService.java");
+        assertTrue(service.contains("selectTreeList"));
+        String controller = files.get(javaBase + "/controller/BizProductController.java");
+        assertTrue(controller.contains("@GetMapping(\"/list\")"));
+        // flyway：parent 列索引
+        String sqlKey = files.keySet().stream().filter(k -> k.startsWith("sql/")).findFirst().orElseThrow();
+        assertTrue(files.get(sqlKey).contains("KEY `idx_parent_id` (`parent_id`)"));
+        // PC：树表格 + TreeSelect + 不分页（无 useTablePage）
+        String pcPage = files.get("pivotos-ui/apps/admin/src/views/system/product/index.vue");
+        assertTrue(pcPage.contains("ElTreeSelect"));
+        assertTrue(pcPage.contains("default-expand-all"));
+        assertTrue(pcPage.contains("row-key=\"id\""));
+        assertFalse(pcPage.contains("useTablePage"));
+        // PC API：树查询函数 + children 类型
+        String pcApi = files.get("pivotos-ui/apps/admin/src/api/system/product.ts");
+        assertTrue(pcApi.contains("selectBizProductTreeList"));
+        assertTrue(pcApi.contains("children?: BizProductVO[];"));
+    }
+
+    @Test
+    @DisplayName("previewCode - 树字段不在表字段中报 GEN_TREE_CONFIG_MISSING")
+    void testPreviewCodeTreeColumnMissing() {
+        mockTable.setTplCategory("tree");
+        mockTable.setTreeCode("id");
+        mockTable.setTreeParentCode("not_exist_parent");
+        mockTable.setTreeName("product_name");
+        when(genTableMapper.selectById(1L)).thenReturn(mockTable);
+        when(genTableColumnMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(mockColumns);
+
+        ServiceException ex = assertThrows(ServiceException.class,
+                () -> generatorService.previewCode(1L));
+        assertEquals(GeneratorErrorCode.GEN_TREE_CONFIG_MISSING.getCode(), ex.getCode());
+    }
+
     // ==================== Helper ====================
 
     private GenTableColumn buildColumn(Long id, Long tableId, String columnName,
