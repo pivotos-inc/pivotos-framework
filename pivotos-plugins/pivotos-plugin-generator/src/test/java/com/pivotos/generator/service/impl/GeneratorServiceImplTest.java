@@ -211,6 +211,34 @@ class GeneratorServiceImplTest {
     }
 
     @Test
+    @DisplayName("previewCode - S47 app 侧并行端点组 + uni API /app 前缀")
+    void testPreviewCodeAppSideEndpoints() {
+        when(genTableMapper.selectById(1L)).thenReturn(mockTable);
+        when(genTableColumnMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(mockColumns);
+
+        Map<String, String> files = generatorService.previewCode(1L);
+
+        String javaBase = "pivotos-plugins/pivotos-plugin-system/src/main/java/com/pivotos/system";
+        // app 侧并行控制器：/app 前缀 + StpMobileUtil 登录校验（app-user/wx-mini-user 任一放行）
+        String appController = files.get(javaBase + "/controller/BizProductAppController.java");
+        assertNotNull(appController);
+        assertTrue(appController.contains("class BizProductAppController"));
+        assertTrue(appController.contains("@RequestMapping(\"/app/system/product\")"));
+        assertTrue(appController.contains("StpMobileUtil.checkLogin();"));
+        assertFalse(appController.contains("StpSysUtil"));
+        // sys 端点组不动：权限串仍钉 sys 体系
+        String controller = files.get(javaBase + "/controller/BizProductController.java");
+        assertTrue(controller.contains("type = StpSysUtil.TYPE"));
+        // uni API：统一 /app 前缀
+        String uniApi = files.get("pivotos-app/src/api/system/product.ts");
+        assertNotNull(uniApi);
+        assertTrue(uniApi.contains("'/app/system/product/page'"));
+        assertTrue(uniApi.contains("'/app/system/product/' + id"));
+        assertFalse(uniApi.contains("'/system/product/page'"));
+    }
+
+    @Test
     @DisplayName("previewCode - flyway 菜单段重写为 1100 + C/F 按钮 + 动态 id")
     void testPreviewCodeFlywayMenu() {
         when(genTableMapper.selectById(1L)).thenReturn(mockTable);

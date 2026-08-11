@@ -46,27 +46,27 @@ export interface ${className}Query {
   pageSize: number;
 }
 
-/** 分页查询 */
+/** 分页查询（S47：打 app 侧并行端点组，app-user/wx-mini-user 登录即可） */
 export function select${className}Page(query: ${className}Query) {
-  return get<{ list: ${className}VO[]; total: number }>('/${moduleName}/${businessName}/page', query);
+  return get<{ list: ${className}VO[]; total: number }>('/app/${moduleName}/${businessName}/page', query);
 }
 
 /** 查询详情 */
 export function get${className}(id: number): Promise<${className}VO> {
-  return get<${className}VO>('/${moduleName}/${businessName}/' + id);
+  return get<${className}VO>('/app/${moduleName}/${businessName}/' + id);
 }
 
 /** 新增 */
 export function create${className}(body: ${className}SaveRequest): Promise<unknown> {
-  return post<unknown>('/${moduleName}/${businessName}', body);
+  return post<unknown>('/app/${moduleName}/${businessName}', body);
 }
 
 /** 修改 */
 export function update${className}(body: ${className}SaveRequest): Promise<unknown> {
-  return put<unknown>('/${moduleName}/${businessName}', body);
+  return put<unknown>('/app/${moduleName}/${businessName}', body);
 }
 
 /** 删除 */
 export function delete${className}(id: number): Promise<unknown> {
-  return del<unknown>('/${moduleName}/${businessName}/' + id);
+  return del<unknown>('/app/${moduleName}/${businessName}/' + id);
 }
