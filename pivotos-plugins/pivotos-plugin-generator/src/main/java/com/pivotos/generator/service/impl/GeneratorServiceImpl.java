@@ -65,9 +65,9 @@ public class GeneratorServiceImpl implements GeneratorService {
         JAVA_TYPE_MAP.put("double", "Double");
     }
 
-    /** DTO 需要跳过的字段（BaseDO / BaseQuery 已有） */
+    /** DTO 需要跳过的字段（BaseDO / BaseQuery 已有）；存驼峰形，比较前先 toCamelCase（S47 修复：原直接拿 snake 列名比较永不命中） */
     private static final Set<String> BASE_DO_FIELDS = Set.of(
-            "id", "createBy", "createTime", "updateBy", "updateTime", "deleted"
+            "id", "createBy", "createTime", "updateBy", "updateTime", "deleted", "tenantId"
     );
 
     /** Java 类型 → TypeScript 类型映射 */
@@ -213,10 +213,13 @@ public class GeneratorServiceImpl implements GeneratorService {
             column.setIsPk("PRI".equals(columnKey) ? 1 : 0);
             column.setIsIncrement(extra.contains("auto_increment") ? 1 : 0);
             column.setIsRequired("NO".equals(String.valueOf(col.getOrDefault("is_nullable", "YES"))) ? 1 : 0);
-            column.setIsInsert(BASE_DO_FIELDS.contains(columnName) ? 0 : 1);
-            column.setIsEdit("id".equals(columnName) || BASE_DO_FIELDS.contains(columnName) ? 0 : 1);
-            column.setIsList("id".equals(columnName) || "deleted".equals(columnName) || "remark".equals(columnName) ? 0 : 1);
-            column.setIsQuery("id".equals(columnName) || "remark".equals(columnName) || "deleted".equals(columnName) ? 0 : 1);
+            // S47：审计/租户字段（驼峰比较）默认不进 insert/edit/list/query——
+            // 否则 pc-api/uni-api 模板硬编码的 createTime 与 listColumns 重复，typecheck 直接钉死
+            boolean baseField = BASE_DO_FIELDS.contains(toCamelCase(columnName));
+            column.setIsInsert(baseField ? 0 : 1);
+            column.setIsEdit("id".equals(columnName) || baseField ? 0 : 1);
+            column.setIsList("id".equals(columnName) || "remark".equals(columnName) || baseField ? 0 : 1);
+            column.setIsQuery("id".equals(columnName) || "remark".equals(columnName) || baseField ? 0 : 1);
             column.setQueryType(inferQueryType(dataType));
             column.setHtmlType(inferHtmlType(dataType));
             column.setSort(sort++);
@@ -406,6 +409,9 @@ public class GeneratorServiceImpl implements GeneratorService {
                     render("vo.ftl", model));
             result.put(javaDir + "/controller/" + table.getClassName() + "Controller.java",
                     render("controller.ftl", model));
+            // S47（2.3-F3）：app 侧并行端点组（app-user/wx-mini-user 登录即可），sys 端点组不动
+            result.put(javaDir + "/controller/" + table.getClassName() + "AppController.java",
+                    render("app-controller.ftl", model));
             result.put("sql/" + toFlywayFileName(table.getTableName()) + ".sql",
                     render("flyway.ftl", model));
 

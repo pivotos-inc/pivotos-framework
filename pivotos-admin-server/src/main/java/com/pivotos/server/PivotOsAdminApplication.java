@@ -14,8 +14,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *   ② @AutoConfigurationPackage.basePackages：MyBatis-Plus @Mapper 接口自动扫描的包来源
  *   注意：两者相互独立，scanBasePackages 不会自动带进 AutoConfigurationPackages（S8 踩坑 2）
  */
-@SpringBootApplication(scanBasePackages = {"com.pivotos.server", "com.pivotos.system", "com.pivotos.message", "com.pivotos.file", "com.pivotos.ai", "com.pivotos.generator"})
-@AutoConfigurationPackage(basePackages = {"com.pivotos.server", "com.pivotos.system", "com.pivotos.message", "com.pivotos.file", "com.pivotos.ai", "com.pivotos.generator"})
+@SpringBootApplication(scanBasePackages = {"com.pivotos.server", "com.pivotos.system", "com.pivotos.message", "com.pivotos.file", "com.pivotos.ai", "com.pivotos.generator", "com.pivotos.monitor"})
+@AutoConfigurationPackage(basePackages = {"com.pivotos.server", "com.pivotos.system", "com.pivotos.message", "com.pivotos.file", "com.pivotos.ai", "com.pivotos.generator", "com.pivotos.monitor"})
 public class PivotOsAdminApplication {
 
     public static void main(String[] args) {

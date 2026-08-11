@@ -81,8 +81,19 @@ class P0ArchitectureTest {
                     "com.pivotos.system.api..", "com.pivotos.message.api..")))
         .allowEmptyShould(true);
 
-    // ========== A3：Starter 不依赖 Plugin 任何包（实现 + api 均禁止） ==========
+    // monitor 侧对称规则（S48 新增）：monitor 实现包只可依赖其他插件的 api 包（当前无此需求，规则先行防回潮）
     @ArchTest
+    static final ArchRule a1_a2_monitor_impl_must_not_depend_on_other_plugin_impls = noClasses()
+        .that().resideInAPackage("com.pivotos.monitor..")
+        .should().dependOnClassesThat(
+            JavaClass.Predicates.resideInAnyPackage(
+                    "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
+                    "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.ai..")
+                .and(JavaClass.Predicates.resideOutsideOfPackages(
+                    "com.pivotos.system.api..", "com.pivotos.message.api..", "com.pivotos.ai.api..")))
+        .allowEmptyShould(true);
+
+    // ========== A3：Starter 不依赖 Plugin 任何包（实现 + api 均禁止） ==========    @ArchTest
     static final ArchRule a3_starters_must_not_depend_on_plugins = noClasses()
         .that().resideInAPackage("com.pivotos.starter..")
         .should().dependOnClassesThat().resideInAnyPackage(

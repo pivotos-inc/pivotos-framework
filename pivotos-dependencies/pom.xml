@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>2.2.0</version>
+        <version>2.3.0</version>
     </parent>
 
     <artifactId>pivotos-dependencies</artifactId>
@@ -53,6 +53,9 @@
 
         <!-- ==================== Excel 导入导出（EasyExcel 4.x 流式） ==================== -->
         <easyexcel.version>4.0.2</easyexcel.version>
+
+        <!-- ==================== 监控（S48 2.3-F6 服务监控 oshi 采集） ==================== -->
+        <oshi.version>6.9.1</oshi.version>
 
         <!-- ==================== 搜索（Easy-ES 锁定 ES 7.17.28） ==================== -->
         <easy-es.version>3.0.2</easy-es.version>
@@ -151,6 +154,13 @@
                 <groupId>com.baomidou</groupId>
                 <artifactId>lock4j-redisson-spring-boot-starter</artifactId>
                 <version>${lock4j.version}</version>
+            </dependency>
+
+            <!-- oshi 系统/硬件采集（S48 monitor 插件服务监控） -->
+            <dependency>
+                <groupId>com.github.oshi</groupId>
+                <artifactId>oshi-core</artifactId>
+                <version>${oshi.version}</version>
             </dependency>
 
             <!-- ========== Lombok（provided，编译期增强，不进运行时包） ========== -->
@@ -400,6 +410,11 @@
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-plugin-ai-coding</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-monitor</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
