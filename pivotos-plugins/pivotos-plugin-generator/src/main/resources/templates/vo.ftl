@@ -23,5 +23,10 @@ public class ${className}VO extends BaseDTO {
     /** ${label} */
     private ${col.javaType} ${col.javaField};
 
+<#if col.fkTable?? && col.fkTable?has_content>
+    /** ${label}（关联显示，S50 / 2.4-F2） */
+    private String ${col.javaField}Label;
+
+</#if>
 </#list>
 }

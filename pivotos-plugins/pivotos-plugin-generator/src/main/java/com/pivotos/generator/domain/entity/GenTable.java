@@ -49,4 +49,22 @@ public class GenTable extends BaseDO {
 
     /** 备注 */
     private String remark;
+
+    /** 模板类型（crud单表 tree树表 sub主子表） */
+    private String tplCategory;
+
+    /** 树编码字段（tpl_category=tree） */
+    private String treeCode;
+
+    /** 树父编码字段（tpl_category=tree） */
+    private String treeParentCode;
+
+    /** 树名称字段（tpl_category=tree） */
+    private String treeName;
+
+    /** 子表名（tpl_category=sub） */
+    private String subTableName;
+
+    /** 子表外键列名（tpl_category=sub） */
+    private String subTableFkName;
 }

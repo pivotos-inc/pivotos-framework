@@ -55,6 +55,11 @@ public interface GeneratorService {
     void updateGenTableColumn(GenTableColumn column);
 
     /**
+     * 更新表配置（模板类型 / 树 / 主子 / fk 之外的表级属性，S50 / 2.4-F1）
+     */
+    void updateGenTable(GenTable table);
+
+    /**
      * 预览代码
      * @return Map<模板文件名, 生成代码内容>
      */

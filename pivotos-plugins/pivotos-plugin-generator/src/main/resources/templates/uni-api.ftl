@@ -23,6 +23,10 @@ export interface ${className}VO {
 <#list listColumns as col>
   /** ${col.columnComment} */
   ${col.javaField}: ${tsType(col.javaType)};
+<#if col.fkTable?? && col.fkTable?has_content>
+  /** ${col.columnComment}（关联显示） */
+  ${col.javaField}Label?: string;
+</#if>
 </#list>
   createTime?: string;
 }
@@ -70,3 +74,16 @@ export function update${className}(body: ${className}SaveRequest): Promise<unkno
 export function delete${className}(id: number): Promise<unknown> {
   return del<unknown>('/app/${moduleName}/${businessName}/' + id);
 }
+<#if hasFk>
+
+/** fk 下拉选项 */
+export interface ${className}FkOption {
+  label: string;
+  value: string | number;
+}
+
+/** 查询${functionName}关联下拉选项（S50 / 2.4-F2） */
+export function get${className}FkOptions(field: string): Promise<${className}FkOption[]> {
+  return get<${className}FkOption[]>('/app/${moduleName}/${businessName}/fk-options/' + field);
+}
+</#if>

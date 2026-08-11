@@ -86,6 +86,11 @@ public class GeneratorFacadeImpl implements IGeneratorFacade {
             column.setIsQuery(Integer.valueOf(col.getOrDefault("isQuery", 0).toString()));
             column.setQueryType((String) col.getOrDefault("queryType", "EQ"));
             column.setHtmlType((String) col.getOrDefault("htmlType", "input"));
+            column.setDictType((String) col.get("dictType"));
+            // S50（2.4-F1）：fk 关联下拉配置透传（AI 多表意图预留，F5 启用）
+            column.setFkTable((String) col.get("fkTable"));
+            column.setFkValueColumn((String) col.get("fkValueColumn"));
+            column.setFkLabelColumn((String) col.get("fkLabelColumn"));
             column.setSort(sort++);
             genTableColumnMapper.insert(column);
         }

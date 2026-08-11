@@ -14,6 +14,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+<#if hasFk>
+import java.util.Map;
+</#if>
 
 /**
  * ${functionName} - 控制器
@@ -65,4 +68,13 @@ public class ${className}Controller {
         ${classVarName}Service.delete(ids);
         return R.ok();
     }
+<#if hasFk>
+
+    /** 查询${functionName}关联下拉选项（S50 / 2.4-F2；沿 query 权限） */
+    @GetMapping("/fk-options/{field}")
+    @SaCheckPermission(value = "${moduleName}:${businessName}:query", type = StpSysUtil.TYPE)
+    public R<List<Map<String, Object>>> fkOptions(@PathVariable String field) {
+        return R.ok(${classVarName}Service.selectFkOptions(field));
+    }
+</#if>
 }

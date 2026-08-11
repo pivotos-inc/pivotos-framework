@@ -7,6 +7,9 @@ import ${packageName}.domain.dto.${className}QueryRequest;
 import ${packageName}.domain.vo.${className}VO;
 
 import java.util.List;
+<#if hasFk>
+import java.util.Map;
+</#if>
 
 /**
  * ${functionName} - 服务接口
@@ -40,4 +43,11 @@ public interface ${className}Service {
      * 删除${functionName}
      */
     void delete(List<Long> ids);
+<#if hasFk>
+
+    /**
+     * 查询关联下拉选项（S50 / 2.4-F2；field = 实体字段名，返回 [{value, label}]）
+     */
+    List<Map<String, Object>> selectFkOptions(String field);
+</#if>
 }

@@ -16,7 +16,7 @@
 <script setup lang="ts">
 import { onLoad } from '@dcloudio/uni-app';
 import { ref, reactive, computed } from 'vue';
-import { create${className}, update${className}, get${className}, type ${className}SaveRequest } from '@/api/${moduleName}/${businessName}';
+import { create${className}, update${className}, get${className}<#if hasFk>, get${className}FkOptions, type ${className}FkOption</#if>, type ${className}SaveRequest } from '@/api/${moduleName}/${businessName}';
 
 // ========== 表单数据 ==========
 const form = reactive<${className}SaveRequest>({
@@ -24,6 +24,19 @@ const form = reactive<${className}SaveRequest>({
   ${col.javaField}: ${tsDefault(col.javaType)},
 </#list>
 });
+<#if hasFk>
+
+// ========== fk 关联下拉选项（S50 / 2.4-F2） ==========
+<#list fkColumns as col>
+const ${col.javaField}Options = ref<${className}FkOption[]>([]);
+</#list>
+
+async function loadFkOptions() {
+<#list fkColumns as col>
+  ${col.javaField}Options.value = await get${className}FkOptions('${col.javaField}').catch(() => []);
+</#list>
+}
+</#if>
 
 const loading = ref(false);
 const isEdit = ref(false);
@@ -33,6 +46,9 @@ const title = computed(() => isEdit.value ? '编辑${functionName}' : '新增${f
 
 // ========== 加载编辑数据 ==========
 onLoad((query) => {
+<#if hasFk>
+  loadFkOptions();
+</#if>
   const id = Number(query?.id);
   if (id) {
     isEdit.value = true;
@@ -91,7 +107,15 @@ async function onSubmit() {
     <view class="form-container">
       <wd-cell-group>
       <#list insertColumns as col>
-        <#if col.htmlType == "textarea">
+        <#if col.fkTable?? && col.fkTable?has_content>
+        <wd-picker
+          v-model="form.${col.javaField}"
+          label="${col.columnComment}"
+          :columns="${col.javaField}Options"
+          title="请选择${col.columnComment}"
+          placeholder="请选择${col.columnComment}"
+        />
+        <#elseif col.htmlType == "textarea">
         <wd-textarea
           v-model="form.${col.javaField}"
           label="${col.columnComment}"

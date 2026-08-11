@@ -13,6 +13,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+<#if hasFk>
+import java.util.Map;
+</#if>
 
 /**
  * ${functionName} - 移动端控制器（App/H5/小程序）
@@ -70,4 +73,13 @@ public class ${className}AppController {
         ${classVarName}Service.delete(ids);
         return R.ok();
     }
+<#if hasFk>
+
+    /** 查询${functionName}关联下拉选项（移动端，登录即可） */
+    @GetMapping("/fk-options/{field}")
+    public R<List<Map<String, Object>>> fkOptions(@PathVariable String field) {
+        StpMobileUtil.checkLogin();
+        return R.ok(${classVarName}Service.selectFkOptions(field));
+    }
+</#if>
 }

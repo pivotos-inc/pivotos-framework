@@ -120,7 +120,11 @@ onReachBottom(() => {
         <#list listColumns as col>
           <view class="item-row">
             <text class="item-label">${col.columnComment}</text>
+            <#if col.fkTable?? && col.fkTable?has_content>
+            <text class="item-value">{{ item.${col.javaField}Label || item.${col.javaField} }}</text>
+            <#else>
             <text class="item-value">{{ item.${col.javaField} }}</text>
+            </#if>
           </view>
         </#list>
         </view>

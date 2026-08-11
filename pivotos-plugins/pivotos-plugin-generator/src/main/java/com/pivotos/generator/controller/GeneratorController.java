@@ -82,6 +82,14 @@ public class GeneratorController {
         return R.ok();
     }
 
+    /** 更新表配置（模板类型/树/主子，S50 / 2.4-F1） */
+    @PutMapping("/table")
+    @SaCheckPermission(value = "generator:gen:edit", type = StpSysUtil.TYPE)
+    public R<Void> updateTable(@Valid @RequestBody GenTable table) {
+        generatorService.updateGenTable(table);
+        return R.ok();
+    }
+
     /** 同步数据库表字段 */
     @PutMapping("/synch/{tableId}")
     @SaCheckPermission(value = "generator:gen:synch", type = StpSysUtil.TYPE)

@@ -262,6 +262,79 @@ class GeneratorServiceImplTest {
         assertTrue(sql.contains("`price` decimal(10,2)"));
     }
 
+    // ==================== S50：fk 关联下拉（2.4-F2） ====================
+
+    @Test
+    @DisplayName("previewCode - fk 列产出 VO 翻译 + 选项端点 + 双端 select/picker")
+    void testPreviewCodeFkDropdown() {
+        GenTableColumn fkCol = buildColumn(5L, 1L, "dept_id", "deptId", "bigint", "Long",
+                0, 1, 1, 1, 1, 1, "dept_id", "EQ", "input", 5);
+        fkCol.setFkTable("sys_dept");
+        fkCol.setFkValueColumn("id");
+        fkCol.setFkLabelColumn("dept_name");
+        List<GenTableColumn> cols = new java.util.ArrayList<>(mockColumns);
+        cols.add(fkCol);
+
+        when(genTableMapper.selectById(1L)).thenReturn(mockTable);
+        when(genTableColumnMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(cols);
+        // deleted 列探测：sys_dept 有 deleted → 选项/翻译 SQL 带过滤
+        when(jdbcTemplate.queryForObject(contains("information_schema.columns"), eq(Long.class), eq("sys_dept")))
+                .thenReturn(1L);
+
+        Map<String, String> files = generatorService.previewCode(1L);
+        String javaBase = "pivotos-plugins/pivotos-plugin-system/src/main/java/com/pivotos/system";
+
+        // VO：label 字段
+        String vo = files.get(javaBase + "/domain/vo/BizProductVO.java");
+        assertTrue(vo.contains("private String deptIdLabel;"));
+        // ServiceImpl：FK_CONFIG + 批量回填 + deleted 过滤 + 选项查询
+        String serviceImpl = files.get(javaBase + "/service/impl/BizProductServiceImpl.java");
+        assertTrue(serviceImpl.contains("FK_CONFIG"));
+        assertTrue(serviceImpl.contains("Map.entry(\"deptId\", new String[]{\"sys_dept\", \"id\", \"dept_name\""));
+        assertTrue(serviceImpl.contains("fillFkLabels(voList)"));
+        assertTrue(serviceImpl.contains("fillDeptIdLabel(vos)"));
+        assertTrue(serviceImpl.contains(" AND `deleted` = 0"));
+        assertTrue(serviceImpl.contains("selectFkOptions(String field)"));
+        // Controller：sys/app 双侧选项端点
+        String controller = files.get(javaBase + "/controller/BizProductController.java");
+        assertTrue(controller.contains("/fk-options/{field}"));
+        assertTrue(controller.contains("system:product:query"));
+        String appController = files.get(javaBase + "/controller/BizProductAppController.java");
+        assertTrue(appController.contains("/fk-options/{field}"));
+        // PC：表格 label 列 + 表单/搜索 select + api 选项函数
+        String pcPage = files.get("pivotos-ui/apps/admin/src/views/system/product/index.vue");
+        assertTrue(pcPage.contains("prop: 'deptIdLabel'"));
+        assertTrue(pcPage.contains("component: 'select', options: fkOptions.deptId"));
+        String pcApi = files.get("pivotos-ui/apps/admin/src/api/system/product.ts");
+        assertTrue(pcApi.contains("getBizProductFkOptions"));
+        assertTrue(pcApi.contains("deptIdLabel?: string;"));
+        // uni：picker + /app 前缀选项 + 列表/详情 label 展示
+        String uniForm = files.get("pivotos-app/src/pages-gen/system/product/form.vue");
+        assertTrue(uniForm.contains("<wd-picker"));
+        assertTrue(uniForm.contains(":columns=\"deptIdOptions\""));
+        String uniList = files.get("pivotos-app/src/pages-gen/system/product/list.vue");
+        assertTrue(uniList.contains("item.deptIdLabel || item.deptId"));
+        String uniApi = files.get("pivotos-app/src/api/system/product.ts");
+        assertTrue(uniApi.contains("'/app/system/product/fk-options/' + field"));
+    }
+
+    @Test
+    @DisplayName("previewCode - fk 配置不完整（缺值列/显示列）按无 fk 处理")
+    void testPreviewCodeFkIncompleteIgnored() {
+        GenTableColumn fkCol = buildColumn(5L, 1L, "dept_id", "deptId", "bigint", "Long",
+                0, 1, 1, 1, 1, 1, "dept_id", "EQ", "input", 5);
+        fkCol.setFkTable("sys_dept"); // 缺 value/label 列
+        List<GenTableColumn> cols = new java.util.ArrayList<>(mockColumns);
+        cols.add(fkCol);
+        when(genTableMapper.selectById(1L)).thenReturn(mockTable);
+        when(genTableColumnMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(cols);
+
+        Map<String, String> files = generatorService.previewCode(1L);
+        String javaBase = "pivotos-plugins/pivotos-plugin-system/src/main/java/com/pivotos/system";
+        String serviceImpl = files.get(javaBase + "/service/impl/BizProductServiceImpl.java");
+        assertFalse(serviceImpl.contains("FK_CONFIG"));
+    }
+
     // ==================== Helper ====================
 
     private GenTableColumn buildColumn(Long id, Long tableId, String columnName,

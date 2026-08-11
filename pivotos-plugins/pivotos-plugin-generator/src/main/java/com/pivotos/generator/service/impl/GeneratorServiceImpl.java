@@ -281,7 +281,56 @@ public class GeneratorServiceImpl implements GeneratorService {
 
     @Override
     public void updateGenTableColumn(GenTableColumn column) {
+        // S50（2.4-F1）：fk 关联配置标识符白名单校验——这些值会进入生成代码的 SQL 常量
+        validateIdentifier(column.getFkTable(), "关联表名");
+        validateIdentifier(column.getFkValueColumn(), "关联值列");
+        validateIdentifier(column.getFkLabelColumn(), "关联显示列");
         genTableColumnMapper.updateById(column);
+    }
+
+    @Override
+    public void updateGenTable(GenTable table) {
+        if (table.getId() == null || genTableMapper.selectById(table.getId()) == null) {
+            throw new ServiceException(GeneratorErrorCode.GEN_TABLE_NOT_FOUND);
+        }
+        String tpl = table.getTplCategory();
+        if (tpl == null || tpl.isBlank()) {
+            table.setTplCategory("crud");
+        } else if (!Set.of("crud", "tree", "sub").contains(tpl)) {
+            throw new ServiceException(GeneratorErrorCode.GEN_PARAM_INVALID);
+        }
+        // 树/主子配置字段同样进生成代码，做标识符白名单校验
+        validateIdentifier(table.getTreeCode(), "树编码字段");
+        validateIdentifier(table.getTreeParentCode(), "树父编码字段");
+        validateIdentifier(table.getTreeName(), "树名称字段");
+        validateIdentifier(table.getSubTableName(), "子表名");
+        validateIdentifier(table.getSubTableFkName(), "子表外键列名");
+        genTableMapper.updateById(table);
+    }
+
+    /** fk 目标表是否含 deleted 逻辑删除列（生成期一次性判定，查不到按无处理） */
+    private boolean fkTableHasDeletedColumn(String fkTable) {
+        try {
+            Long cnt = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.columns " +
+                    "WHERE table_schema = (SELECT DATABASE()) AND TABLE_NAME = ? AND COLUMN_NAME = 'deleted'",
+                    Long.class, fkTable);
+            return cnt != null && cnt > 0;
+        } catch (Exception e) {
+            log.warn("[Generator] fk 目标表 deleted 列探测失败，按无处理: {}", fkTable, e);
+            return false;
+        }
+    }
+
+    /** 标识符白名单（null/空串放行=未配置；非空必须是小写 SQL 标识符，防配置值注入生成代码） */
+    private static void validateIdentifier(String value, String label) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        if (!value.matches("^[a-z][a-z0-9_]{0,63}$")) {
+            log.warn("[Generator] {}非法: {}", label, value);
+            throw new ServiceException(GeneratorErrorCode.GEN_PARAM_INVALID);
+        }
     }
 
     // ==================== 代码生成 ====================
@@ -304,6 +353,25 @@ public class GeneratorServiceImpl implements GeneratorService {
         model.put("author", genTable.getFunctionAuthor());
         model.put("datetime", DateUtil.now());
         model.put("tableName", genTable.getTableName());
+
+        // S50（2.4-F1）：模板类型 + fk 关联字段（fkTable 非空即关联下拉列）
+        model.put("tplCategory", genTable.getTplCategory() == null ? "crud" : genTable.getTplCategory());
+        List<GenTableColumn> fkColumns = columns.stream()
+                .filter(c -> c.getFkTable() != null && !c.getFkTable().isBlank()
+                        && c.getFkValueColumn() != null && !c.getFkValueColumn().isBlank()
+                        && c.getFkLabelColumn() != null && !c.getFkLabelColumn().isBlank())
+                .toList();
+        model.put("fkColumns", fkColumns);
+        model.put("hasFk", !fkColumns.isEmpty());
+        // fk 目标表带逻辑删除列的字段集（生成期判定，选项/翻译 SQL 过滤 deleted=0；
+        // 用 List 而非 Set——FreeMarker ?seq_contains 只认序列）
+        List<String> fkDeletedFields = new ArrayList<>();
+        for (GenTableColumn c : fkColumns) {
+            if (fkTableHasDeletedColumn(c.getFkTable())) {
+                fkDeletedFields.add(c.getJavaField());
+            }
+        }
+        model.put("fkDeletedFields", fkDeletedFields);
 
         // 主键字段
         model.put("pkColumn", columns.stream()

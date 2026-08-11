@@ -14,7 +14,7 @@
   <#if javaType == "String"><#return "''"><#elseif javaType == "Integer" || javaType == "Long" || javaType == "BigDecimal" || javaType == "Float" || javaType == "Double"><#return "undefined"><#elseif javaType == "Boolean"><#return "false"><#elseif javaType == "LocalDateTime" || javaType == "LocalDate" || javaType == "LocalTime"><#return "''"><#else><#return "''"></#if>
 </#function>
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed<#if hasFk>, onMounted</#if>, reactive, ref } from 'vue';
 import { ElButton, ElMessage, ElMessageBox, ElTableColumn } from 'element-plus';
 import { Plus } from '@element-plus/icons-vue';
 import { YDialog, YForm, YSearchForm, YTable } from '@pivotos/ui';
@@ -24,9 +24,12 @@ import {
   create${className},
   delete${className},
   get${className},
+<#if hasFk>
+  get${className}FkOptions,
+</#if>
   update${className},
 } from '@/api/${moduleName}/${businessName}';
-import type { ${className}VO, ${className}SaveRequest, ${className}Query } from '@/api/${moduleName}/${businessName}';
+import type { ${className}VO, ${className}SaveRequest, ${className}Query<#if hasFk>, ${className}FkOption</#if> } from '@/api/${moduleName}/${businessName}';
 
 // ============================================================
 // 分页查询
@@ -43,11 +46,30 @@ const { loading, rows, total, params, load, search, reset } = useTablePage<${cla
 });
 
 // ============================================================
+<#if hasFk>
+// fk 关联下拉选项（S50 / 2.4-F2；push 原地填充保持 schema 引用有效）
+// ============================================================
+const fkOptions = reactive({
+<#list fkColumns as col>
+  ${col.javaField}: [] as ${className}FkOption[],
+</#list>
+});
+
+onMounted(() => {
+<#list fkColumns as col>
+  get${className}FkOptions('${col.javaField}').then((list) => fkOptions.${col.javaField}.push(...list));
+</#list>
+});
+
+// ============================================================
+</#if>
 // 搜索表单
 // ============================================================
 const searchSchemas: YFormSchema[] = [
 <#list queryColumns as col>
-  <#if col.queryType == "BETWEEN">
+  <#if col.fkTable?? && col.fkTable?has_content>
+  { field: '${col.javaField}', label: '${col.columnComment}', component: 'select', options: fkOptions.${col.javaField}, emptyOption: '全部' },
+  <#elseif col.queryType == "BETWEEN">
   { field: '${col.javaField}', label: '${col.columnComment}', component: 'daterange' },
   <#else>
   { field: '${col.javaField}', label: '${col.columnComment}', component: 'input', placeholder: '<#if col.queryType == "LIKE">按${col.columnComment}模糊查询<#else>请输入${col.columnComment}</#if>' },
@@ -61,7 +83,9 @@ const searchSchemas: YFormSchema[] = [
 const columns: YTableColumn<${className}VO>[] = [
   { type: 'index', label: '#', width: 56, align: 'center' },
 <#list listColumns as col>
-  <#if col.javaType == "LocalDateTime" || col.javaType == "LocalDate">
+  <#if col.fkTable?? && col.fkTable?has_content>
+  { prop: '${col.javaField}Label', label: '${col.columnComment}', minWidth: 140 },
+  <#elseif col.javaType == "LocalDateTime" || col.javaType == "LocalDate">
   { prop: '${col.javaField}', label: '${col.columnComment}', width: 170 },
   <#elseif col.javaType == "Boolean">
   { prop: '${col.javaField}', label: '${col.columnComment}', width: 90, align: 'center' },
@@ -82,7 +106,9 @@ const isEdit = computed(() => !!formModel.id);
 
 const formSchemas = computed<YFormSchema[]>(() => [
 <#list insertColumns as col>
-  <#if col.htmlType == "textarea">
+  <#if col.fkTable?? && col.fkTable?has_content>
+  { field: '${col.javaField}', label: '${col.columnComment}', component: 'select', options: fkOptions.${col.javaField}<#if col.isRequired == 1>, emptyOption: false, rules: [{ required: true, message: '请选择${col.columnComment}', trigger: 'change' }]</#if> },
+  <#elseif col.htmlType == "textarea">
   { field: '${col.javaField}', label: '${col.columnComment}', component: 'textarea'<#if col.isRequired == 1>, rules: [{ required: true, message: '${col.columnComment}不能为空', trigger: 'blur' }]</#if> },
   <#elseif col.htmlType == "datetime">
   { field: '${col.javaField}', label: '${col.columnComment}', component: 'date'<#if col.isRequired == 1>, rules: [{ required: true, message: '${col.columnComment}不能为空', trigger: 'blur' }]</#if> },
