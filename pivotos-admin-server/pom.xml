@@ -81,6 +81,11 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-ai-coding</artifactId>
         </dependency>
+        <!-- monitor 插件（S48 2.3-F6：服务监控 oshi/JMX + 缓存监控 Redis INFO，无表结构） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-monitor</artifactId>
+        </dependency>
 
         <!-- ===== API 文档 ===== -->
         <dependency>

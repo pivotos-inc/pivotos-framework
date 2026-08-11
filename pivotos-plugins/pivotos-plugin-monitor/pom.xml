@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-plugins</artifactId>
+        <version>2.2.0</version>
+    </parent>
+
+    <artifactId>pivotos-plugin-monitor</artifactId>
+
+    <name>pivotos-plugin-monitor</name>
+    <description>PivotOS monitor 插件（S48 2.3-F6：服务监控 oshi/JMX/虚拟线程 + 缓存监控 Redis INFO，无表结构）</description>
+
+    <dependencies>
+        <!-- 底座 Starter -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-auth</artifactId>
+        </dependency>
+
+        <!-- Redisson 客户端（缓存监控 INFO / DBSIZE 采集） -->
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- oshi 系统/硬件采集（服务监控 CPU/内存/磁盘） -->
+        <dependency>
+            <groupId>com.github.oshi</groupId>
+            <artifactId>oshi-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- 测试（纯单元测试：INFO 解析器，无需 Spring 上下文） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>
