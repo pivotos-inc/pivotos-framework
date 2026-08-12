@@ -3,25 +3,20 @@ package ${packageName}.domain.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
-<#if hasSub>
-import jakarta.validation.Valid;
-import java.util.List;
-</#if>
-<#list importPaths as p>
+<#list subImportPaths as p>
 import ${p};
 </#list>
 
 /**
- * ${functionName} - 新增请求
+ * ${subFunctionName} - 子项请求（S51 / 2.4-F3 主子表明细行；fk 由后端按主表 id 回写）
  *
  * @author ${author}
  * @date ${datetime}
  */
 @Data
-public class ${className}CreateRequest {
+public class ${subClassName}ItemRequest {
 
-<#list insertColumns as col>
-<#if col.javaField != "id" && col.javaField != "createBy" && col.javaField != "createTime" && col.javaField != "updateBy" && col.javaField != "updateTime" && col.javaField != "deleted">
+<#list subInsertColumns as col>
 <#assign label = col.columnComment!''>
 <#if label == ''><#assign label = col.javaField></#if>
     /** ${label} */
@@ -34,11 +29,5 @@ public class ${className}CreateRequest {
 </#if>
     private ${col.javaType} ${col.javaField};
 
-</#if>
 </#list>
-<#if hasSub>
-    /** ${subFunctionName}明细（S51 / 2.4-F3；可空=无明细） */
-    @Valid
-    private List<${subClassName}ItemRequest> items;
-</#if>
 }

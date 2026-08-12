@@ -65,6 +65,15 @@ public class GenTableColumn extends BaseDO {
     /** 字典类型 */
     private String dictType;
 
+    /** 关联表名（fk 关联下拉） */
+    private String fkTable;
+
+    /** 关联值列 */
+    private String fkValueColumn;
+
+    /** 关联显示列 */
+    private String fkLabelColumn;
+
     /** 排序 */
     private Integer sort;
 }

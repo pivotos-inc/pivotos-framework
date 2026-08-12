@@ -1,6 +1,6 @@
 <#-- =====================================================
- PC 端 Vue 页面模板
- 基于 YSearchForm + YTable + YDialog + YForm
+ PC 端 Vue 页面模板（主子表版，S51 / 2.4-F3）
+ 基于 YSearchForm + YTable + YDialog + YForm + 内嵌 ElTable 明细编辑
 ===================================================== -->
 <#function tsType javaType>
   <#if javaType == "String"><#return "string">
@@ -13,9 +13,12 @@
 <#function tsDefault javaType>
   <#if javaType == "String"><#return "''"><#elseif javaType == "Integer" || javaType == "Long" || javaType == "BigDecimal" || javaType == "Float" || javaType == "Double"><#return "undefined"><#elseif javaType == "Boolean"><#return "false"><#elseif javaType == "LocalDateTime" || javaType == "LocalDate" || javaType == "LocalTime"><#return "''"><#else><#return "''"></#if>
 </#function>
+<#function isNum javaType>
+  <#if javaType == "Integer" || javaType == "Long" || javaType == "BigDecimal" || javaType == "Float" || javaType == "Double"><#return true><#else><#return false></#if>
+</#function>
 <script setup lang="ts">
 import { computed<#if hasFk>, onMounted</#if>, reactive, ref } from 'vue';
-import { ElButton, ElMessage, ElMessageBox, ElTableColumn } from 'element-plus';
+import { ElButton, ElInput, ElInputNumber, ElMessage, ElMessageBox, ElTable, ElTableColumn } from 'element-plus';
 import { Plus } from '@element-plus/icons-vue';
 import { YDialog, YForm, YSearchForm, YTable } from '@pivotos/ui';
 import type { YFormSchema, YTableColumn } from '@pivotos/ui';
@@ -29,7 +32,15 @@ import {
 </#if>
   update${className},
 } from '@/api/${moduleName}/${businessName}';
-import type { ${className}VO, ${className}SaveRequest, ${className}Query<#if hasFk>, ${className}FkOption</#if> } from '@/api/${moduleName}/${businessName}';
+import type {
+  ${className}VO,
+  ${className}SaveRequest,
+  ${className}Query,
+  ${subClassName}Item,
+<#if hasFk>
+  ${className}FkOption,
+</#if>
+} from '@/api/${moduleName}/${businessName}';
 
 // ============================================================
 // 分页查询
@@ -45,8 +56,8 @@ const { loading, rows, total, params, load, search, reset } = useTablePage<${cla
 </#if>
 });
 
-// ============================================================
 <#if hasFk>
+// ============================================================
 // fk 关联下拉选项（S50 / 2.4-F2；push 原地填充保持 schema 引用有效）
 // ============================================================
 const fkOptions = reactive({
@@ -61,8 +72,8 @@ onMounted(() => {
 </#list>
 });
 
-// ============================================================
 </#if>
+// ============================================================
 // 搜索表单
 // ============================================================
 const searchSchemas: YFormSchema[] = [
@@ -96,13 +107,14 @@ const columns: YTableColumn<${className}VO>[] = [
 ];
 
 // ============================================================
-// 新增 / 编辑 对话框
+// 新增 / 编辑 对话框（含 ${subFunctionName}明细内嵌编辑，S51 / 2.4-F3）
 // ============================================================
 const dialogVisible = ref(false);
 const confirmLoading = ref(false);
 const formRef = ref<InstanceType<typeof YForm>>();
 const formModel = reactive<Record<string, unknown>>({});
 const isEdit = computed(() => !!formModel.id);
+const subRows = ref<${subClassName}Item[]>([]);
 
 const formSchemas = computed<YFormSchema[]>(() => [
 <#list insertColumns as col>
@@ -123,10 +135,22 @@ const formSchemas = computed<YFormSchema[]>(() => [
 const title = computed(() => isEdit.value ? '编辑${functionName}' : '新增${functionName}');
 
 // ============================================================
+// 明细行操作
+// ============================================================
+function addSubRow(): void {
+  subRows.value.push({});
+}
+
+function removeSubRow(index: number): void {
+  subRows.value.splice(index, 1);
+}
+
+// ============================================================
 // 操作函数
 // ============================================================
 function handleAdd(): void {
   Object.keys(formModel).forEach((k) => delete formModel[k]);
+  subRows.value = [];
   dialogVisible.value = true;
 }
 
@@ -134,6 +158,12 @@ async function handleEdit(row: ${className}VO): Promise<void> {
   const detail = await get${className}(row.id);
   Object.keys(formModel).forEach((k) => delete formModel[k]);
   Object.assign(formModel, { ...detail });
+  // 明细全量替换语义：仅取可编辑字段回显（VO 中的 id/审计列不带回保存请求）
+  subRows.value = (detail.items ?? []).map((i) => ({
+<#list subInsertColumns as col>
+    ${col.javaField}: i.${col.javaField},
+</#list>
+  }));
   dialogVisible.value = true;
 }
 
@@ -146,6 +176,7 @@ async function handleSubmit(): Promise<void> {
 <#list insertColumns as col>
       ${col.javaField}: formModel.${col.javaField} as ${tsType(col.javaType)},
 </#list>
+      items: subRows.value,
     };
     if (isEdit.value) {
       body.id = formModel.id as number;
@@ -162,7 +193,7 @@ async function handleSubmit(): Promise<void> {
 }
 
 async function handleDelete(row: ${className}VO): Promise<void> {
-  await ElMessageBox.confirm('确认删除该${functionName}吗？', '提示', { type: 'warning' });
+  await ElMessageBox.confirm('确认删除该${functionName}吗？${subFunctionName}明细将一并删除。', '提示', { type: 'warning' });
   await delete${className}(String(row.id));
   ElMessage.success('删除成功');
   await load();
@@ -206,11 +237,38 @@ async function handleDelete(row: ${className}VO): Promise<void> {
     <YDialog
       v-model="dialogVisible"
       :title="title"
-      width="520px"
+      width="960px"
       :confirm-loading="confirmLoading"
       @confirm="handleSubmit"
     >
       <YForm ref="formRef" v-model="formModel" :schemas="formSchemas" label-width="100px" />
+
+      <div class="sub-section">
+        <div class="sub-header">
+          <span class="sub-title">${subFunctionName}明细</span>
+          <ElButton size="small" type="primary" plain :icon="Plus" @click="addSubRow">
+            添加行
+          </ElButton>
+        </div>
+        <ElTable :data="subRows" size="small" border max-height="320">
+<#list subInsertColumns as col>
+          <ElTableColumn label="${col.columnComment}" min-width="140">
+            <template #default="{ row }">
+  <#if isNum(col.javaType)>
+              <ElInputNumber v-model="row.${col.javaField}" :controls="false" style="width: 100%" />
+  <#else>
+              <ElInput v-model="row.${col.javaField}" placeholder="请输入${col.columnComment}" />
+  </#if>
+            </template>
+          </ElTableColumn>
+</#list>
+          <ElTableColumn label="操作" width="70" align="center">
+            <template #default="{ $index }">
+              <ElButton link type="danger" @click="removeSubRow($index)">删行</ElButton>
+            </template>
+          </ElTableColumn>
+        </ElTable>
+      </div>
     </YDialog>
   </div>
 </template>
@@ -220,5 +278,17 @@ async function handleDelete(row: ${className}VO): Promise<void> {
   display: flex;
   justify-content: flex-end;
   margin-bottom: 12px;
+}
+.sub-section {
+  margin-top: 16px;
+}
+.sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.sub-title {
+  font-weight: 600;
 }
 </style>

@@ -3,6 +3,10 @@ package ${packageName}.domain.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+<#if hasSub>
+import jakarta.validation.Valid;
+import java.util.List;
+</#if>
 <#list importPaths as p>
 import ${p};
 </#list>
@@ -36,4 +40,9 @@ public class ${className}UpdateRequest {
 
 </#if>
 </#list>
+<#if hasSub>
+    /** ${subFunctionName}明细（S51 / 2.4-F3；全量替换语义：提交即覆盖旧明细） */
+    @Valid
+    private List<${subClassName}ItemRequest> items;
+</#if>
 }

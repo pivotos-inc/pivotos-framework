@@ -66,7 +66,11 @@ async function onDelete() {
     <view v-else class="detail-container">
       <wd-cell-group border>
       <#list listColumns as col>
+        <#if col.fkTable?? && col.fkTable?has_content>
+        <wd-cell title="${col.columnComment}" :value="detail.${col.javaField}Label || detail.${col.javaField}" />
+        <#else>
         <wd-cell title="${col.columnComment}" :value="detail.${col.javaField}" />
+        </#if>
       </#list>
       </wd-cell-group>
 

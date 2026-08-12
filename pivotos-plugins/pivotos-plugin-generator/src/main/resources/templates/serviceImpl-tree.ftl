@@ -4,6 +4,7 @@ import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.page.PageResult;
 import ${packageName}.domain.entity.${className};
 import ${packageName}.domain.dto.${className}CreateRequest;
@@ -20,18 +21,22 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-<#if hasFk>
 import java.util.ArrayList;
+<#if hasFk>
 import java.util.HashMap;
 </#if>
+import java.util.LinkedHashMap;
 import java.util.List;
-<#if hasFk>
 import java.util.Map;
+<#if hasFk>
 import java.util.Objects;
 </#if>
 
 /**
- * ${functionName} - 服务实现
+ * ${functionName} - 服务实现（树表版，S53 / 2.4-F4）
+ * <p>
+ * parent_id 自引用；selectTreeList 全量查询（千行内）内存组装 children 树；
+ * 删除前置「有子节点禁删」（对齐部门管理先例）；新增/编辑校验父节点存在（0=根）。
  *
  * @author ${author}
  * @date ${datetime}
@@ -40,17 +45,46 @@ import java.util.Objects;
 @Service
 public class ${className}ServiceImpl implements ${className}Service {
 
+    /** 根节点父标识 */
+    private static final Long ROOT_PARENT_ID = 0L;
+
     @Resource
     private ${className}Mapper ${classVarName}Mapper;
 <#if hasFk>
 
-    /** fk 显示值翻译 / 下拉选项查询（S50 / 2.4-F2；架构测试未禁 JdbcTemplate，A5 仅禁 mapper XML） */
+    /** fk 显示值翻译 / 下拉选项查询（S50 / 2.4-F2） */
     @Resource
     private JdbcTemplate jdbcTemplate;
 </#if>
 
     @Override
     public PageResult<${className}VO> selectPage(${className}QueryRequest query) {
+        LambdaQueryWrapper<${className}> wq = buildQuery(query);
+        wq.orderByDesc(${className}::getCreateTime);
+
+        Page<${className}> page = ${classVarName}Mapper.selectPage(
+                new Page<>(query.getPageNum(), query.getPageSize()), wq);
+        List<${className}VO> voList = page.getRecords().stream().map(this::toVo).toList();
+<#if hasFk>
+        fillFkLabels(voList);
+</#if>
+        return new PageResult<>(voList, page.getTotal(), query.getPageNum(), query.getPageSize());
+    }
+
+    @Override
+    public List<${className}VO> selectTreeList(${className}QueryRequest query) {
+        LambdaQueryWrapper<${className}> wq = buildQuery(query);
+        wq.orderByAsc(${className}::get${treeCodeField?cap_first});
+        List<${className}VO> voList = ${classVarName}Mapper.selectList(wq)
+                .stream().map(this::toVo).toList();
+<#if hasFk>
+        fillFkLabels(voList);
+</#if>
+        return assembleTree(voList);
+    }
+
+    /** 查询条件（分页/树查询共用） */
+    private LambdaQueryWrapper<${className}> buildQuery(${className}QueryRequest query) {
         LambdaQueryWrapper<${className}> wq = Wrappers.lambdaQuery();
 <#list queryColumns as col>
 <#if col.queryType == "LIKE">
@@ -62,29 +96,38 @@ public class ${className}ServiceImpl implements ${className}Service {
         wq.eq(query.get${col.javaField?cap_first}() != null, ${className}::get${col.javaField?cap_first}, query.get${col.javaField?cap_first}());
 </#if>
 </#list>
-        wq.orderByDesc(${className}::getCreateTime);
+        return wq;
+    }
 
-        Page<${className}> page = ${classVarName}Mapper.selectPage(
-                new Page<>(query.getPageNum(), query.getPageSize()), wq);
-        List<${className}VO> voList = page.getRecords().stream().map(entity -> {
-            ${className}VO vo = new ${className}VO();
-            BeanUtil.copyProperties(entity, vo);
-            return vo;
-        }).toList();
-<#if hasFk>
-        fillFkLabels(voList);
-</#if>
-        return new PageResult<>(voList, page.getTotal(), query.getPageNum(), query.getPageSize());
+    /** 内存组装树：父挂子两遍扫描；父节点不在结果集（如被过滤）的节点提升为根，防丢数据 */
+    private List<${className}VO> assembleTree(List<${className}VO> voList) {
+        Map<Long, ${className}VO> byId = new LinkedHashMap<>();
+        for (${className}VO vo : voList) {
+            byId.put(vo.get${treeCodeField?cap_first}(), vo);
+        }
+        List<${className}VO> roots = new ArrayList<>();
+        for (${className}VO vo : voList) {
+            Long parentId = vo.get${treeParentField?cap_first}();
+            ${className}VO parent = parentId == null ? null : byId.get(parentId);
+            if (parent == null || parentId == 0L || ROOT_PARENT_ID.equals(parentId)) {
+                roots.add(vo);
+            } else {
+                if (parent.getChildren() == null) {
+                    parent.setChildren(new ArrayList<>());
+                }
+                parent.getChildren().add(vo);
+            }
+        }
+        return roots;
     }
 
     @Override
     public ${className}VO selectById(Long id) {
         ${className} entity = ${classVarName}Mapper.selectById(id);
         if (entity == null) {
-            throw new RuntimeException("${tableComment}不存在");
+            throw new ServiceException("${tableComment}不存在");
         }
-        ${className}VO vo = new ${className}VO();
-        BeanUtil.copyProperties(entity, vo);
+        ${className}VO vo = toVo(entity);
 <#if hasFk>
         fillFkLabels(List.of(vo));
 </#if>
@@ -94,6 +137,7 @@ public class ${className}ServiceImpl implements ${className}Service {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void create(${className}CreateRequest request) {
+        checkParentExists(request.get${treeParentField?cap_first}());
         ${className} entity = new ${className}();
         BeanUtil.copyProperties(request, entity);
         entity.setId(null);
@@ -105,8 +149,14 @@ public class ${className}ServiceImpl implements ${className}Service {
     public void update(${className}UpdateRequest request) {
         ${className} entity = ${classVarName}Mapper.selectById(request.getId());
         if (entity == null) {
-            throw new RuntimeException("${tableComment}不存在");
+            throw new ServiceException("${tableComment}不存在");
         }
+        // 防环底线：父节点不得为自身（后代检测在千行内由前端禁选自身+此校验兜底）
+        if (request.get${treeParentField?cap_first}() != null
+                && request.get${treeParentField?cap_first}().equals(request.getId())) {
+            throw new ServiceException("父节点不能是自身");
+        }
+        checkParentExists(request.get${treeParentField?cap_first}());
         BeanUtil.copyProperties(request, entity);
         ${classVarName}Mapper.updateById(entity);
     }
@@ -114,7 +164,29 @@ public class ${className}ServiceImpl implements ${className}Service {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(List<Long> ids) {
+        // 有子节点禁删（对齐部门管理先例）
+        Long children = ${classVarName}Mapper.selectCount(
+                Wrappers.<${className}>lambdaQuery().in(${className}::get${treeParentField?cap_first}, ids));
+        if (children != null && children > 0) {
+            throw new ServiceException("存在子节点，不允许删除");
+        }
         ${classVarName}Mapper.deleteBatchIds(ids);
+    }
+
+    /** 父节点存在性校验（0/null=根，放行） */
+    private void checkParentExists(Long parentId) {
+        if (parentId == null || ROOT_PARENT_ID.equals(parentId)) {
+            return;
+        }
+        if (${classVarName}Mapper.selectById(parentId) == null) {
+            throw new ServiceException("父节点不存在");
+        }
+    }
+
+    private ${className}VO toVo(${className} entity) {
+        ${className}VO vo = new ${className}VO();
+        BeanUtil.copyProperties(entity, vo);
+        return vo;
     }
 <#if hasFk>
 

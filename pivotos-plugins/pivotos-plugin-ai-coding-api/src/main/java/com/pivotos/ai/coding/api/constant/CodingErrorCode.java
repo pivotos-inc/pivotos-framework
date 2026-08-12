@@ -44,6 +44,9 @@ public enum CodingErrorCode implements ErrorCode {
     /** 装配补丁失败 */
     CODING_ASSEMBLY_FAILED(7010, "装配补丁失败（pom/扫描登记），请检查工程文件"),
 
+    /** 多表意图关系不闭合/标识符非法（S52 / 2.4-F5） */
+    CODING_RELATION_INVALID(7011, "多表结构校验未通过（关系不闭合或命名非法），请调整业务描述"),
+
     ;
 
     private final int code;

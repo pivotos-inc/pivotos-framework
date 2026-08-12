@@ -86,6 +86,11 @@ public class GeneratorFacadeImpl implements IGeneratorFacade {
             column.setIsQuery(Integer.valueOf(col.getOrDefault("isQuery", 0).toString()));
             column.setQueryType((String) col.getOrDefault("queryType", "EQ"));
             column.setHtmlType((String) col.getOrDefault("htmlType", "input"));
+            column.setDictType((String) col.get("dictType"));
+            // S50（2.4-F1）：fk 关联下拉配置透传（AI 多表意图预留，F5 启用）
+            column.setFkTable((String) col.get("fkTable"));
+            column.setFkValueColumn((String) col.get("fkValueColumn"));
+            column.setFkLabelColumn((String) col.get("fkLabelColumn"));
             column.setSort(sort++);
             genTableColumnMapper.insert(column);
         }
@@ -113,6 +118,38 @@ public class GeneratorFacadeImpl implements IGeneratorFacade {
     @Override
     public Map<String, String> previewPluginSkeleton(Map<String, Object> params) {
         return generatorService.previewPluginSkeleton(params);
+    }
+
+    @Override
+    public void configureSubTable(String mainTableName, String subTableName, String subFkName) {
+        GenTable main = genTableMapper.selectOne(
+                new LambdaQueryWrapper<GenTable>().eq(GenTable::getTableName, mainTableName));
+        if (main == null) {
+            throw new ServiceException(GeneratorErrorCode.GEN_TABLE_NOT_FOUND);
+        }
+        // 强制覆盖：importTable 幂等可能返回旧记录，主子配置必须刷新（S52 / 2.4-F5）
+        main.setTplCategory("sub");
+        main.setSubTableName(subTableName);
+        main.setSubTableFkName(subFkName);
+        genTableMapper.updateById(main);
+        log.info("[Generator] 主子配置已写入: main={}, sub={}, fk={}", mainTableName, subTableName, subFkName);
+    }
+
+    @Override
+    public void configureTreeTable(String tableName, String treeCode, String treeParentCode, String treeName) {
+        GenTable table = genTableMapper.selectOne(
+                new LambdaQueryWrapper<GenTable>().eq(GenTable::getTableName, tableName));
+        if (table == null) {
+            throw new ServiceException(GeneratorErrorCode.GEN_TABLE_NOT_FOUND);
+        }
+        // 强制覆盖：importTable 幂等可能返回旧记录，树配置必须刷新（S54 / tree intent）
+        table.setTplCategory("tree");
+        table.setTreeCode(treeCode);
+        table.setTreeParentCode(treeParentCode);
+        table.setTreeName(treeName);
+        genTableMapper.updateById(table);
+        log.info("[Generator] 树配置已写入: table={}, treeCode={}, treeParentCode={}, treeName={}",
+                tableName, treeCode, treeParentCode, treeName);
     }
 
     private static String toClassName(String businessName) {

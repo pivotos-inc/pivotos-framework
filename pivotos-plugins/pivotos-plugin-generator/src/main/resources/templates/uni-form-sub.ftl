@@ -1,6 +1,7 @@
 <#-- =====================================================
- uni-app 表单页模板（新增 / 编辑）
+ uni-app 表单页模板（主子表版，S51 / 2.4-F3）
  输出: pivotos-app/src/pages-gen/{moduleName}/{businessName}/form.vue
+ 主字段区 + ${subFunctionName}明细卡片区（全量替换语义）
 ===================================================== -->
 <#function tsType javaType>
   <#if javaType == "String"><#return "string">
@@ -16,7 +17,7 @@
 <script setup lang="ts">
 import { onLoad } from '@dcloudio/uni-app';
 import { ref, reactive, computed } from 'vue';
-import { create${className}, update${className}, get${className}<#if hasFk>, get${className}FkOptions, type ${className}FkOption</#if>, type ${className}SaveRequest } from '@/api/${moduleName}/${businessName}';
+import { create${className}, update${className}, get${className}<#if hasFk>, get${className}FkOptions, type ${className}FkOption</#if>, type ${className}SaveRequest, type ${subClassName}Item } from '@/api/${moduleName}/${businessName}';
 
 // ========== 表单数据 ==========
 const form = reactive<${className}SaveRequest>({
@@ -24,6 +25,17 @@ const form = reactive<${className}SaveRequest>({
   ${col.javaField}: ${tsDefault(col.javaType)},
 </#list>
 });
+
+// ========== ${subFunctionName}明细（S51 / 2.4-F3） ==========
+const items = ref<${subClassName}Item[]>([]);
+
+function addItem() {
+  items.value.push({});
+}
+
+function removeItem(index: number) {
+  items.value.splice(index, 1);
+}
 <#if hasFk>
 
 // ========== fk 关联下拉选项（S50 / 2.4-F2） ==========
@@ -62,6 +74,12 @@ async function loadDetail(id: number) {
   try {
     const detail = await get${className}(id);
     Object.assign(form, detail);
+    // 明细全量替换语义：仅取可编辑字段回显（VO 中的 id/审计列不带回保存请求）
+    items.value = (detail.items ?? []).map((i) => ({
+<#list subInsertColumns as col>
+      ${col.javaField}: i.${col.javaField},
+</#list>
+    }));
   } catch {
     uni.showToast({ title: '加载失败', icon: 'none' });
   } finally {
@@ -82,6 +100,7 @@ async function onSubmit() {
 
   loading.value = true;
   try {
+    form.items = items.value;
     if (isEdit.value) {
       form.id = pageId.value;
       await update${className}(form);
@@ -139,6 +158,30 @@ async function onSubmit() {
       </#list>
       </wd-cell-group>
 
+      <!-- ${subFunctionName}明细 -->
+      <view class="sub-section">
+        <view class="sub-header">
+          <text class="sub-title">${subFunctionName}明细</text>
+          <wd-button size="small" type="primary" plain @click="addItem">添加明细</wd-button>
+        </view>
+        <wd-cell-group v-for="(item, idx) in items" :key="idx" class="sub-card">
+          <view class="sub-card-bar">
+            <text class="sub-card-title">明细 {{ idx + 1 }}</text>
+            <text class="sub-card-del" @click="removeItem(idx)">删除</text>
+          </view>
+        <#list subInsertColumns as col>
+          <wd-input
+            v-model="item.${col.javaField}"
+            label="${col.columnComment}"
+            placeholder="请输入${col.columnComment}"
+            <#if col.javaType == "Integer" || col.javaType == "Long" || col.javaType == "BigDecimal" || col.javaType == "Float" || col.javaType == "Double">type="number"
+            </#if>clearable
+          />
+        </#list>
+        </wd-cell-group>
+        <view v-if="items.length === 0" class="sub-empty">暂无明细，点击「添加明细」新增一行</view>
+      </view>
+
       <view class="submit-btn">
         <wd-button type="primary" block :loading="loading" @click="onSubmit">
           {{ isEdit ? '保存修改' : '立即创建' }}
@@ -156,6 +199,50 @@ async function onSubmit() {
 
 .form-container {
   padding: 24rpx;
+}
+
+.sub-section {
+  margin-top: 24rpx;
+}
+
+.sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8rpx 16rpx 16rpx;
+}
+
+.sub-title {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.sub-card {
+  margin-bottom: 16rpx;
+}
+
+.sub-card-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16rpx 24rpx 0;
+}
+
+.sub-card-title {
+  font-size: 26rpx;
+  color: #666;
+}
+
+.sub-card-del {
+  font-size: 26rpx;
+  color: #f56c6c;
+}
+
+.sub-empty {
+  padding: 32rpx 0;
+  text-align: center;
+  font-size: 26rpx;
+  color: #999;
 }
 
 .submit-btn {

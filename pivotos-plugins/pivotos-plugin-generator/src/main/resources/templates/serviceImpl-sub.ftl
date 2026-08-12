@@ -4,13 +4,18 @@ import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.toolkit.Db;
 import com.pivotos.common.core.page.PageResult;
 import ${packageName}.domain.entity.${className};
+import ${packageName}.domain.entity.${subClassName};
 import ${packageName}.domain.dto.${className}CreateRequest;
 import ${packageName}.domain.dto.${className}UpdateRequest;
 import ${packageName}.domain.dto.${className}QueryRequest;
+import ${packageName}.domain.dto.${subClassName}ItemRequest;
 import ${packageName}.domain.vo.${className}VO;
+import ${packageName}.domain.vo.${subClassName}VO;
 import ${packageName}.mapper.${className}Mapper;
+import ${packageName}.mapper.${subClassName}Mapper;
 import ${packageName}.service.${className}Service;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -20,8 +25,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-<#if hasFk>
 import java.util.ArrayList;
+<#if hasFk>
 import java.util.HashMap;
 </#if>
 import java.util.List;
@@ -31,7 +36,10 @@ import java.util.Objects;
 </#if>
 
 /**
- * ${functionName} - 服务实现
+ * ${functionName} - 服务实现（主子表，S51 / 2.4-F3）
+ *
+ * <p>主子事务边界：主表写入与子表增删同事务，任一失败整体回滚；
+ * 子表更新语义为「全量替换」（按主表 id 删旧插新），子表批量写入走 Db.saveBatch（禁循环单插）。
  *
  * @author ${author}
  * @date ${datetime}
@@ -42,6 +50,9 @@ public class ${className}ServiceImpl implements ${className}Service {
 
     @Resource
     private ${className}Mapper ${classVarName}Mapper;
+
+    @Resource
+    private ${subClassName}Mapper ${subClassVarName}Mapper;
 <#if hasFk>
 
     /** fk 显示值翻译 / 下拉选项查询（S50 / 2.4-F2；架构测试未禁 JdbcTemplate，A5 仅禁 mapper XML） */
@@ -88,6 +99,15 @@ public class ${className}ServiceImpl implements ${className}Service {
 <#if hasFk>
         fillFkLabels(List.of(vo));
 </#if>
+        // 子表明细
+        List<${subClassName}> subList = ${subClassVarName}Mapper.selectList(Wrappers.<${subClassName}>lambdaQuery()
+                .eq(${subClassName}::get${subFkField?cap_first}, id)
+                .orderByAsc(${subClassName}::getId));
+        vo.setItems(subList.stream().map(sub -> {
+            ${subClassName}VO subVO = new ${subClassName}VO();
+            BeanUtil.copyProperties(sub, subVO);
+            return subVO;
+        }).toList());
         return vo;
     }
 
@@ -98,6 +118,7 @@ public class ${className}ServiceImpl implements ${className}Service {
         BeanUtil.copyProperties(request, entity);
         entity.setId(null);
         ${classVarName}Mapper.insert(entity);
+        saveItems(entity.getId(), request.getItems());
     }
 
     @Override
@@ -109,12 +130,34 @@ public class ${className}ServiceImpl implements ${className}Service {
         }
         BeanUtil.copyProperties(request, entity);
         ${classVarName}Mapper.updateById(entity);
+        // 子表全量替换：删旧插新（同事务，失败整体回滚）
+        ${subClassVarName}Mapper.delete(Wrappers.<${subClassName}>lambdaQuery()
+                .eq(${subClassName}::get${subFkField?cap_first}, request.getId()));
+        saveItems(request.getId(), request.getItems());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(List<Long> ids) {
         ${classVarName}Mapper.deleteBatchIds(ids);
+        ${subClassVarName}Mapper.delete(Wrappers.<${subClassName}>lambdaQuery()
+                .in(${subClassName}::get${subFkField?cap_first}, ids));
+    }
+
+    /** 子项批量落库：fk 回写主表 id + 批量插入（禁循环单插） */
+    private void saveItems(Long mainId, List<${subClassName}ItemRequest> items) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        List<${subClassName}> entities = new ArrayList<>(items.size());
+        for (${subClassName}ItemRequest item : items) {
+            ${subClassName} sub = new ${subClassName}();
+            BeanUtil.copyProperties(item, sub);
+            sub.setId(null);
+            sub.set${subFkField?cap_first}(mainId);
+            entities.add(sub);
+        }
+        Db.saveBatch(entities);
     }
 <#if hasFk>
 

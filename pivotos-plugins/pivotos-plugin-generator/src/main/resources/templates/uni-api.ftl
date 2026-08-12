@@ -23,9 +23,36 @@ export interface ${className}VO {
 <#list listColumns as col>
   /** ${col.columnComment} */
   ${col.javaField}: ${tsType(col.javaType)};
+<#if col.fkTable?? && col.fkTable?has_content>
+  /** ${col.columnComment}（关联显示） */
+  ${col.javaField}Label?: string;
+</#if>
 </#list>
   createTime?: string;
+<#if hasSub>
+  /** ${subFunctionName}明细（详情返回，S51 / 2.4-F3） */
+  items?: ${subClassName}VO[];
+</#if>
 }
+<#if hasSub>
+
+/** ${subFunctionName} VO（子表） */
+export interface ${subClassName}VO {
+  id: number;
+<#list subVoColumns as col>
+  /** ${col.columnComment} */
+  ${col.javaField}?: ${tsType(col.javaType)};
+</#list>
+}
+
+/** ${subFunctionName}子项（保存请求明细行） */
+export interface ${subClassName}Item {
+<#list subInsertColumns as col>
+  /** ${col.columnComment} */
+  ${col.javaField}?: ${tsType(col.javaType)};
+</#list>
+}
+</#if>
 
 /** ${functionName} 保存请求 */
 export interface ${className}SaveRequest {
@@ -34,6 +61,10 @@ export interface ${className}SaveRequest {
   /** ${col.columnComment} */
   ${col.javaField}?: ${tsType(col.javaType)};
 </#list>
+<#if hasSub>
+  /** ${subFunctionName}明细（全量替换语义） */
+  items?: ${subClassName}Item[];
+</#if>
 }
 
 /** ${functionName} 查询参数 */
@@ -70,3 +101,16 @@ export function update${className}(body: ${className}SaveRequest): Promise<unkno
 export function delete${className}(id: number): Promise<unknown> {
   return del<unknown>('/app/${moduleName}/${businessName}/' + id);
 }
+<#if hasFk>
+
+/** fk 下拉选项 */
+export interface ${className}FkOption {
+  label: string;
+  value: string | number;
+}
+
+/** 查询${functionName}关联下拉选项（S50 / 2.4-F2） */
+export function get${className}FkOptions(field: string): Promise<${className}FkOption[]> {
+  return get<${className}FkOption[]>('/app/${moduleName}/${businessName}/fk-options/' + field);
+}
+</#if>

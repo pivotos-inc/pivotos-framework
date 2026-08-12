@@ -53,4 +53,20 @@ public interface CodingService {
      * @return coding session with skeleton files
      */
     CodingSessionVO parseAndGeneratePlugin(String description);
+
+    /**
+     * Parse natural language and generate master-detail (主子表) code (S52 / 2.4-F5).
+     *
+     * @param description master-detail business description
+     * @return coding session with generated files
+     */
+    CodingSessionVO parseAndGenerateSub(String description);
+
+    /**
+     * Parse natural language and generate tree table code (S54 / tree intent).
+     *
+     * @param description tree/hierarchical business description
+     * @return coding session with generated files
+     */
+    CodingSessionVO parseAndGenerateTree(String description);
 }
