@@ -40,6 +40,16 @@ sa-token:
   is-print: false
   is-log: false
 
+# WarmFlow 工作流引擎（S55 2.5-F1 引擎底座）
+warm-flow:
+  enabled: true
+  ui: true              # 开启内置设计器 UI（/warm-flow-ui/**）
+  banner: false
+  token-name: Authorization   # 复用 Sa-Token 同一 header
+  logic_delete: true          # WarmFlow 自带逻辑删除（del_flag）
+  logic_delete_value: 2
+  logic_not_delete_value: 0
+
 mybatis-plus:
   global-config:
     banner: false

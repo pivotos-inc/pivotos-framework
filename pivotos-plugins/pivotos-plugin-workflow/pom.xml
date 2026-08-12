@@ -44,6 +44,11 @@
             <groupId>org.dromara.warm</groupId>
             <artifactId>warm-flow-mybatis-plus-sb4-starter</artifactId>
         </dependency>
+        <!-- WarmFlow 内置设计器 UI（/warm-flow-ui/** 静态资源 + /warm-flow/** API） -->
+        <dependency>
+            <groupId>org.dromara.warm</groupId>
+            <artifactId>warm-flow-plugin-ui-sb-web</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.projectlombok</groupId>

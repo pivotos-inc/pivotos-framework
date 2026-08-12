@@ -300,6 +300,12 @@
                 <artifactId>warm-flow-mybatis-plus-sb4-starter</artifactId>
                 <version>${warm-flow.version}</version>
             </dependency>
+            <!-- WarmFlow 内置设计器 UI（jar 包静态资源，/warm-flow-ui/** 自动挂载） -->
+            <dependency>
+                <groupId>org.dromara.warm</groupId>
+                <artifactId>warm-flow-plugin-ui-sb-web</artifactId>
+                <version>${warm-flow.version}</version>
+            </dependency>
 
             <!-- ========== 本项目内部模块（随会话推进逐个取消注释） ========== -->
             <dependency>
