@@ -38,6 +38,11 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-auth</artifactId>
         </dependency>
+        <!-- 消息插件契约（审批通知集成，S57 B6） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-message-api</artifactId>
+        </dependency>
 
         <!-- WarmFlow 工作流引擎（SB4 + MyBatis-Plus 版本） -->
         <dependency>
