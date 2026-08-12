@@ -68,6 +68,9 @@
         <!-- ==================== 模板引擎（代码生成器） ==================== -->
         <freemarker.version>2.3.34</freemarker.version>
 
+        <!-- ==================== 工作流引擎（WarmFlow：Dromara 社区，轻量国产，BPMN 2.0 子集） ==================== -->
+        <warm-flow.version>1.8.7</warm-flow.version>
+
         <!-- ==================== 测试 ==================== -->
         <testcontainers.version>2.0.5</testcontainers.version>
         <archunit.version>1.4.2</archunit.version>
@@ -291,6 +294,13 @@
                 <scope>test</scope>
             </dependency>
 
+            <!-- ========== WarmFlow 工作流引擎（SB4 + MyBatis-Plus 版本） ========== -->
+            <dependency>
+                <groupId>org.dromara.warm</groupId>
+                <artifactId>warm-flow-mybatis-plus-sb4-starter</artifactId>
+                <version>${warm-flow.version}</version>
+            </dependency>
+
             <!-- ========== 本项目内部模块（随会话推进逐个取消注释） ========== -->
             <dependency>
                 <groupId>com.pivotos</groupId>
@@ -415,6 +425,16 @@
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-plugin-monitor</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-workflow-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-workflow</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

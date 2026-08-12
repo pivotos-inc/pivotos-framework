@@ -86,6 +86,11 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-monitor</artifactId>
         </dependency>
+        <!-- workflow 插件（S55 2.5-F1：WarmFlow 工作流引擎底座） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-workflow</artifactId>
+        </dependency>
 
         <!-- ===== API 文档 ===== -->
         <dependency>
