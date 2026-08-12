@@ -5,6 +5,7 @@ import com.alibaba.excel.ExcelWriter;
 import com.alibaba.excel.context.AnalysisContext;
 import com.alibaba.excel.event.AnalysisEventListener;
 import com.alibaba.excel.write.metadata.WriteSheet;
+import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.starter.excel.annotation.DictExcelProperty;
 import com.pivotos.starter.excel.config.ExcelProperties;
 import com.pivotos.starter.excel.function.BatchSaveFunction;
@@ -284,7 +285,7 @@ public final class ExcelHelper {
             if (totalRows > properties.getImportMaxRows()) {
                 errors.add(new ExcelImportResult.ImportError(
                         totalRows, "超过最大行数限制（" + properties.getImportMaxRows() + "行）"));
-                throw new RuntimeException("导入终止：超过最大行数");
+                throw new ServiceException("导入终止：超过最大行数");
             }
             batch.add(data);
             if (batch.size() >= properties.getImportBatchSize()) {

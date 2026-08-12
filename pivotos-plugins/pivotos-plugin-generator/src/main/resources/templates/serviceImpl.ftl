@@ -4,6 +4,7 @@ import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.page.PageResult;
 import ${packageName}.domain.entity.${className};
 import ${packageName}.domain.dto.${className}CreateRequest;
@@ -81,7 +82,7 @@ public class ${className}ServiceImpl implements ${className}Service {
     public ${className}VO selectById(Long id) {
         ${className} entity = ${classVarName}Mapper.selectById(id);
         if (entity == null) {
-            throw new RuntimeException("${tableComment}不存在");
+            throw new ServiceException("${tableComment}不存在");
         }
         ${className}VO vo = new ${className}VO();
         BeanUtil.copyProperties(entity, vo);
@@ -105,7 +106,7 @@ public class ${className}ServiceImpl implements ${className}Service {
     public void update(${className}UpdateRequest request) {
         ${className} entity = ${classVarName}Mapper.selectById(request.getId());
         if (entity == null) {
-            throw new RuntimeException("${tableComment}不存在");
+            throw new ServiceException("${tableComment}不存在");
         }
         BeanUtil.copyProperties(request, entity);
         ${classVarName}Mapper.updateById(entity);
