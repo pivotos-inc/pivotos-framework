@@ -99,6 +99,39 @@ public class IntentParseService {
              "sub":{"tableName":"...","businessName":"...","tableComment":"...","columns":[...]},
              "relation":{"subFkName":"..."}}
             """;
+    
+    /** 树表意图（S54 / tree intent）：LLM 输出单表 + 树三字段；树字段存在性由 TreeIntentValidator 确定性校验 */
+    private static final String TREE_SYSTEM_PROMPT = """
+            You are a database designer. Given a business description of a TREE/HIERARCHICAL feature
+            (e.g. department hierarchy, product category, administrative region), output a single-table
+            schema with tree configuration in JSON.
+            Rules:
+            1. moduleName: business domain (system/business/cms/etc.), lowercase
+            2. functionName: Chinese feature name (max 10 chars)
+            3. tableName: snake_case with domain prefix (e.g. biz_category)
+            4. businessName: camelCase of core entity (e.g. category)
+            5. tableComment: brief description
+            6. treeCode: the column name used as the unique tree node code (e.g. category_code);
+               it MUST also appear in columns
+            7. treeParentCode: the column name for parent reference (e.g. parent_id);
+               it MUST also appear in columns; root nodes have parent_id = 0
+            8. treeName: the column name displayed as the tree node label (e.g. category_name);
+               it MUST also appear in columns
+            9. columns: array of {columnName, columnType(MySQL), columnComment,
+               javaType(String/Integer/Long/BigDecimal/LocalDateTime/Boolean),
+               javaField(camelCase), isPk(0|1), isRequired(0|1),
+               isQuery(0|1), queryType(EQ|LIKE), htmlType(input|textarea|datetime|switch),
+               isList(0|1), isInsert(0|1), isEdit(0|1)}
+            10. Do NOT include id/createBy/createTime/updateBy/updateTime/deleted in columns
+                (auto-generated). The parent_id column (treeParentCode) MUST be listed in columns.
+            11. Optional: a column may carry fkTable/fkValueColumn/fkLabelColumn when it references
+                an existing platform table for dropdown binding
+            12. isList/isInsert/isEdit default to 1; set 0 for fields that should be hidden
+            Output ONLY JSON, no markdown:
+            {"moduleName":"...","functionName":"...","tableName":"...","businessName":"...","tableComment":"...",
+             "treeCode":"...","treeParentCode":"...","treeName":"...",
+             "columns":[...]}
+            """;
 
     public IntentParseService(ObjectMapper objectMapper, AiClientRegistry registry,
                               AiProviderMapper providerMapper, AiApiKeyMapper keyMapper) {
@@ -123,6 +156,12 @@ public class IntentParseService {
     public Map<String, Object> parseSubIntent(String description) {
         log.info("[AI Coding] Sub intent parse: description={}", description);
         return callLlm(SUB_SYSTEM_PROMPT, "Master-detail business description: " + description + "\n\nOutput JSON schema:");
+    }
+
+    /** 树表意图解析（S54 / tree intent）：返回单表+树三字段，存在性由 TreeIntentValidator 校验 */
+    public Map<String, Object> parseTreeIntent(String description) {
+        log.info("[AI Coding] Tree intent parse: description={}", description);
+        return callLlm(TREE_SYSTEM_PROMPT, "Tree/hierarchical business description: " + description + "\n\nOutput JSON schema:");
     }
 
     /** 共用：取首个启用供应商 + 首个启用 Key → LLM 调用 → JSON 解析 */

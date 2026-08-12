@@ -67,6 +67,15 @@ public class CodingController {
     }
 
     /**
+     * Parse natural language and generate tree table code (S54 / tree intent).
+     */
+    @PostMapping("/tree/parse")
+    @SaCheckPermission(value = "ai:coding:parse", type = StpSysUtil.TYPE)
+    public R<CodingSessionVO> parseTree(@RequestBody CodingRequest request) {
+        return R.ok(codingService.parseAndGenerateTree(request.getDescription()));
+    }
+
+    /**
      * Page query coding sessions (list view, without generated files).
      */
     @GetMapping("/session/page")

@@ -61,4 +61,12 @@ public interface CodingService {
      * @return coding session with generated files
      */
     CodingSessionVO parseAndGenerateSub(String description);
+
+    /**
+     * Parse natural language and generate tree table code (S54 / tree intent).
+     *
+     * @param description tree/hierarchical business description
+     * @return coding session with generated files
+     */
+    CodingSessionVO parseAndGenerateTree(String description);
 }

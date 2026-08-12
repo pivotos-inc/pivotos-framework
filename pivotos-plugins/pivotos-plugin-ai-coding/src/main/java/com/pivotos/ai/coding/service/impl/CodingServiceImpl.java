@@ -14,6 +14,7 @@ import com.pivotos.ai.coding.service.CrudApplyService;
 import com.pivotos.ai.coding.service.ErrorCodeSegmentAllocator;
 import com.pivotos.ai.coding.service.IntentParseService;
 import com.pivotos.ai.coding.service.SubIntentValidator;
+import com.pivotos.ai.coding.service.TreeIntentValidator;
 import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.generator.service.IGeneratorFacade;
@@ -52,12 +53,15 @@ public class CodingServiceImpl implements CodingService {
     private final AssemblyPatcher assemblyPatcher;
     private final CrudApplyService crudApplyService;
     private final SubIntentValidator subIntentValidator;
+    private final TreeIntentValidator treeIntentValidator;
 
     /** 骨架任务类型 */
     private static final int TASK_TYPE_CRUD = 1;
     private static final int TASK_TYPE_PLUGIN = 2;
     /** 主子表任务类型（S52 / 2.4-F5） */
     private static final int TASK_TYPE_SUB = 3;
+    /** 树表任务类型（S54 / tree intent） */
+    private static final int TASK_TYPE_TREE = 4;
 
     /** 保留插件名（与既有模块/组件冲突） */
     private static final java.util.Set<String> RESERVED_PLUGIN_NAMES = java.util.Set.of(
@@ -74,7 +78,8 @@ public class CodingServiceImpl implements CodingService {
                              ArtifactLinter artifactLinter,
                              AssemblyPatcher assemblyPatcher,
                              CrudApplyService crudApplyService,
-                             SubIntentValidator subIntentValidator) {
+                             SubIntentValidator subIntentValidator,
+                             TreeIntentValidator treeIntentValidator) {
         this.intentParseService = intentParseService;
         this.generatorFacade = generatorFacade;
         this.sessionMapper = sessionMapper;
@@ -84,6 +89,7 @@ public class CodingServiceImpl implements CodingService {
         this.assemblyPatcher = assemblyPatcher;
         this.crudApplyService = crudApplyService;
         this.subIntentValidator = subIntentValidator;
+        this.treeIntentValidator = treeIntentValidator;
     }
 
     @Override
@@ -242,6 +248,92 @@ public class CodingServiceImpl implements CodingService {
             session.setExtraJson(objectMapper.writeValueAsString(extra));
         } catch (Exception e) {
             log.error("[AI Coding] Serialize sub session failed", e);
+            throw new ServiceException(CODING_GENERATE_FAILED);
+        }
+        sessionMapper.insert(session);
+
+        return toVO(session, generatedFiles);
+    }
+
+    // ==================== 树表（S54 / tree intent） ====================
+
+    @Override
+    @Transactional
+    @SuppressWarnings("unchecked")
+    public CodingSessionVO parseAndGenerateTree(String description) {
+        if (description == null || description.isBlank()) {
+            throw new ServiceException(CODING_DESC_EMPTY);
+        }
+
+        // Step 1: LLM 树表意图解析
+        Map<String, Object> intent;
+        try {
+            intent = intentParseService.parseTreeIntent(description);
+        } catch (Exception e) {
+            log.error("[AI Coding] Tree intent parse failed: description={}", description, e);
+            throw new ServiceException(CODING_INTENT_PARSE_FAILED);
+        }
+
+        // Step 2: 确定性校验（不信 LLM：标识符/树字段存在性/互异/审计列/fk 降级，7011 拦截）
+        treeIntentValidator.validate(intent);
+
+        String moduleName = (String) intent.get("moduleName");
+        String functionName = (String) intent.get("functionName");
+        String tableName = (String) intent.get("tableName");
+        String businessName = (String) intent.get("businessName");
+        String tableComment = (String) intent.get("tableComment");
+        String treeCode = (String) intent.get("treeCode");
+        String treeParentCode = (String) intent.get("treeParentCode");
+        String treeName = (String) intent.get("treeName");
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) intent.get("columns");
+        log.info("[AI Coding] Tree parsed: table={}, treeCode={}, treeParentCode={}, treeName={}",
+                tableName, treeCode, treeParentCode, treeName);
+
+        // Step 3: 导入表并配置树模板
+        Long tableId;
+        try {
+            tableId = generatorFacade.importTable(tableName, moduleName, functionName,
+                    businessName, tableComment, columns);
+            generatorFacade.configureTreeTable(tableName, treeCode, treeParentCode, treeName);
+        } catch (Exception e) {
+            log.error("[AI Coding] Tree table import failed: table={}", tableName, e);
+            throw new ServiceException(CODING_GENERATE_FAILED);
+        }
+
+        // Step 4: 树表全套产物预览（S53 模板族：serviceImpl-tree / pc-page-tree / vo / controller / flyway / pc-api）
+        Map<String, String> generatedFiles;
+        try {
+            generatedFiles = generatorFacade.previewCode(tableId);
+        } catch (Exception e) {
+            log.error("[AI Coding] Tree code generation failed: tableId={}", tableId, e);
+            throw new ServiceException(CODING_GENERATE_FAILED);
+        }
+
+        // Step 5: 红线 lint（报告随会话留存，apply 时 CrudApplyService 强校验）
+        List<String> violations = artifactLinter.lint(generatedFiles);
+        if (!violations.isEmpty()) {
+            log.warn("[AI Coding] Tree artifacts lint violations: {}", violations);
+        }
+
+        // Step 6: 暂存会话（taskType=4, extraJson 存树三字段+lintReport）
+        CodingSession session = new CodingSession();
+        session.setDescription(description);
+        session.setModuleName(moduleName);
+        session.setTableName(tableName);
+        session.setFunctionName(functionName);
+        session.setBusinessName(businessName);
+        session.setStatus(1);
+        session.setTaskType(TASK_TYPE_TREE);
+        try {
+            session.setGeneratedFilesJson(objectMapper.writeValueAsString(generatedFiles));
+            Map<String, Object> extra = new LinkedHashMap<>();
+            extra.put("treeCode", treeCode);
+            extra.put("treeParentCode", treeParentCode);
+            extra.put("treeName", treeName);
+            extra.put("lintReport", violations);
+            session.setExtraJson(objectMapper.writeValueAsString(extra));
+        } catch (Exception e) {
+            log.error("[AI Coding] Serialize tree session failed", e);
             throw new ServiceException(CODING_GENERATE_FAILED);
         }
         sessionMapper.insert(session);

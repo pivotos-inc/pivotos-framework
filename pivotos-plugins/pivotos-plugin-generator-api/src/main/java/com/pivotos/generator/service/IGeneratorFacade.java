@@ -65,4 +65,15 @@ public interface IGeneratorFacade {
      * @param subFkName     fk column in sub table pointing to main id
      */
     void configureSubTable(String mainTableName, String subTableName, String subFkName);
+
+    /**
+     * Configure tree table on an imported table (S54 / tree intent):
+     * force-overwrite tplCategory=tree + treeCode + treeParentCode + treeName.
+     *
+     * @param tableName      table already imported via {@link #importTable}
+     * @param treeCode       tree code column name (e.g. category_code)
+     * @param treeParentCode tree parent code column name (e.g. parent_id)
+     * @param treeName       tree name column name (e.g. category_name)
+     */
+    void configureTreeTable(String tableName, String treeCode, String treeParentCode, String treeName);
 }

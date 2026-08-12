@@ -135,6 +135,23 @@ public class GeneratorFacadeImpl implements IGeneratorFacade {
         log.info("[Generator] 主子配置已写入: main={}, sub={}, fk={}", mainTableName, subTableName, subFkName);
     }
 
+    @Override
+    public void configureTreeTable(String tableName, String treeCode, String treeParentCode, String treeName) {
+        GenTable table = genTableMapper.selectOne(
+                new LambdaQueryWrapper<GenTable>().eq(GenTable::getTableName, tableName));
+        if (table == null) {
+            throw new ServiceException(GeneratorErrorCode.GEN_TABLE_NOT_FOUND);
+        }
+        // 强制覆盖：importTable 幂等可能返回旧记录，树配置必须刷新（S54 / tree intent）
+        table.setTplCategory("tree");
+        table.setTreeCode(treeCode);
+        table.setTreeParentCode(treeParentCode);
+        table.setTreeName(treeName);
+        genTableMapper.updateById(table);
+        log.info("[Generator] 树配置已写入: table={}, treeCode={}, treeParentCode={}, treeName={}",
+                tableName, treeCode, treeParentCode, treeName);
+    }
+
     private static String toClassName(String businessName) {
         if (businessName == null || businessName.isBlank()) return "Unknown";
         return businessName.substring(0, 1).toUpperCase() + businessName.substring(1);
