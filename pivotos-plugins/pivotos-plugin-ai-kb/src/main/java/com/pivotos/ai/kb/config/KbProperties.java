@@ -13,6 +13,9 @@ public class KbProperties {
     /** 向量存储全局配置 */
     private VectorStore vectorStore = new VectorStore();
 
+    /** OCR 配置 */
+    private Ocr ocr = new Ocr();
+
     @Data
     public static class VectorStore {
 
@@ -31,5 +34,15 @@ public class KbProperties {
 
         /** 快照文件名 */
         private String fileName = "kb-store.json";
+    }
+
+    @Data
+    public static class Ocr {
+        /** 是否启用 OCR（tesseract 未安装时自动降级） */
+        private boolean enabled = true;
+        /** tessdata 目录路径（为 null 使用系统默认） */
+        private String tessdataPath;
+        /** OCR 语言（默认 chi_sim+eng） */
+        private String languages = "chi_sim+eng";
     }
 }

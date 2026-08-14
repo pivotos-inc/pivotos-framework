@@ -1,23 +1,34 @@
 package com.pivotos.ai.kb.service;
 
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.pivotos.ai.kb.domain.entity.AiKbChunk;
 import com.pivotos.ai.kb.domain.entity.KbDocument;
 import com.pivotos.ai.kb.domain.entity.KnowledgeBase;
 import com.pivotos.ai.kb.enums.KbDocStatusEnum;
+import com.pivotos.ai.kb.extractor.OcrExtractor;
+import com.pivotos.ai.kb.extractor.PdfTableExtractor;
+import com.pivotos.ai.kb.mapper.AiKbChunkMapper;
 import com.pivotos.ai.kb.mapper.KbDocumentMapper;
+import com.pivotos.ai.kb.retriever.Bm25Retriever;
+import com.pivotos.ai.kb.retriever.RrfFusion;
+import com.pivotos.ai.kb.splitter.SemanticChunkSplitter;
 import com.pivotos.ai.kb.vectorstore.KbVectorStoreFactory;
 import com.pivotos.file.api.facade.IFileFacade;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
-import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * RAG 管线服务：下载 → Tika 解析 → 分块 → Embedding → VectorStore。
@@ -30,6 +41,11 @@ public class KbPipelineService {
     private final KbVectorStoreFactory vectorStoreFactory;
     private final IFileFacade fileFacade;
     private final KbDocumentMapper documentMapper;
+    private final AiKbChunkMapper chunkMapper;
+    private final Bm25Retriever bm25Retriever;
+    private final RrfFusion rrfFusion;
+    private final PdfTableExtractor pdfTableExtractor;
+    private final OcrExtractor ocrExtractor;
 
     /**
      * 对指定文档执行向量化索引。
@@ -50,9 +66,39 @@ public class KbPipelineService {
                 d.getMetadata().put("file_name", StringUtils.hasText(doc.getFileName()) ? doc.getFileName() : "");
             });
 
-            TokenTextSplitter splitter = TokenTextSplitter.builder()
-                    .withChunkSize(doc.getChunkSize() != null && doc.getChunkSize() > 0 ? doc.getChunkSize() : 500)
-                    .build();
+            // 多模态解析增强：PDF 表格提取 + OCR
+            String fileName = StringUtils.hasText(doc.getFileName()) ? doc.getFileName() : doc.getFileUrl();
+            String fileType = determineFileType(fileName);
+            StringBuilder additionalText = new StringBuilder();
+
+            if ("pdf".equals(fileType)) {
+                String tables = pdfTableExtractor.extractTables(downloadUrl);
+                if (StringUtils.hasText(tables)) {
+                    additionalText.append(tables);
+                }
+            }
+
+            if (ocrExtractor.isAvailable()) {
+                String ocrText = ocrExtractor.extractText(downloadUrl, fileType);
+                if (StringUtils.hasText(ocrText)) {
+                    additionalText.append(ocrText);
+                }
+            }
+
+            if (StringUtils.hasText(additionalText.toString())) {
+                Map<String, Object> extraMeta = new HashMap<>();
+                extraMeta.put("kb_id", kb.getId().toString());
+                extraMeta.put("doc_id", doc.getId().toString());
+                extraMeta.put("file_name", fileName);
+                if (!(rawDocuments instanceof ArrayList)) {
+                    rawDocuments = new ArrayList<>(rawDocuments);
+                }
+                rawDocuments.add(new Document(additionalText.toString(), extraMeta));
+            }
+
+            int chunkSize = doc.getChunkSize() != null && doc.getChunkSize() > 0 ? doc.getChunkSize() : 500;
+            int chunkOverlap = doc.getChunkOverlap() != null && doc.getChunkOverlap() > 0 ? doc.getChunkOverlap() : 100;
+            SemanticChunkSplitter splitter = new SemanticChunkSplitter(chunkSize, chunkOverlap);
             List<Document> chunks = splitter.apply(rawDocuments);
 
             VectorStore vectorStore = vectorStoreFactory.get(kb);
@@ -65,6 +111,26 @@ public class KbPipelineService {
                         kb.getId(), doc.getId(), i / batchSize + 1,
                         (chunks.size() + batchSize - 1) / batchSize, batch.size());
             }
+
+            // 同步写入 ai_kb_chunk 表（BM25 检索用）
+            List<AiKbChunk> chunkEntities = new ArrayList<>();
+            for (int i = 0; i < chunks.size(); i++) {
+                String content = chunks.get(i).getText();
+                AiKbChunk chunkEntity = new AiKbChunk();
+                chunkEntity.setKbId(kb.getId());
+                chunkEntity.setDocId(doc.getId());
+                chunkEntity.setChunkIndex(i);
+                chunkEntity.setContent(content);
+                chunkEntity.setContentHash(md5Hex(content.length() > 100 ? content.substring(0, 100) : content));
+                chunkEntity.setTenantId(kb.getTenantId());
+                chunkEntities.add(chunkEntity);
+            }
+            int chunkBatchSize = 200;
+            for (int i = 0; i < chunkEntities.size(); i += chunkBatchSize) {
+                List<AiKbChunk> batch = chunkEntities.subList(i, Math.min(i + chunkBatchSize, chunkEntities.size()));
+                chunkMapper.batchInsert(batch);
+            }
+            log.info("[PivotOS-KB] 文本块写入完成: kbId={}, docId={}, chunks={}", kb.getId(), doc.getId(), chunkEntities.size());
 
             doc.setStatus(KbDocStatusEnum.COMPLETED.getValue());
             doc.setVectorCount(chunks.size());
@@ -97,6 +163,8 @@ public class KbPipelineService {
             log.warn("[PivotOS-KB] 删除知识库向量失败（可能尚不存在）: kbId={}, reason={}",
                     kb.getId(), e.getMessage());
         }
+        chunkMapper.deleteByKbId(kb.getId());
+        log.info("[PivotOS-KB] 已删除知识库文本块: kbId={}", kb.getId());
     }
 
     /**
@@ -114,24 +182,50 @@ public class KbPipelineService {
             log.warn("[PivotOS-KB] 删除文档向量失败（可能尚不存在）: kbId={}, docId={}, reason={}",
                     kb.getId(), doc.getId(), e.getMessage());
         }
+        chunkMapper.deleteByDocId(doc.getId());
+        log.info("[PivotOS-KB] 已删除文档文本块: kbId={}, docId={}", kb.getId(), doc.getId());
     }
 
     /**
-     * 在指定知识库中检索相似文本块。
+     * 在指定知识库中检索相似文本块（混合检索：向量 + BM25 + RRF 融合）。
+     *
+     * <p>hybridSearch=true 时：向量 topK*3 + BM25 topK*3 → RRF 融合 topK。
+     * hybridSearch=false 时：仅向量检索 topK。
      *
      * @param kb    知识库
      * @param query 查询文本
      * @param topK  返回条数
-     * @return 相似文档块
+     * @return 融合排序后的结果列表
      */
-    public List<Document> search(KnowledgeBase kb, String query, int topK) {
+    public List<RrfFusion.FusedResult> search(KnowledgeBase kb, String query, int topK) {
         VectorStore vectorStore = vectorStoreFactory.get(kb);
+        boolean hybrid = !Boolean.FALSE.equals(kb.getHybridSearch());
+
+        if (!hybrid) {
+            // 仅向量检索
+            SearchRequest request = SearchRequest.builder()
+                    .query(query)
+                    .topK(topK)
+                    .filterExpression("kb_id == '" + kb.getId() + "'")
+                    .build();
+            List<Document> vectorResults = vectorStore.similaritySearch(request);
+            return vectorResults.stream()
+                    .map(d -> new RrfFusion.FusedResult(d.getText(), d.getMetadata(), null, 0.0))
+                    .toList();
+        }
+
+        // 混合检索：向量 topK*3 + BM25 topK*3 → RRF 融合 topK
         SearchRequest request = SearchRequest.builder()
                 .query(query)
-                .topK(topK)
+                .topK(topK * 3)
                 .filterExpression("kb_id == '" + kb.getId() + "'")
                 .build();
-        return vectorStore.similaritySearch(request);
+        List<Document> vectorResults = vectorStore.similaritySearch(request);
+        List<Bm25Retriever.Bm25Result> bm25Results = bm25Retriever.search(kb.getId(), query, topK * 3);
+        List<RrfFusion.FusedResult> fused = rrfFusion.fuse(vectorResults, bm25Results, topK);
+        log.info("[PivotOS-KB] 混合检索: kbId={}, vector={}, bm25={}, fused={}",
+                kb.getId(), vectorResults.size(), bm25Results.size(), fused.size());
+        return fused;
     }
 
     private String resolveDownloadUrl(String fileUrl) {
@@ -155,5 +249,29 @@ public class KbPipelineService {
                 .eq(KbDocument::getId, doc.getId())
                 .set(KbDocument::getStatus, status.getValue())
                 .set(KbDocument::getErrorMsg, errorMsg));
+    }
+
+    /** 计算字符串 MD5（用于文本块 content_hash 去重） */
+    private String md5Hex(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return String.valueOf(input.hashCode());
+        }
+    }
+
+    /** 从文件名提取扩展名（小写，无扩展名返回空串） */
+    private String determineFileType(String fileName) {
+        if (fileName == null) {
+            return "";
+        }
+        int dot = fileName.lastIndexOf('.');
+        return dot >= 0 ? fileName.substring(dot + 1).toLowerCase() : "";
     }
 }

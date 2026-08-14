@@ -35,6 +35,9 @@ public class KnowledgeBase extends TenantBaseDO {
     /** 默认分块重叠（字符数） */
     private Integer chunkOverlap;
 
+    /** 混合检索开关（true=向量+BM25+RRF, false=仅向量，默认 true） */
+    private Boolean hybridSearch;
+
     /** 状态：0 正常，1 停用 */
     private Integer status;
 }

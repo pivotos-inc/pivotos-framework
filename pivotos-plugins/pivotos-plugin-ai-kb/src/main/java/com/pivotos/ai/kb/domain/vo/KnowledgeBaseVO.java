@@ -22,6 +22,7 @@ public class KnowledgeBaseVO implements Serializable {
     private String embeddingModel;
     private Integer chunkSize;
     private Integer chunkOverlap;
+    private Boolean hybridSearch;
     private Integer status;
     private Long tenantId;
     private LocalDateTime createTime;
