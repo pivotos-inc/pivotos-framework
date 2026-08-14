@@ -1,10 +1,13 @@
 package com.pivotos.ai.kb.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.pivotos.ai.kb.domain.dto.KbEvalRecordSaveRequest;
 import com.pivotos.ai.kb.domain.dto.KbEvalRunRequest;
 import com.pivotos.ai.kb.domain.dto.KbEvalSaveRequest;
 import com.pivotos.ai.kb.domain.vo.KbEvalCompareVO;
 import com.pivotos.ai.kb.domain.vo.KbEvalQuestionVO;
+import com.pivotos.ai.kb.domain.vo.KbEvalRecordItemVO;
+import com.pivotos.ai.kb.domain.vo.KbEvalRecordVO;
 import com.pivotos.ai.kb.service.KbEvalService;
 import com.pivotos.common.core.result.R;
 import com.pivotos.starter.auth.account.StpSysUtil;
@@ -71,5 +74,34 @@ public class KbEvalController {
     public R<KbEvalCompareVO> run(@Validated @RequestBody KbEvalRunRequest request) {
         return R.ok(kbEvalService.runOne(request.getQuestionId(),
                 request.getTopK() == null ? 5 : request.getTopK()));
+    }
+
+    /** 保存一轮全量跑分记录（聚合指标后端统一计算） */
+    @PostMapping("/record")
+    @SaCheckPermission(value = "ai:kb:edit", type = StpSysUtil.TYPE)
+    public R<Long> saveRecord(@Validated @RequestBody KbEvalRecordSaveRequest request) {
+        return R.ok(kbEvalService.saveRun(request));
+    }
+
+    /** 最近跑分记录列表（最近 20 条） */
+    @GetMapping("/record/list")
+    @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
+    public R<List<KbEvalRecordVO>> listRecords(@RequestParam Long kbId) {
+        return R.ok(kbEvalService.listRecords(kbId));
+    }
+
+    /** 某轮跑分的逐题明细（快照） */
+    @GetMapping("/record/{id}")
+    @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
+    public R<List<KbEvalRecordItemVO>> recordDetail(@PathVariable Long id) {
+        return R.ok(kbEvalService.getRecordDetail(id));
+    }
+
+    /** 删除跑分记录（级联删除明细） */
+    @DeleteMapping("/record/{id}")
+    @SaCheckPermission(value = "ai:kb:edit", type = StpSysUtil.TYPE)
+    public R<Void> deleteRecord(@PathVariable Long id) {
+        kbEvalService.deleteRecord(id);
+        return R.ok();
     }
 }
