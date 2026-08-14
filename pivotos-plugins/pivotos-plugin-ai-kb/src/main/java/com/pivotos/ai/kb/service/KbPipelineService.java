@@ -134,11 +134,13 @@ public class KbPipelineService {
 
             doc.setStatus(KbDocStatusEnum.COMPLETED.getValue());
             doc.setVectorCount(chunks.size());
+            doc.setChunkCount(chunks.size());
             // LambdaUpdateWrapper 显式 set null，绕过 MyBatis-Plus NOT_NULL 策略
             documentMapper.update(null, new LambdaUpdateWrapper<KbDocument>()
                     .eq(KbDocument::getId, doc.getId())
                     .set(KbDocument::getStatus, KbDocStatusEnum.COMPLETED.getValue())
                     .set(KbDocument::getVectorCount, chunks.size())
+                    .set(KbDocument::getChunkCount, chunks.size())
                     .set(KbDocument::getErrorMsg, null));
             log.info("[PivotOS-KB] 文档向量化完成: kbId={}, docId={}, chunks={}", kb.getId(), doc.getId(), chunks.size());
         } catch (Exception e) {

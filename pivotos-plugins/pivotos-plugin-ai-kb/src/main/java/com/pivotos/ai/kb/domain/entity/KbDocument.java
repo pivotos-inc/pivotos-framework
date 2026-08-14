@@ -37,6 +37,9 @@ public class KbDocument extends TenantBaseDO {
     /** 实际分块重叠 */
     private Integer chunkOverlap;
 
+    /** 分块数量（S62 混合检索） */
+    private Integer chunkCount;
+
     /**
      * 文档状态。
      * 0 待处理，1 向量化中，2 已完成，3 失败

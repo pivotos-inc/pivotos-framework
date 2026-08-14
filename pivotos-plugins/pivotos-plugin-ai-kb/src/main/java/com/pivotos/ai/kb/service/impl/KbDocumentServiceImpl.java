@@ -67,6 +67,7 @@ public class KbDocumentServiceImpl implements KbDocumentService {
         entity.setChunkOverlap(kb.getChunkOverlap());
         entity.setStatus(KbDocStatusEnum.PENDING.getValue());
         entity.setVectorCount(0);
+        entity.setChunkCount(0);
         documentMapper.insert(entity);
 
         // 同步触发向量化（大文件后续可改异步）
@@ -126,6 +127,7 @@ public class KbDocumentServiceImpl implements KbDocumentService {
         vo.setStatus(entity.getStatus());
         vo.setErrorMsg(entity.getErrorMsg());
         vo.setVectorCount(entity.getVectorCount());
+        vo.setChunkCount(entity.getChunkCount());
         vo.setCreateTime(entity.getCreateTime());
         vo.setUpdateTime(entity.getUpdateTime());
         return vo;
