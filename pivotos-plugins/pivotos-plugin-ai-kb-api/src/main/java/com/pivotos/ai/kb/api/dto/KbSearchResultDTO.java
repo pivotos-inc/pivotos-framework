@@ -22,4 +22,7 @@ public class KbSearchResultDTO {
 
     /** BM25 通道排名（0 表示未命中，检索调试用） */
     private Integer bm25Rank;
+
+    /** 重排相关性分数（null 表示未重排，S65 检索调试用） */
+    private Double rerankScore;
 }

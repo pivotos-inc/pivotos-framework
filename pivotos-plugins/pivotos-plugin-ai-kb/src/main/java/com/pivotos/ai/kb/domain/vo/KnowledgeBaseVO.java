@@ -23,6 +23,7 @@ public class KnowledgeBaseVO implements Serializable {
     private Integer chunkSize;
     private Integer chunkOverlap;
     private Boolean hybridSearch;
+    private Boolean rerank;
     private Integer status;
     private Long tenantId;
     private LocalDateTime createTime;

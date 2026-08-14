@@ -24,6 +24,9 @@ public class ProviderVO extends BaseDTO {
     /** 向量化模型名（空则回退 spring.ai.openai.embedding.options.model） */
     private String embeddingModel;
 
+    /** 重排模型名（如 qwen3-rerank，空则不启用重排，S65） */
+    private String rerankModel;
+
     /** 排序 */
     private Integer sort;
 

@@ -1,6 +1,7 @@
 package com.pivotos.ai.kb.service;
 
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.pivotos.ai.api.facade.IRerankFacade;
 import com.pivotos.ai.kb.domain.entity.AiKbChunk;
 import com.pivotos.ai.kb.domain.entity.KbDocument;
 import com.pivotos.ai.kb.domain.entity.KnowledgeBase;
@@ -20,6 +21,7 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -46,6 +48,8 @@ public class KbPipelineService {
     private final RrfFusion rrfFusion;
     private final PdfTableExtractor pdfTableExtractor;
     private final OcrExtractor ocrExtractor;
+    /** 重排契约（S65）：plugin-ai 未装配或无配置时静默降级为原召回顺序 */
+    private final ObjectProvider<IRerankFacade> rerankFacadeProvider;
 
     /**
      * 对指定文档执行向量化索引。
@@ -189,10 +193,12 @@ public class KbPipelineService {
     }
 
     /**
-     * 在指定知识库中检索相似文本块（混合检索：向量 + BM25 + RRF 融合）。
+     * 在指定知识库中检索相似文本块（混合检索：向量 + BM25 + RRF 融合 + rerank 精排）。
      *
-     * <p>hybridSearch=true 时：向量 topK*3 + BM25 topK*3 → RRF 融合 topK。
-     * hybridSearch=false 时：仅向量检索 topK。
+     * <p>hybridSearch=true 时：向量 topK*3 + BM25 topK*3 → RRF 融合。
+     * hybridSearch=false 时：仅向量检索。
+     * rerank=true 时（S65）：候选扩至 topK*2，经 reranker 精排取 topK；
+     * 无重排配置或调用失败时降级为原召回顺序（rerankScore=null）。
      *
      * @param kb    知识库
      * @param query 查询文本
@@ -202,35 +208,66 @@ public class KbPipelineService {
     public List<RrfFusion.FusedResult> search(KnowledgeBase kb, String query, int topK) {
         VectorStore vectorStore = vectorStoreFactory.get(kb);
         boolean hybrid = !Boolean.FALSE.equals(kb.getHybridSearch());
+        boolean rerankEnabled = !Boolean.FALSE.equals(kb.getRerank());
 
+        List<RrfFusion.FusedResult> candidates;
         if (!hybrid) {
-            // 仅向量检索
+            // 仅向量检索（重排开启时扩候选 topK*2，精排后再截断）
             SearchRequest request = SearchRequest.builder()
                     .query(query)
-                    .topK(topK)
+                    .topK(rerankEnabled ? topK * 2 : topK)
                     .filterExpression("kb_id == '" + kb.getId() + "'")
                     .build();
             List<Document> vectorResults = vectorStore.similaritySearch(request);
-            List<RrfFusion.FusedResult> results = new ArrayList<>();
+            candidates = new ArrayList<>();
             for (int i = 0; i < vectorResults.size(); i++) {
                 Document d = vectorResults.get(i);
-                results.add(new RrfFusion.FusedResult(d.getText(), d.getMetadata(), null, 0.0, i + 1, 0));
+                candidates.add(new RrfFusion.FusedResult(d.getText(), d.getMetadata(), null, 0.0, i + 1, 0, null));
             }
-            return results;
+        } else {
+            // 混合检索：向量 topK*3 + BM25 topK*3 → RRF 融合（重排开启时扩候选 topK*2）
+            SearchRequest request = SearchRequest.builder()
+                    .query(query)
+                    .topK(topK * 3)
+                    .filterExpression("kb_id == '" + kb.getId() + "'")
+                    .build();
+            List<Document> vectorResults = vectorStore.similaritySearch(request);
+            List<Bm25Retriever.Bm25Result> bm25Results = bm25Retriever.search(kb.getId(), query, topK * 3);
+            candidates = rrfFusion.fuse(vectorResults, bm25Results, rerankEnabled ? topK * 2 : topK);
+            log.info("[PivotOS-KB] 混合检索: kbId={}, vector={}, bm25={}, fused={}",
+                    kb.getId(), vectorResults.size(), bm25Results.size(), candidates.size());
         }
 
-        // 混合检索：向量 topK*3 + BM25 topK*3 → RRF 融合 topK
-        SearchRequest request = SearchRequest.builder()
-                .query(query)
-                .topK(topK * 3)
-                .filterExpression("kb_id == '" + kb.getId() + "'")
-                .build();
-        List<Document> vectorResults = vectorStore.similaritySearch(request);
-        List<Bm25Retriever.Bm25Result> bm25Results = bm25Retriever.search(kb.getId(), query, topK * 3);
-        List<RrfFusion.FusedResult> fused = rrfFusion.fuse(vectorResults, bm25Results, topK);
-        log.info("[PivotOS-KB] 混合检索: kbId={}, vector={}, bm25={}, fused={}",
-                kb.getId(), vectorResults.size(), bm25Results.size(), fused.size());
-        return fused;
+        if (!rerankEnabled) {
+            return candidates;
+        }
+        return applyRerank(kb, query, candidates, topK);
+    }
+
+    /**
+     * rerank 精排（S65）：facade 缺失/返回空（无配置或调用失败）时降级为原召回顺序。
+     */
+    private List<RrfFusion.FusedResult> applyRerank(KnowledgeBase kb, String query,
+                                                    List<RrfFusion.FusedResult> candidates, int topK) {
+        IRerankFacade reranker = rerankFacadeProvider.getIfAvailable();
+        if (reranker == null || candidates.isEmpty()) {
+            return candidates.subList(0, Math.min(topK, candidates.size()));
+        }
+        List<String> contents = candidates.stream().map(RrfFusion.FusedResult::content).toList();
+        List<IRerankFacade.RerankResult> reranked = reranker.rerank(query, contents, topK);
+        if (reranked.isEmpty()) {
+            return candidates.subList(0, Math.min(topK, candidates.size()));
+        }
+        List<RrfFusion.FusedResult> results = new ArrayList<>(reranked.size());
+        for (IRerankFacade.RerankResult r : reranked) {
+            if (r.index() < 0 || r.index() >= candidates.size()) {
+                continue;
+            }
+            results.add(candidates.get(r.index()).withRerankScore(r.score()));
+        }
+        log.info("[PivotOS-KB] rerank 精排: kbId={}, candidates={}, reranked={}",
+                kb.getId(), candidates.size(), results.size());
+        return results;
     }
 
     private String resolveDownloadUrl(String fileUrl) {
