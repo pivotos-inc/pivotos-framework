@@ -17,6 +17,7 @@ import org.dromara.warm.flow.core.service.InsService;
 import org.dromara.warm.flow.core.service.TaskService;
 import org.dromara.warm.flow.core.utils.page.Page;
 import org.dromara.warm.flow.orm.entity.FlowInstance;
+import org.dromara.warm.flow.orm.entity.FlowTask;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -53,12 +54,23 @@ public class FlowInstanceService {
             throw new ServiceException("流程实例创建失败，请检查流程定义是否已发布");
         }
         // 设置业务 ID（WarmFlow start 不直接接受 businessId，需更新）
-        if (StringUtils.hasText(cmd.getBusinessId())) {
+        String bizId = StringUtils.hasText(cmd.getBusinessId()) ? cmd.getBusinessId() : cmd.getBusinessName();
+        if (StringUtils.hasText(bizId)) {
             FlowInstance update = new FlowInstance();
             update.setId(instance.getId());
-            update.setBusinessId(cmd.getBusinessId());
+            update.setBusinessId(bizId);
             insService.updateById(update);
-            instance.setBusinessId(cmd.getBusinessId());
+            instance.setBusinessId(bizId);
+            // 同步更新 Task 表，确保待办列表直接取到 businessId
+            List<Task> tasks = taskService.getByInsId(instance.getId());
+            if (tasks != null) {
+                for (Task t : tasks) {
+                    FlowTask taskUpdate = new FlowTask();
+                    taskUpdate.setId(t.getId());
+                    taskUpdate.setBusinessId(bizId);
+                    taskService.updateById(taskUpdate);
+                }
+            }
         }
         // 通知首个审批节点处理人
         notifyService.notifyOnStart(instance);
@@ -67,18 +79,14 @@ public class FlowInstanceService {
 
     /**
      * 撤回流程（发起人操作）
+     * <p>
+     * WarmFlow TaskService.revoke(Long instanceId, FlowParams) 第一个参数是实例 ID。
      */
     public void revoke(Long instanceId) {
-        List<Task> tasks = taskService.getByInsId(instanceId);
-        if (tasks.isEmpty()) {
-            throw new ServiceException("无可撤回的任务");
-        }
-        // 取第一个待审批任务进行撤回
-        Task task = tasks.get(0);
         FlowParams params = FlowParams.build()
                 .handler(currentHandler())
                 .message("发起人撤回");
-        taskService.revoke(task.getId(), params);
+        taskService.revoke(instanceId, params);
         Instance instance = insService.getById(instanceId);
         if (instance != null) {
             notifyService.notifyOnRevoke(instance);
@@ -87,17 +95,14 @@ public class FlowInstanceService {
 
     /**
      * 终止流程
+     * <p>
+     * WarmFlow TaskService.terminationByInsId(Long instanceId, FlowParams) 按实例 ID 终止。
      */
     public void terminate(Long instanceId) {
-        List<Task> tasks = taskService.getByInsId(instanceId);
-        if (tasks.isEmpty()) {
-            throw new ServiceException("无可终止的任务");
-        }
-        Task task = tasks.get(0);
         FlowParams params = FlowParams.build()
                 .handler(currentHandler())
                 .message("流程终止");
-        taskService.termination(task.getId(), params);
+        taskService.terminationByInsId(instanceId, params);
     }
 
     /**
@@ -112,9 +117,11 @@ public class FlowInstanceService {
         Page<Instance> page = new Page<>(query.getPageNum(), query.getPageSize());
         page.setOrderBy("create_time");
         page.setIsAsc("desc");
-        insService.page(condition, page);
-        List<WorkflowInstanceVO> list = page.getList().stream().map(this::toVO).toList();
-        return new PageResult<>(list, page.getTotal(), query.getPageNum(), query.getPageSize());
+        Page<Instance> result = insService.page(condition, page);
+        Page<Instance> finalPage = result != null ? result : page;
+        List<WorkflowInstanceVO> list = finalPage.getList() != null
+                ? finalPage.getList().stream().map(this::toVO).toList() : List.of();
+        return new PageResult<>(list, finalPage.getTotal(), query.getPageNum(), query.getPageSize());
     }
 
     /**
@@ -138,6 +145,13 @@ public class FlowInstanceService {
         vo.setId(ins.getId());
         vo.setDefinitionId(ins.getDefinitionId());
         vo.setFlowName(ins.getFlowName());
+        // flow_instance 表不含 flow_name 列，需从 definition 补全
+        if (!StringUtils.hasText(vo.getFlowName())) {
+            Definition def = defService.getById(ins.getDefinitionId());
+            if (def != null) {
+                vo.setFlowName(def.getFlowName());
+            }
+        }
         vo.setBusinessId(ins.getBusinessId());
         vo.setNodeCode(ins.getNodeCode());
         vo.setNodeName(ins.getNodeName());

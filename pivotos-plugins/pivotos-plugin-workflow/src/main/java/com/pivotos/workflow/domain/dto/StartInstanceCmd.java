@@ -16,6 +16,9 @@ public class StartInstanceCmd {
     /** 业务 ID（关联业务表主键） */
     private String businessId;
 
+    /** 业务名称（展示用，如"张三的请假单"） */
+    private String businessName;
+
     /** 流程变量（可传递给流程节点的条件参数） */
     private Map<String, Object> variable;
 }

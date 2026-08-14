@@ -31,6 +31,8 @@
         <module>pivotos-plugin-monitor</module>
         <module>pivotos-plugin-workflow-api</module>
         <module>pivotos-plugin-workflow</module>
+        <module>pivotos-plugin-ai-kb-api</module>
+        <module>pivotos-plugin-ai-kb</module>
     </modules>
 
     <dependencyManagement>

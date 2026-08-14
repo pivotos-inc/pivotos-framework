@@ -15,6 +15,7 @@ public class WorkflowTaskVO {
     private Long instanceId;
     private String flowName;
     private String businessId;
+    private String businessName;
     private String nodeCode;
     private String nodeName;
     private Integer nodeType;

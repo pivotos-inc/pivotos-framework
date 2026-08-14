@@ -152,6 +152,6 @@ CREATE TABLE IF NOT EXISTS flow_user (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='流程用户表';
 
 -- ========== 8. 流程管理一级菜单 ==========
--- 菜单 ID 从 3000 起分配（当前最高 ~2100），避免冲突
-INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query, route_name, is_frame, is_cache, menu_type, visible, status, perms, icon, remark)
-VALUES (3000, '流程管理', 0, 7, 'workflow', NULL, '', '', 1, 0, 'M', '0', '0', '', 'guide', '工作流引擎管理目录');
+-- ID 分配：3500 = 流程管理（顶级目录），避免与 3000 AI 助手冲突
+INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, icon, sort, visible, status, create_by, create_time, deleted)
+VALUES (3500, 0, '流程管理', 'M', '/workflow', NULL, 'guide', 50, 0, 0, 1, NOW(), 0);

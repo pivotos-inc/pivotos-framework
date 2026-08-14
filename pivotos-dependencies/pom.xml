@@ -271,6 +271,22 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- S58 RAG 向量存储与文档解析（版本由 spring-ai-bom 托管，此处显式列出便于模块引用） -->
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-vector-store</artifactId>
+                <version>${spring-ai.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-starter-vector-store-milvus</artifactId>
+                <version>${spring-ai.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-tika-document-reader</artifactId>
+                <version>${spring-ai.version}</version>
+            </dependency>
 
             <!-- ========== FreeMarker 模板引擎（代码生成器） ========== -->
             <dependency>
@@ -441,6 +457,16 @@
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-plugin-workflow</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-ai-kb-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-ai-kb</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

@@ -49,9 +49,12 @@ public class FlowDefinitionService {
         // 默认按创建时间倒序
         page.setOrderBy("create_time");
         page.setIsAsc("desc");
-        defService.page(condition, page);
-        List<FlowDefinitionVO> list = page.getList().stream().map(this::toVO).toList();
-        return new PageResult<>(list, page.getTotal(), query.getPageNum(), query.getPageSize());
+        // WarmFlow page() 可能返回新 Page 对象（结果在返回值中），需要接收返回值
+        Page<Definition> result = defService.page(condition, page);
+        Page<Definition> finalPage = result != null ? result : page;
+        List<FlowDefinitionVO> list = finalPage.getList() != null
+                ? finalPage.getList().stream().map(this::toVO).toList() : List.of();
+        return new PageResult<>(list, finalPage.getTotal(), query.getPageNum(), query.getPageSize());
     }
 
     /**

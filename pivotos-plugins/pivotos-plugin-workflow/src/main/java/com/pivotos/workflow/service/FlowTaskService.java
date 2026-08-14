@@ -9,9 +9,11 @@ import com.pivotos.workflow.domain.vo.WorkflowHisTaskVO;
 import com.pivotos.workflow.domain.vo.WorkflowTaskVO;
 import lombok.RequiredArgsConstructor;
 import org.dromara.warm.flow.core.dto.FlowParams;
+import org.dromara.warm.flow.core.entity.Definition;
 import org.dromara.warm.flow.core.entity.HisTask;
 import org.dromara.warm.flow.core.entity.Instance;
 import org.dromara.warm.flow.core.entity.Task;
+import org.dromara.warm.flow.core.service.DefService;
 import org.dromara.warm.flow.core.service.HisTaskService;
 import org.dromara.warm.flow.core.service.InsService;
 import org.dromara.warm.flow.core.service.TaskService;
@@ -34,6 +36,7 @@ public class FlowTaskService {
     private final TaskService taskService;
     private final HisTaskService hisTaskService;
     private final InsService insService;
+    private final DefService defService;
     private final WorkflowNotifyService notifyService;
 
     /**
@@ -41,15 +44,19 @@ public class FlowTaskService {
      */
     public PageResult<WorkflowTaskVO> pagePending(TaskPageQuery query) {
         FlowTask condition = new FlowTask();
+        // 仅查询待审批（flowStatus=1）的任务，已处理的任务不应出现在待办中
+        condition.setFlowStatus("1");
         if (StringUtils.hasText(query.getFlowName())) {
             condition.setFlowName(query.getFlowName());
         }
         Page<Task> page = new Page<>(query.getPageNum(), query.getPageSize());
         page.setOrderBy("create_time");
         page.setIsAsc("desc");
-        taskService.page(condition, page);
-        List<WorkflowTaskVO> list = page.getList().stream().map(this::toTaskVO).toList();
-        return new PageResult<>(list, page.getTotal(), query.getPageNum(), query.getPageSize());
+        Page<Task> result = taskService.page(condition, page);
+        Page<Task> finalPage = result != null ? result : page;
+        List<WorkflowTaskVO> list = finalPage.getList() != null
+                ? finalPage.getList().stream().map(this::toTaskVO).toList() : List.of();
+        return new PageResult<>(list, finalPage.getTotal(), query.getPageNum(), query.getPageSize());
     }
 
     /**
@@ -61,16 +68,23 @@ public class FlowTaskService {
         Page<HisTask> page = new Page<>(query.getPageNum(), query.getPageSize());
         page.setOrderBy("create_time");
         page.setIsAsc("desc");
-        hisTaskService.page(condition, page);
-        List<WorkflowHisTaskVO> list = page.getList().stream().map(this::toHisVO).toList();
-        return new PageResult<>(list, page.getTotal(), query.getPageNum(), query.getPageSize());
+        Page<HisTask> result = hisTaskService.page(condition, page);
+        Page<HisTask> finalPage = result != null ? result : page;
+        List<WorkflowHisTaskVO> list = finalPage.getList() != null
+                ? finalPage.getList().stream().map(this::toHisVO).toList() : List.of();
+        return new PageResult<>(list, finalPage.getTotal(), query.getPageNum(), query.getPageSize());
     }
 
     /**
      * 审批通过
      */
     public void pass(TaskActionCmd cmd) {
-        Instance result = taskService.pass(cmd.getTaskId(), cmd.getMessage(), cmd.getVariable());
+        Instance result;
+        try {
+            result = taskService.pass(cmd.getTaskId(), cmd.getMessage(), cmd.getVariable());
+        } catch (org.dromara.warm.flow.core.exception.FlowException e) {
+            throw new ServiceException("审批通过失败：" + e.getMessage());
+        }
         if (result != null) {
             notifyService.notifyOnPass(result, cmd.getMessage());
         }
@@ -80,7 +94,12 @@ public class FlowTaskService {
      * 驳回
      */
     public void reject(TaskActionCmd cmd) {
-        Instance result = taskService.reject(cmd.getTaskId(), cmd.getMessage(), cmd.getVariable());
+        Instance result;
+        try {
+            result = taskService.reject(cmd.getTaskId(), cmd.getMessage(), cmd.getVariable());
+        } catch (org.dromara.warm.flow.core.exception.FlowException e) {
+            throw new ServiceException("当前节点不支持驳回操作，请检查流程定义中是否配置了驳回路径");
+        }
         if (result != null) {
             notifyService.notifyOnReject(result, cmd.getMessage());
         }
@@ -97,7 +116,11 @@ public class FlowTaskService {
                 .handler(currentHandler())
                 .nextHandler(cmd.getTargetUserId())
                 .message(cmd.getMessage());
-        taskService.transfer(cmd.getTaskId(), params);
+        try {
+            taskService.transfer(cmd.getTaskId(), params);
+        } catch (org.dromara.warm.flow.core.exception.FlowException e) {
+            throw new ServiceException("转办失败：" + e.getMessage());
+        }
         // 查询任务信息用于通知
         Task task = taskService.getById(cmd.getTaskId());
         if (task != null) {
@@ -116,7 +139,11 @@ public class FlowTaskService {
                 .handler(currentHandler())
                 .nextHandler(cmd.getTargetUserId())
                 .message(cmd.getMessage());
-        taskService.depute(cmd.getTaskId(), params);
+        try {
+            taskService.depute(cmd.getTaskId(), params);
+        } catch (org.dromara.warm.flow.core.exception.FlowException e) {
+            throw new ServiceException("委派失败：" + e.getMessage());
+        }
     }
 
     /**
@@ -132,6 +159,7 @@ public class FlowTaskService {
      */
     public long countPending() {
         FlowTask condition = new FlowTask();
+        condition.setFlowStatus("1");
         return taskService.selectCount(condition);
     }
 
@@ -147,6 +175,22 @@ public class FlowTaskService {
         vo.setInstanceId(task.getInstanceId());
         vo.setFlowName(task.getFlowName());
         vo.setBusinessId(task.getBusinessId());
+        // flow_task 表不含 flow_name/business_id，需从实例和定义表补充
+        if (!StringUtils.hasText(vo.getFlowName()) || !StringUtils.hasText(vo.getBusinessId())) {
+            Instance ins = insService.getById(task.getInstanceId());
+            if (ins != null) {
+                if (!StringUtils.hasText(vo.getBusinessId())) {
+                    vo.setBusinessId(ins.getBusinessId());
+                }
+                if (!StringUtils.hasText(vo.getFlowName())) {
+                    // flow_instance 也不含 flow_name 列，从 definition 取
+                    Definition def = defService.getById(task.getDefinitionId());
+                    if (def != null) {
+                        vo.setFlowName(def.getFlowName());
+                    }
+                }
+            }
+        }
         vo.setNodeCode(task.getNodeCode());
         vo.setNodeName(task.getNodeName());
         vo.setNodeType(task.getNodeType());

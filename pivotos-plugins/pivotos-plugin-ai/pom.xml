@@ -27,6 +27,12 @@
             <artifactId>pivotos-plugin-message-api</artifactId>
         </dependency>
 
+        <!-- 跨插件契约：RAG 知识库检索（S59 对话集成知识库上下文） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-ai-kb-api</artifactId>
+        </dependency>
+
         <!-- 底座契约与 Starter -->
         <dependency>
             <groupId>com.pivotos</groupId>
