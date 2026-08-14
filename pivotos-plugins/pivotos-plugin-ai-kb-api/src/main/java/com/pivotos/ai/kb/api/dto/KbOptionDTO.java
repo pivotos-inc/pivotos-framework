@@ -13,4 +13,7 @@ public class KbOptionDTO {
 
     /** 知识库名称 */
     private String name;
+
+    /** 查询改写开关（true=检索前 LLM 改写多轮问题，S68） */
+    private Boolean queryRewrite;
 }

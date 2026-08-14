@@ -35,6 +35,7 @@ public class KnowledgeBaseLocalFacade implements IKnowledgeBaseFacade {
         KbOptionDTO dto = new KbOptionDTO();
         dto.setId(vo.getId());
         dto.setName(vo.getName());
+        dto.setQueryRewrite(vo.getQueryRewrite());
         return dto;
     }
 }

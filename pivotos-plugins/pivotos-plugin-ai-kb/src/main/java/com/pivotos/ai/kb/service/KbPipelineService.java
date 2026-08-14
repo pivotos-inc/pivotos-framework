@@ -206,9 +206,23 @@ public class KbPipelineService {
      * @return 融合排序后的结果列表
      */
     public List<RrfFusion.FusedResult> search(KnowledgeBase kb, String query, int topK) {
+        return search(kb, query, topK, null);
+    }
+
+    /**
+     * 检索重载（S66 评测用）：rerankOverride 非空时临时覆盖知识库 rerank 开关，
+     * 不影响知识库自身配置；传 null 时行为与三参方法一致。
+     *
+     * @param kb             知识库
+     * @param query          查询文本
+     * @param topK           返回条数
+     * @param rerankOverride 重排开关覆盖（true/false 强制，null 跟随 kb.rerank）
+     * @return 融合排序后的结果列表
+     */
+    public List<RrfFusion.FusedResult> search(KnowledgeBase kb, String query, int topK, Boolean rerankOverride) {
         VectorStore vectorStore = vectorStoreFactory.get(kb);
         boolean hybrid = !Boolean.FALSE.equals(kb.getHybridSearch());
-        boolean rerankEnabled = !Boolean.FALSE.equals(kb.getRerank());
+        boolean rerankEnabled = rerankOverride != null ? rerankOverride : !Boolean.FALSE.equals(kb.getRerank());
 
         List<RrfFusion.FusedResult> candidates;
         if (!hybrid) {

@@ -10,3 +10,6 @@ target/
 .env.*
 !.env.example
 logs/
+
+# 运行时数据（simple 向量存储等，S58 起本地生成）
+pivotos-admin-server/data/

@@ -2,6 +2,8 @@ package com.pivotos.ai.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.pivotos.ai.api.enums.AiErrorCode;
 import com.pivotos.ai.client.AiClientRegistry;
 import com.pivotos.ai.domain.dto.ChatSendRequest;
@@ -12,6 +14,7 @@ import com.pivotos.ai.domain.entity.AiProvider;
 import com.pivotos.ai.domain.vo.ChatMessageVO;
 import com.pivotos.ai.domain.vo.ChatReferenceVO;
 import com.pivotos.ai.domain.vo.ConversationVO;
+import com.pivotos.ai.kb.api.dto.KbOptionDTO;
 import com.pivotos.ai.kb.api.dto.KbSearchResultDTO;
 import com.pivotos.ai.kb.api.facade.IKnowledgeBaseFacade;
 import com.pivotos.ai.mapper.AiChatMessageMapper;
@@ -79,15 +82,16 @@ public class AiChatServiceImpl implements AiChatService {
         ChatTarget target = resolveTarget(request);
         AiConversation conversation = resolveConversation(userId, request, target.model());
         List<Message> history = loadHistory(conversation.getId());
-        saveMessage(conversation, userId, "user", request.getContent());
+        saveMessage(conversation, userId, "user", request.getContent(), null);
 
-        // RAG：检索知识库并构建上下文
-        RagContext rag = buildRagContext(request.getKbIds(), request.getContent());
+        // RAG：检索知识库并构建上下文（S68：含查询改写）
+        RagContext rag = buildRagContext(request.getKbIds(), request.getContent(), history, target);
 
         String reply = callWithFailover(target, history, request.getContent(),
                 conversation.getId(), rag.context());
 
-        AiChatMessage assistant = saveMessage(conversation, userId, "assistant", reply);
+        AiChatMessage assistant = saveMessage(conversation, userId, "assistant", reply,
+                referencesJson(rag.references()));
         touchConversation(conversation.getId());
         ChatMessageVO vo = toMessageVO(assistant);
         vo.setReferences(rag.references().isEmpty() ? null : rag.references());
@@ -102,17 +106,26 @@ public class AiChatServiceImpl implements AiChatService {
         ChatClient chatClient = pickClient(target, 0);
         AiConversation conversation = resolveConversation(userId, request, target.model());
         List<Message> history = loadHistory(conversation.getId());
-        AiChatMessage userMessage = saveMessage(conversation, userId, "user", request.getContent());
+        AiChatMessage userMessage = saveMessage(conversation, userId, "user", request.getContent(), null);
 
-        // RAG：检索知识库并构建上下文
-        RagContext rag = buildRagContext(request.getKbIds(), request.getContent());
+        // RAG：检索知识库并构建上下文（S68：含查询改写）
+        RagContext rag = buildRagContext(request.getKbIds(), request.getContent(), history, target);
 
         // 0 = 不超时：长回复由模型流结束或异常驱动完成
         SseEmitter emitter = new SseEmitter(0L);
-        sendEvent(emitter, "meta", Map.of(
-                "conversationId", conversation.getId(),
-                "userMessageId", userMessage.getId(),
-                "title", conversation.getTitle()));
+        Map<String, Object> metaData = new LinkedHashMap<>();
+        metaData.put("conversationId", conversation.getId());
+        metaData.put("userMessageId", userMessage.getId());
+        metaData.put("title", conversation.getTitle());
+        if (rag.rewrittenQuery() != null) {
+            // S68：查询改写发生时的透明化提示（前端展示实际检索词）
+            metaData.put("rewrittenQuery", rag.rewrittenQuery());
+        }
+        if (rag.kbRoutedOut()) {
+            // S69：意图路由出局——本轮判定无需知识库检索（前端提示按通用知识回答）
+            metaData.put("kbRoutedOut", true);
+        }
+        sendEvent(emitter, "meta", metaData);
 
         Long conversationId = conversation.getId();
         if (streamKey != null) {
@@ -146,7 +159,8 @@ public class AiChatServiceImpl implements AiChatService {
                         aiProviderService.recordKeySuccess(streamKey.getId());
                     }
                     // 回调线程无 LoginContext，saveMessage 内已显式补齐审计字段
-                    AiChatMessage assistant = saveMessage(conversation, userId, "assistant", answer.toString());
+                    AiChatMessage assistant = saveMessage(conversation, userId, "assistant",
+                            answer.toString(), referencesJson(rag.references()));
                     touchConversation(conversationId);
                     Map<String, Object> doneData = new LinkedHashMap<>();
                     doneData.put("conversationId", conversationId);
@@ -307,41 +321,74 @@ public class AiChatServiceImpl implements AiChatService {
     }
 
     /* ================= RAG 知识库检索 ================= */
-
-    /** RAG 上下文载体：检索到的上下文文本 + 引用来源列表 */
-    private record RagContext(String context, List<ChatReferenceVO> references) {}
-
-    /** RAG 检索上下文展示前 N 字（避免 prompt 过长） */
+    
+    /** RAG 上下文载体：检索上下文文本 + 引用来源列表 + 改写后的检索词（未改写为 null，S68）+ 意图路由出局标记（S69） */
+    private record RagContext(String context, List<ChatReferenceVO> references, String rewrittenQuery, boolean kbRoutedOut) {}
+    
+    /** 意图路由决策：是否需要知识库检索 + 实际检索词（S69，路由与改写合并单次 LLM 调用） */
+    private record RouteDecision(boolean needSearch, String query) {}
+    
+    /** RAG 上下文展示前 N 字（避免 prompt 过长） */
     private static final int REFERENCE_CONTENT_MAX = 200;
     /** RAG 每个知识库默认召回条数 */
     private static final int RAG_TOP_K = 5;
-
+    /** 查询改写参考的最近历史消息条数（S68） */
+    private static final int REWRITE_HISTORY_LIMIT = 4;
+    /** 意图路由 + 查询改写 system 指令（S69）：严格只输出 JSON，不回答问题 */
+    private static final String ROUTE_SYSTEM_PROMPT = """
+            你是知识库检索路由助手。根据对话历史中的用户问题，对用户最新的问题做两个判断：\
+            一、是否需要检索知识库：打招呼、闲聊、纯常识或计算类问题输出 needSearch=false，可能需要参考知识库内容的问题输出 needSearch=true；\
+            二、把最新问题改写为可独立检索的查询语句（补全代词与省略的上下文，保持原意，不加无关内容）。\
+            严禁回答问题，严禁输出任何解释，只输出一行 JSON：{"needSearch":true,"query":"..."}。\
+            示例：最新问题「你好」→ {"needSearch":false,"query":"你好"}；\
+            历史问题「鲫鱼汤怎么做才适合产妇喝？」，最新问题「那要炖多久呢？」→ {"needSearch":true,"query":"产妇喝的鲫鱼汤要炖多久"}""";
+    
     /**
      * 构建 RAG 上下文：遍历 kbIds 逐个检索，拼接为 system prompt 格式的参考资料文本。
      * kbIds 为空或 kb 门面不可用时返回 null context + 空 references（静默降级）。
+     * S69：检索前先做意图路由（与 S68 查询改写合并单次 LLM 调用），判定无需检索则跳过全部检索；
+     * 引用携带 kbId/kbName/docId/chunkId 溯源信息。
      */
-    private RagContext buildRagContext(List<Long> kbIds, String query) {
+    private RagContext buildRagContext(List<Long> kbIds, String query, List<Message> history, ChatTarget target) {
         if (kbIds == null || kbIds.isEmpty()) {
-            return new RagContext(null, Collections.emptyList());
+            return new RagContext(null, Collections.emptyList(), null, false);
         }
         IKnowledgeBaseFacade facade = kbFacadeProvider.getIfAvailable();
         if (facade == null) {
-            return new RagContext(null, Collections.emptyList());
+            return new RagContext(null, Collections.emptyList(), null, false);
         }
-
+    
+        // 知识库选项映射（名称展示 + 改写开关判断）
+        Map<Long, KbOptionDTO> optionMap = new LinkedHashMap<>();
+        try {
+            facade.listOptions().forEach(o -> optionMap.put(o.getId(), o));
+        } catch (Exception e) {
+            log.warn("[PivotOS] RAG 加载知识库选项失败，kbName/queryRewrite 降级: {}", e.getMessage());
+        }
+    
+        // S69 意图路由 + S68 查询改写：合并单次 LLM 调用（异常降级为检索 + 原问题）
+        boolean rewriteEnabled = kbIds.stream()
+                .anyMatch(id -> optionMap.get(id) != null && Boolean.TRUE.equals(optionMap.get(id).getQueryRewrite()));
+        RouteDecision decision = routeQuery(target, history, query, rewriteEnabled);
+        if (!decision.needSearch()) {
+            return new RagContext(null, Collections.emptyList(), null, true);
+        }
+        String searchQuery = decision.query();
+        String rewrittenQuery = searchQuery.strip().equals(query.strip()) ? null : searchQuery;
+    
         List<KbSearchResultDTO> allResults = new ArrayList<>();
         for (Long kbId : kbIds) {
             try {
-                List<KbSearchResultDTO> results = facade.search(kbId, query, RAG_TOP_K);
+                List<KbSearchResultDTO> results = facade.search(kbId, searchQuery, RAG_TOP_K);
                 allResults.addAll(results);
             } catch (Exception e) {
                 log.warn("[PivotOS] RAG 检索知识库失败，已跳过：kbId={}, error={}", kbId, e.getMessage());
             }
         }
         if (allResults.isEmpty()) {
-            return new RagContext(null, Collections.emptyList());
+            return new RagContext(null, Collections.emptyList(), rewrittenQuery, false);
         }
-
+    
         // 跨知识库去重：按 content 前 100 字 hash 去重（保留首次出现，丢弃后续重复）
         Set<String> seenHash = new HashSet<>();
         List<KbSearchResultDTO> deduped = new ArrayList<>();
@@ -353,7 +400,7 @@ public class AiChatServiceImpl implements AiChatService {
                 deduped.add(r);
             }
         }
-
+    
         StringBuilder sb = new StringBuilder();
         sb.append("以下是从知识库中检索到的参考资料，请在回答时优先参考这些内容，并在回答中标注引用来源（如 [1]、[2]）：\n\n");
         List<ChatReferenceVO> references = new ArrayList<>();
@@ -364,8 +411,13 @@ public class AiChatServiceImpl implements AiChatService {
                 sb.append("来源：").append(r.getFileName()).append('\n');
             }
             sb.append(r.getContent()).append("\n\n");
-
+    
             ChatReferenceVO ref = new ChatReferenceVO();
+            ref.setKbId(r.getKbId());
+            ref.setKbName(r.getKbId() != null && optionMap.get(r.getKbId()) != null
+                    ? optionMap.get(r.getKbId()).getName() : null);
+            ref.setDocId(r.getDocId());
+            ref.setChunkId(r.getChunkId());
             ref.setFileName(r.getFileName());
             ref.setScore(r.getScore());
             ref.setContent(r.getContent() != null && r.getContent().length() > REFERENCE_CONTENT_MAX
@@ -373,7 +425,65 @@ public class AiChatServiceImpl implements AiChatService {
                     : r.getContent());
             references.add(ref);
         }
-        return new RagContext(sb.toString().stripTrailing(), references);
+        return new RagContext(sb.toString().stripTrailing(), references, rewrittenQuery, false);
+    }
+    
+    /**
+     * 意图路由 + 查询改写（S69）：取最近 {@link #REWRITE_HISTORY_LIMIT} 条历史用户问题 + 当前问题，
+     * 用当前对话目标（轮询起点 Key，不额外消耗轮询位）单次调用同时完成
+     * 「是否需要检索」与「改写为独立检索语句」两个判断（JSON 输出）。
+     * 只喂用户消息：assistant 长回复会诱导模型续答而非判断，且徒增 token。
+     * rewriteEnabled=false（所有选中知识库改写开关均关）时仅采纳 needSearch，检索词强制原问题。
+     * 任何异常 / JSON 解析失败 / 字段缺失均降级为「检索 + 原问题」（宁可多检不可漏检）。
+     */
+    private RouteDecision routeQuery(ChatTarget target, List<Message> history, String query, boolean rewriteEnabled) {
+        RouteDecision fallback = new RouteDecision(true, query);
+        try {
+            List<Message> userMessages = history.stream()
+                    .filter(m -> m instanceof UserMessage)
+                    .toList();
+            List<Message> recent = userMessages.size() > REWRITE_HISTORY_LIMIT
+                    ? userMessages.subList(userMessages.size() - REWRITE_HISTORY_LIMIT, userMessages.size())
+                    : userMessages;
+            ChatClient client = pickClient(target, 0);
+            ChatClient.ChatClientRequestSpec spec = client.prompt()
+                    .system(ROUTE_SYSTEM_PROMPT)
+                    .messages(recent)
+                    .user(query);
+            if (target.dynamic() && target.model() != null && !target.model().isBlank()) {
+                spec = spec.options(clientRegistry.buildChatOptions(target.provider(), target.model()));
+            }
+            String content = spec.call().content();
+            if (content == null || content.isBlank()) {
+                return fallback;
+            }
+            // 容忍模型包代码围栏等杂质：截取首个 { 到末个 } 之间的 JSON 片段
+            int start = content.indexOf('{');
+            int end = content.lastIndexOf('}');
+            if (start < 0 || end <= start) {
+                log.warn("[PivotOS] RAG 意图路由输出非 JSON，降级检索: {}", content.strip());
+                return fallback;
+            }
+            JSONObject json = JSON.parseObject(content.substring(start, end + 1));
+            if (!json.getBooleanValue("needSearch", true)) {
+                log.info("[PivotOS] RAG 意图路由出局（无需检索）：问题={}", query);
+                return new RouteDecision(false, query);
+            }
+            String routed = json.getString("query");
+            if (!rewriteEnabled || routed == null || routed.isBlank() || routed.strip().equals(query.strip())) {
+                return new RouteDecision(true, query);
+            }
+            log.info("[PivotOS] RAG 查询改写生效：原问题={} 改写后={}", query, routed.strip());
+            return new RouteDecision(true, routed.strip());
+        } catch (Exception e) {
+            log.warn("[PivotOS] RAG 意图路由调用失败，降级原问题检索: {}", e.getMessage());
+            return fallback;
+        }
+    }
+    
+    /** 引用列表序列化为 JSON（空列表返回 null，不落无意义空数组） */
+    private String referencesJson(List<ChatReferenceVO> references) {
+        return references == null || references.isEmpty() ? null : JSON.toJSONString(references);
     }
 
     /** 定位或新建会话（新建时标题取首条消息前 20 字，模型记本次实际解析结果） */
@@ -417,13 +527,15 @@ public class AiChatServiceImpl implements AiChatService {
     }
 
     /** 消息落库：显式补齐审计字段（流式回调线程 LoginContext 丢失，自动填充只在字段为 null 时兜底） */
-    private AiChatMessage saveMessage(AiConversation conversation, Long userId, String role, String content) {
+    private AiChatMessage saveMessage(AiConversation conversation, Long userId, String role,
+                                      String content, String referencesJson) {
         LocalDateTime now = LocalDateTime.now();
         AiChatMessage message = new AiChatMessage();
         message.setConversationId(conversation.getId());
         message.setUserId(userId);
         message.setRole(role);
         message.setContent(content == null ? "" : content);
+        message.setReferences(referencesJson);
         message.setTenantId(conversation.getTenantId());
         message.setCreateBy(userId);
         message.setUpdateBy(userId);
@@ -468,6 +580,15 @@ public class AiChatServiceImpl implements AiChatService {
         vo.setRole(message.getRole());
         vo.setContent(message.getContent());
         vo.setCreateTime(message.getCreateTime());
+        // S68：历史消息引用从持久化 JSON 反序列化回填（解析失败静默置空，不阻塞历史加载）
+        if (message.getReferences() != null && !message.getReferences().isBlank()) {
+            try {
+                vo.setReferences(JSON.parseArray(message.getReferences(), ChatReferenceVO.class));
+            } catch (Exception e) {
+                log.warn("[PivotOS] 消息引用 JSON 解析失败，置空: messageId={}, reason={}",
+                        message.getId(), e.getMessage());
+            }
+        }
         return vo;
     }
 }

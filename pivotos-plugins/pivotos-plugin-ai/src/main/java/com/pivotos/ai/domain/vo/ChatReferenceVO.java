@@ -6,6 +6,18 @@ import lombok.Data;
 @Data
 public class ChatReferenceVO {
 
+    /** 来源知识库 ID（S68） */
+    private Long kbId;
+
+    /** 来源知识库名称（S68） */
+    private String kbName;
+
+    /** 来源文档 ID（S68 溯源下钻用，可为 null） */
+    private Long docId;
+
+    /** 命中分块 ID（S68 溯源下钻用，null 表示未反查到） */
+    private Long chunkId;
+
     /** 来源文件名 */
     private String fileName;
 
