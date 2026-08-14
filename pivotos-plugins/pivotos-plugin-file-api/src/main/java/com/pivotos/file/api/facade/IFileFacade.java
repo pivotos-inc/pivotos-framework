@@ -1,5 +1,6 @@
 package com.pivotos.file.api.facade;
 
+import com.pivotos.file.api.dto.FileStatsDTO;
 import com.pivotos.file.api.dto.PresignResult;
 
 /**
@@ -29,4 +30,9 @@ public interface IFileFacade {
      * @return 预签名 GET 访问地址
      */
     String presignDownload(String objectKeyOrUrl);
+
+    /**
+     * 文件存储统计（文件总数 + 存储总字节，S71 运营工作台/数据大屏）
+     */
+    FileStatsDTO storageStats();
 }

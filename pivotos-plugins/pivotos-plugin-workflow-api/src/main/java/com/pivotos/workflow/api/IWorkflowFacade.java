@@ -1,5 +1,7 @@
 package com.pivotos.workflow.api;
 
+import com.pivotos.workflow.api.dto.WorkflowStatsDTO;
+
 import java.util.Map;
 
 /**
@@ -30,4 +32,13 @@ public interface IWorkflowFacade {
      * @return 流程实例 ID
      */
     Long startInstance(String flowCode, String businessId, Map<String, Object> variable);
+
+    // ---- S71 补充：运营统计 ----
+
+    /**
+     * 流程实例统计（实例总数 / 待审批任务数 / 按 flow_status 分组计数）
+     *
+     * @return 实例统计 DTO
+     */
+    WorkflowStatsDTO instanceStats();
 }

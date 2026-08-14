@@ -104,7 +104,7 @@ class P0ArchitectureTest {
                     "com.pivotos.ai.kb..", "com.pivotos.workflow.api..")))
         .allowEmptyShould(true);
 
-    // monitor 侧对称规则（S48 新增）：monitor 实现包只可依赖其他插件的 api 包（当前无此需求，规则先行防回潮）
+    // monitor 侧对称规则（S48 新增，S71 运营看板启用 api 依赖）：monitor 实现包只可依赖其他插件的 api 包
     @ArchTest
     static final ArchRule a1_a2_monitor_impl_must_not_depend_on_other_plugin_impls = noClasses()
         .that().resideInAPackage("com.pivotos.monitor..")
@@ -115,6 +115,7 @@ class P0ArchitectureTest {
                     "com.pivotos.workflow..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.pivotos.system.api..", "com.pivotos.message.api..", "com.pivotos.ai.api..",
+                    "com.pivotos.file.api..",
                     "com.pivotos.ai.kb.api..", "com.pivotos.workflow.api..")))
         .allowEmptyShould(true);
 
