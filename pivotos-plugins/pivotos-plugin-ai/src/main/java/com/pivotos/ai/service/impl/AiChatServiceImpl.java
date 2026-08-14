@@ -10,7 +10,10 @@ import com.pivotos.ai.domain.entity.AiChatMessage;
 import com.pivotos.ai.domain.entity.AiConversation;
 import com.pivotos.ai.domain.entity.AiProvider;
 import com.pivotos.ai.domain.vo.ChatMessageVO;
+import com.pivotos.ai.domain.vo.ChatReferenceVO;
 import com.pivotos.ai.domain.vo.ConversationVO;
+import com.pivotos.ai.kb.api.dto.KbSearchResultDTO;
+import com.pivotos.ai.kb.api.facade.IKnowledgeBaseFacade;
 import com.pivotos.ai.mapper.AiChatMessageMapper;
 import com.pivotos.ai.mapper.AiConversationMapper;
 import com.pivotos.ai.service.AiChatService;
@@ -66,6 +69,8 @@ public class AiChatServiceImpl implements AiChatService {
     private final Environment environment;
     private final AiProviderService aiProviderService;
     private final AiClientRegistry clientRegistry;
+    /** 知识库门面（可选依赖：kb 插件未部署时为 null，RAG 功能静默降级） */
+    private final ObjectProvider<IKnowledgeBaseFacade> kbFacadeProvider;
 
     @Override
     public ChatMessageVO send(Long userId, ChatSendRequest request) {
@@ -74,11 +79,17 @@ public class AiChatServiceImpl implements AiChatService {
         List<Message> history = loadHistory(conversation.getId());
         saveMessage(conversation, userId, "user", request.getContent());
 
-        String reply = callWithFailover(target, history, request.getContent(), conversation.getId());
+        // RAG：检索知识库并构建上下文
+        RagContext rag = buildRagContext(request.getKbIds(), request.getContent());
+
+        String reply = callWithFailover(target, history, request.getContent(),
+                conversation.getId(), rag.context());
 
         AiChatMessage assistant = saveMessage(conversation, userId, "assistant", reply);
         touchConversation(conversation.getId());
-        return toMessageVO(assistant);
+        ChatMessageVO vo = toMessageVO(assistant);
+        vo.setReferences(rag.references().isEmpty() ? null : rag.references());
+        return vo;
     }
 
     @Override
@@ -90,6 +101,9 @@ public class AiChatServiceImpl implements AiChatService {
         AiConversation conversation = resolveConversation(userId, request, target.model());
         List<Message> history = loadHistory(conversation.getId());
         AiChatMessage userMessage = saveMessage(conversation, userId, "user", request.getContent());
+
+        // RAG：检索知识库并构建上下文
+        RagContext rag = buildRagContext(request.getKbIds(), request.getContent());
 
         // 0 = 不超时：长回复由模型流结束或异常驱动完成
         SseEmitter emitter = new SseEmitter(0L);
@@ -106,7 +120,7 @@ public class AiChatServiceImpl implements AiChatService {
         }
         StringBuilder answer = new StringBuilder();
         // 流式已发 meta，失败不换 Key 重试（半途换 Key 会重复输出），直接下发 error 事件
-        Flux<String> flux = buildPrompt(chatClient, target, history, request.getContent())
+        Flux<String> flux = buildPrompt(chatClient, target, history, request.getContent(), rag.context())
                 .stream()
                 .content();
         flux.subscribe(
@@ -132,9 +146,13 @@ public class AiChatServiceImpl implements AiChatService {
                     // 回调线程无 LoginContext，saveMessage 内已显式补齐审计字段
                     AiChatMessage assistant = saveMessage(conversation, userId, "assistant", answer.toString());
                     touchConversation(conversationId);
-                    sendEvent(emitter, "done", Map.of(
-                            "conversationId", conversationId,
-                            "messageId", assistant.getId()));
+                    Map<String, Object> doneData = new LinkedHashMap<>();
+                    doneData.put("conversationId", conversationId);
+                    doneData.put("messageId", assistant.getId());
+                    if (!rag.references().isEmpty()) {
+                        doneData.put("references", rag.references());
+                    }
+                    sendEvent(emitter, "done", doneData);
                     emitter.complete();
                 });
         return emitter;
@@ -222,12 +240,19 @@ public class AiChatServiceImpl implements AiChatService {
         return clientRegistry.getChatClient(target.provider(), key);
     }
 
-    /** 组装 prompt：动态目标按请求/供应商模型覆盖 options（按 provider.code 分派工厂产出；静态 client 用其自带默认模型） */
+    /**
+     * 组装 prompt：动态目标按请求/供应商模型覆盖 options（按 provider.code 分派工厂产出；静态 client 用其自带默认模型）。
+     * RAG 上下文非空时以 system 消息注入，位于历史消息之后、用户消息之前。
+     */
     private ChatClient.ChatClientRequestSpec buildPrompt(
-            ChatClient client, ChatTarget target, List<Message> history, String content) {
+            ChatClient client, ChatTarget target, List<Message> history,
+            String content, String ragContext) {
         ChatClient.ChatClientRequestSpec spec = client.prompt()
-                .messages(history)
-                .user(content);
+                .messages(history);
+        if (ragContext != null) {
+            spec = spec.system(ragContext);
+        }
+        spec = spec.user(content);
         if (target.dynamic() && target.model() != null && !target.model().isBlank()) {
             // Spring AI 2.0 options() 收 Builder 本体，内部与 client 默认 options 合并；
             // 工厂按 code 产出对应 SDK 的 options Builder 上转型，屏蔽供应商类型差异
@@ -237,7 +262,8 @@ public class AiChatServiceImpl implements AiChatService {
     }
 
     /** 同步调用：动态目标失败自动换下一 Key 重试一次（单 Key 或静态目标不重试），逐 Key 记健康度 */
-    private String callWithFailover(ChatTarget target, List<Message> history, String content, Long conversationId) {
+    private String callWithFailover(ChatTarget target, List<Message> history, String content,
+                                     Long conversationId, String ragContext) {
         int attempts = target.dynamic() ? Math.min(2, target.keys().size()) : 1;
         for (int i = 0; i < attempts; i++) {
             AiApiKey key = pickKey(target, i);
@@ -247,7 +273,7 @@ public class AiChatServiceImpl implements AiChatService {
                         conversationId, target.provider().getId(), key.getId(), i + 1, attempts);
             }
             try {
-                String reply = buildPrompt(pickClient(target, i), target, history, content)
+                String reply = buildPrompt(pickClient(target, i), target, history, content, ragContext)
                         .call()
                         .content();
                 if (key != null) {
@@ -276,6 +302,64 @@ public class AiChatServiceImpl implements AiChatService {
         boolean dynamic() {
             return provider != null;
         }
+    }
+
+    /* ================= RAG 知识库检索 ================= */
+
+    /** RAG 上下文载体：检索到的上下文文本 + 引用来源列表 */
+    private record RagContext(String context, List<ChatReferenceVO> references) {}
+
+    /** RAG 检索上下文展示前 N 字（避免 prompt 过长） */
+    private static final int REFERENCE_CONTENT_MAX = 200;
+    /** RAG 每个知识库默认召回条数 */
+    private static final int RAG_TOP_K = 5;
+
+    /**
+     * 构建 RAG 上下文：遍历 kbIds 逐个检索，拼接为 system prompt 格式的参考资料文本。
+     * kbIds 为空或 kb 门面不可用时返回 null context + 空 references（静默降级）。
+     */
+    private RagContext buildRagContext(List<Long> kbIds, String query) {
+        if (kbIds == null || kbIds.isEmpty()) {
+            return new RagContext(null, Collections.emptyList());
+        }
+        IKnowledgeBaseFacade facade = kbFacadeProvider.getIfAvailable();
+        if (facade == null) {
+            return new RagContext(null, Collections.emptyList());
+        }
+
+        List<KbSearchResultDTO> allResults = new ArrayList<>();
+        for (Long kbId : kbIds) {
+            try {
+                List<KbSearchResultDTO> results = facade.search(kbId, query, RAG_TOP_K);
+                allResults.addAll(results);
+            } catch (Exception e) {
+                log.warn("[PivotOS] RAG 检索知识库失败，已跳过：kbId={}, error={}", kbId, e.getMessage());
+            }
+        }
+        if (allResults.isEmpty()) {
+            return new RagContext(null, Collections.emptyList());
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("以下是从知识库中检索到的参考资料，请在回答时优先参考这些内容，并在回答中标注引用来源（如 [1]、[2]）：\n\n");
+        List<ChatReferenceVO> references = new ArrayList<>();
+        for (int i = 0; i < allResults.size(); i++) {
+            KbSearchResultDTO r = allResults.get(i);
+            sb.append('[').append(i + 1).append("] ");
+            if (r.getFileName() != null) {
+                sb.append("来源：").append(r.getFileName()).append('\n');
+            }
+            sb.append(r.getContent()).append("\n\n");
+
+            ChatReferenceVO ref = new ChatReferenceVO();
+            ref.setFileName(r.getFileName());
+            ref.setScore(r.getScore());
+            ref.setContent(r.getContent() != null && r.getContent().length() > REFERENCE_CONTENT_MAX
+                    ? r.getContent().substring(0, REFERENCE_CONTENT_MAX) + "…"
+                    : r.getContent());
+            references.add(ref);
+        }
+        return new RagContext(sb.toString().stripTrailing(), references);
     }
 
     /** 定位或新建会话（新建时标题取首条消息前 20 字，模型记本次实际解析结果） */

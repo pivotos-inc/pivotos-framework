@@ -46,7 +46,15 @@ public class FileProperties {
     private Integer presignExpireSeconds = 600;
 
     /** 允许直传的扩展名（小写，不含点） */
-    private List<String> allowedExtensions = List.of("jpg", "jpeg", "png", "gif", "webp");
+    private List<String> allowedExtensions = List.of(
+            // 图片
+            "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg",
+            // 文档（知识库 / 通用附件）
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+            "txt", "md", "markdown", "csv", "json",
+            // 压缩包
+            "zip", "rar", "7z", "tar", "gz"
+    );
 
     /**
      * 生效的访问基址：publicUrl 缺省回落 endpoint，去掉尾斜杠

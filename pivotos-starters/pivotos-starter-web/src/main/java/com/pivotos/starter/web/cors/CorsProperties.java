@@ -5,7 +5,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.util.List;
 
 /**
- * CORS 配置
+ * CORS 配置。
+ * <p>
+ * 代理同源模式下（前端 baseURL='/api'，经 Vite proxy / Nginx 反代），浏览器请求与后端同源，
+ * 不发送 Origin 头、不触发预检，此 CORS 配置处于休眠状态。
+ * 保留以兼容直连后端调试（如 Postman、浏览器裸连 8080）等非代理场景。
  */
 @ConfigurationProperties(prefix = "pivotos.cors")
 public class CorsProperties {

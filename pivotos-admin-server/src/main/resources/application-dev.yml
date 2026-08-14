@@ -20,6 +20,22 @@ spring:
       password: redis_wKTrkz
       timeout: 5s
 
+  ai:
+    # dev 兜底：IDEA 直接启动（不 source .env.dev）时用此值
+    # 优先级：环境变量 DASHSCOPE_API_KEY > 此兜底值；生产环境必须通过环境变量注入
+    openai:
+      api-key: ${DASHSCOPE_API_KEY:sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC}
+    vectorstore:
+      milvus:
+        client:
+          host: 175.24.176.176
+          port: 19530
+        database-name: default
+        collection-name: pivotos_kb
+        embedding-dimension: 1024
+        initialize-schema: true
+        metric-type: COSINE
+
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
@@ -27,6 +43,7 @@ mybatis-plus:
 logging:
   level:
     com.pivotos: debug
+    org.dromara.warm.flow: debug
 
 pivotos:
   tenant:
@@ -44,7 +61,7 @@ pivotos:
     public-url: https://cos.293242.com
   # XXL-Job 调度中心（测试环境本地）
   job:
-    admin-addresses: http://175.24.176.176:8100
+    admin-addresses: http://127.0.0.1:8100
     app-name: pivotos-executor
     port: 9999
   # 微信小程序（测试号）

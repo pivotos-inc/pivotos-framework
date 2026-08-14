@@ -27,11 +27,11 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noFields;
 @AnalyzeClasses(packages = "com.pivotos", importOptions = ImportOption.DoNotIncludeTests.class)
 class P0ArchitectureTest {
 
-    /** 其他插件实现包清单（S13 新增 Plugin 登记；message 已于 S13、ai 已于 S19 落地，flow/job/monitor 预登记） */
+    /** 其他插件实现包清单（S13 新增 Plugin 登记；message 已于 S13、ai 已于 S19 落地，flow/job/monitor 预登记，workflow 于 S55 落地，ai-kb 于 S58 落地） */
     private static final String[] OTHER_PLUGIN_IMPL = {
         "com.pivotos.message..", "com.pivotos.flow..",
         "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..",
-        "com.pivotos.ai.."};
+        "com.pivotos.ai..", "com.pivotos.workflow..", "com.pivotos.ai.kb.."};
 
     /** ScopedValue 上下文体系所在包：A6/A7 唯一豁免区 */
     private static final String CORE_PACKAGE = "com.pivotos.starter.core..";
@@ -41,7 +41,9 @@ class P0ArchitectureTest {
         "pivotos-plugin-system", "sys_",
         "pivotos-plugin-message", "msg_",
         "pivotos-plugin-ai", "ai_",
-        "pivotos-plugin-file", "sys_");
+        "pivotos-plugin-file", "sys_",
+        "pivotos-plugin-workflow", "flow_",
+        "pivotos-plugin-ai-kb", "ai_kb_");
 
     // ========== A1 + A2：Plugin 实现包之间无编译依赖；跨插件仅可访问对方 api 包 ==========
     // 直接否定式：system 实现包不得依赖任何"其他插件实现包"；其他插件 api 包不在清单内，天然放行。
@@ -63,9 +65,11 @@ class P0ArchitectureTest {
         .should().dependOnClassesThat(
             JavaClass.Predicates.resideInAnyPackage(
                     "com.pivotos.system..", "com.pivotos.flow..", "com.pivotos.file..",
-                    "com.pivotos.job..", "com.pivotos.monitor..", "com.pivotos.ai..")
+                    "com.pivotos.job..", "com.pivotos.monitor..", "com.pivotos.ai..",
+                    "com.pivotos.workflow..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
-                    "com.pivotos.system.api..", "com.pivotos.ai.api..")))
+                    "com.pivotos.system.api..", "com.pivotos.ai.api..",
+                    "com.pivotos.ai.kb.api..", "com.pivotos.workflow.api..")))
         .allowEmptyShould(true);
 
     // ai 侧对称规则（S19 新增）：ai 实现包只可依赖其他插件的 api 包
@@ -73,12 +77,31 @@ class P0ArchitectureTest {
     static final ArchRule a1_a2_ai_impl_must_not_depend_on_other_plugin_impls = noClasses()
         .that().resideInAPackage("com.pivotos.ai..")
         .and().resideOutsideOfPackage("com.pivotos.ai.api..")
+        .and().resideOutsideOfPackage("com.pivotos.ai.kb..")
         .should().dependOnClassesThat(
             JavaClass.Predicates.resideInAnyPackage(
                     "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
-                    "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..")
+                    "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..",
+                    "com.pivotos.ai.kb..", "com.pivotos.workflow..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
-                    "com.pivotos.system.api..", "com.pivotos.message.api..")))
+                    "com.pivotos.system.api..", "com.pivotos.message.api..",
+                    "com.pivotos.ai.kb.api..", "com.pivotos.workflow.api..")))
+        .allowEmptyShould(true);
+
+    // ai-kb 侧对称规则（S58 新增）：ai-kb 实现包只可依赖其他插件的 api 包
+    @ArchTest
+    static final ArchRule a1_a2_ai_kb_impl_must_not_depend_on_other_plugin_impls = noClasses()
+        .that().resideInAPackage("com.pivotos.ai.kb..")
+        .and().resideOutsideOfPackage("com.pivotos.ai.kb.api..")
+        .should().dependOnClassesThat(
+            JavaClass.Predicates.resideInAnyPackage(
+                    "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
+                    "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..",
+                    "com.pivotos.ai..", "com.pivotos.workflow..")
+                .and(JavaClass.Predicates.resideOutsideOfPackages(
+                    "com.pivotos.system.api..", "com.pivotos.message.api..",
+                    "com.pivotos.file.api..", "com.pivotos.ai.api..",
+                    "com.pivotos.ai.kb..", "com.pivotos.workflow.api..")))
         .allowEmptyShould(true);
 
     // monitor 侧对称规则（S48 新增）：monitor 实现包只可依赖其他插件的 api 包（当前无此需求，规则先行防回潮）
@@ -88,9 +111,26 @@ class P0ArchitectureTest {
         .should().dependOnClassesThat(
             JavaClass.Predicates.resideInAnyPackage(
                     "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
-                    "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.ai..")
+                    "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.ai..",
+                    "com.pivotos.workflow..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
-                    "com.pivotos.system.api..", "com.pivotos.message.api..", "com.pivotos.ai.api..")))
+                    "com.pivotos.system.api..", "com.pivotos.message.api..", "com.pivotos.ai.api..",
+                    "com.pivotos.ai.kb.api..", "com.pivotos.workflow.api..")))
+        .allowEmptyShould(true);
+
+    // workflow 侧对称规则（S55 新增）：workflow 实现包只可依赖其他插件的 api 包
+    @ArchTest
+    static final ArchRule a1_a2_workflow_impl_must_not_depend_on_other_plugin_impls = noClasses()
+        .that().resideInAPackage("com.pivotos.workflow..")
+        .and().resideOutsideOfPackage("com.pivotos.workflow.api..")
+        .should().dependOnClassesThat(
+            JavaClass.Predicates.resideInAnyPackage(
+                    "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
+                    "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..",
+                    "com.pivotos.ai..")
+                .and(JavaClass.Predicates.resideOutsideOfPackages(
+                    "com.pivotos.system.api..", "com.pivotos.message.api..",
+                    "com.pivotos.ai.api..", "com.pivotos.ai.kb.api..")))
         .allowEmptyShould(true);
 
     // ========== A3：Starter 不依赖 Plugin 任何包（实现 + api 均禁止） ==========    @ArchTest
@@ -99,7 +139,7 @@ class P0ArchitectureTest {
         .should().dependOnClassesThat().resideInAnyPackage(
             "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
             "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..",
-            "com.pivotos.ai..")
+            "com.pivotos.ai..", "com.pivotos.workflow..")
         .allowEmptyShould(true);
 
     // ========== A6：无 new Thread / 裸 CompletableFuture.supplyAsync（必须走 ContextExecutor） ==========

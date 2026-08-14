@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>2.4.0</version>
+        <version>2.5.0</version>
     </parent>
 
     <artifactId>pivotos-admin-server</artifactId>
@@ -85,6 +85,16 @@
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-monitor</artifactId>
+        </dependency>
+        <!-- workflow 插件（S55 2.5-F1：WarmFlow 工作流引擎底座） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-workflow</artifactId>
+        </dependency>
+        <!-- ai-kb 插件（S58 2.5-F4：RAG 知识库） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-ai-kb</artifactId>
         </dependency>
 
         <!-- ===== API 文档 ===== -->

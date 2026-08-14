@@ -32,6 +32,11 @@ public class ServiceException extends RuntimeException {
         this(GlobalErrorCode.SYSTEM_ERROR.getCode(), msg);
     }
 
+    public ServiceException(String msg, Throwable cause) {
+        super(msg, cause);
+        this.code = GlobalErrorCode.SYSTEM_ERROR.getCode();
+    }
+
     public int getCode() {
         return code;
     }

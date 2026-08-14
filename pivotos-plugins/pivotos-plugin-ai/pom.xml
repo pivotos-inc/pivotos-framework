@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-plugins</artifactId>
-        <version>2.4.0</version>
+        <version>2.5.0</version>
     </parent>
 
     <artifactId>pivotos-plugin-ai</artifactId>
@@ -25,6 +25,12 @@
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-message-api</artifactId>
+        </dependency>
+
+        <!-- 跨插件契约：RAG 知识库检索（S59 对话集成知识库上下文） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-ai-kb-api</artifactId>
         </dependency>
 
         <!-- 底座契约与 Starter -->

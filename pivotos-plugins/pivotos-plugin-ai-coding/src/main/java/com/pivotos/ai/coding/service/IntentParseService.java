@@ -1,6 +1,7 @@
 package com.pivotos.ai.coding.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.pivotos.common.core.exception.ServiceException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import com.pivotos.ai.client.AiClientRegistry;
@@ -171,7 +172,7 @@ public class IntentParseService {
         List<AiProvider> providers = providerMapper.selectList(
                 new LambdaQueryWrapper<AiProvider>().eq(AiProvider::getStatus, 0));
         if (providers.isEmpty()) {
-            throw new RuntimeException("No enabled AI provider found. Please configure one in AI management.");
+            throw new ServiceException("No enabled AI provider found. Please configure one in AI management.");
         }
         AiProvider provider = providers.get(0);
 
@@ -181,7 +182,7 @@ public class IntentParseService {
                         .eq(AiApiKey::getProviderId, provider.getId())
                         .eq(AiApiKey::getStatus, 0));
         if (keys.isEmpty()) {
-            throw new RuntimeException("No active API key for provider: " + provider.getName());
+            throw new ServiceException("No active API key for provider: " + provider.getName());
         }
         AiApiKey key = keys.get(0);
 
@@ -195,7 +196,7 @@ public class IntentParseService {
 
         log.info("[AI Coding] LLM response length={}", response != null ? response.length() : 0);
         if (response == null || response.isBlank()) {
-            throw new RuntimeException("AI returned empty response");
+            throw new ServiceException("AI returned empty response");
         }
 
         String json = response.trim();
@@ -209,7 +210,7 @@ public class IntentParseService {
             return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
             log.error("[AI Coding] JSON parse failed: {}", response, e);
-            throw new RuntimeException("AI response is not valid JSON", e);
+            throw new ServiceException("AI response is not valid JSON", e);
         }
     }
 }

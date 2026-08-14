@@ -15,8 +15,10 @@ spring:
     enabled: true
     baseline-on-migrate: true
     validate-on-migrate: true
+    out-of-order: true
   # AI 模型接入（阿里云百炼 DashScope · OpenAI 兼容模式）
-  # Key 只走环境变量（export DASHSCOPE_API_KEY=sk-xxx），严禁写死提交
+  # API Key 优先级：环境变量 DASHSCOPE_API_KEY > profile 配置兜底值（见 application-dev.yml）
+  # 程序运行时可从数据库动态覆盖（ChatModelFactory 按 provider.code 装配）；此处为静态兜底
   ai:
     # S46：anthropic/gemini starter 的自动装配以 spring.ai.model.chat 为开关且 matchIfMissing=true，
     # 不关会激活出 3 个 ChatModel Bean 顶掉 ChatClient 自动装配。动态供应商由 plugin-ai 的
@@ -30,6 +32,9 @@ spring:
       chat:
         options:
           model: qwen-plus
+      embedding:
+        options:
+          model: text-embedding-v3
 
 sa-token:
   token-name: Authorization
@@ -39,6 +44,16 @@ sa-token:
   is-read-cookie: false
   is-print: false
   is-log: false
+
+# WarmFlow 工作流引擎（S55 2.5-F1 引擎底座）
+warm-flow:
+  enabled: true
+  ui: true              # 开启内置设计器 UI（/warm-flow-ui/**）
+  banner: false
+  token-name: Authorization   # 复用 Sa-Token 同一 header
+  logic_delete: true          # WarmFlow 自带逻辑删除（del_flag）
+  logic_delete_value: 2
+  logic_not_delete_value: 0
 
 mybatis-plus:
   global-config:
@@ -59,3 +74,10 @@ pivotos:
     # 字段加密密钥（AES，16/24/32 位）：ai_api_key.api_key 等 @FieldEncrypt 字段落库加密
     # dev 默认值恰 16 位仅供本地联调，生产必须用环境变量覆盖
     field-encrypt-key: ${PIVOTOS_FIELD_ENCRYPT_KEY:pivotos-dev-key!}
+  kb:
+    # 默认向量存储类型：milvus（主用）/ simple（零中间件兜底）
+    vector-store:
+      type: ${PIVOTOS_KB_VECTOR_STORE_TYPE:milvus}
+      simple:
+        data-path: ./data/kb/simple
+        file-name: kb-store.json
