@@ -21,6 +21,10 @@ spring:
       timeout: 5s
 
   ai:
+    # dev 兜底：IDEA 直接启动（不 source .env.dev）时用此值
+    # 优先级：环境变量 DASHSCOPE_API_KEY > 此兜底值；生产环境必须通过环境变量注入
+    openai:
+      api-key: ${DASHSCOPE_API_KEY:sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC}
     vectorstore:
       milvus:
         client:
