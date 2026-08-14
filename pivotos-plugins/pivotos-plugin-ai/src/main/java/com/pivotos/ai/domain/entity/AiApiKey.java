@@ -24,6 +24,9 @@ public class AiApiKey extends TenantBaseDO {
     /** 备注名（如"生产主 Key"） */
     private String label;
 
+    /** Key 用途（chat=对话, embedding=向量化, all=通用） */
+    private String purpose;
+
     /** API Key（透明加解密，列表返回前须脱敏） */
     @FieldEncrypt
     @TableField(typeHandler = FieldEncryptTypeHandler.class)

@@ -3,6 +3,7 @@ package com.pivotos.ai.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.pivotos.ai.api.enums.AiErrorCode;
 import com.pivotos.ai.client.AiClientRegistry;
+import com.pivotos.ai.client.DelegatingEmbeddingModel;
 import com.pivotos.ai.domain.dto.ApiKeySaveRequest;
 import com.pivotos.ai.domain.dto.ProviderSaveRequest;
 import com.pivotos.ai.domain.entity.AiApiKey;
@@ -59,6 +60,8 @@ public class AiProviderServiceImpl implements AiProviderService {
     private final AiProperties aiProperties;
     /** message 插件未装配时降级为仅记日志（只依赖 -api 契约） */
     private final ObjectProvider<IMessageFacade> messageFacadeProvider;
+    /** 动态 EmbeddingModel 委托（ObjectProvider 打破与 DelegatingEmbeddingModel 的循环依赖） */
+    private final ObjectProvider<DelegatingEmbeddingModel> embeddingModelProvider;
 
     // ---------- 供应商管理 ----------
 
@@ -89,6 +92,7 @@ public class AiProviderServiceImpl implements AiProviderService {
         fillProvider(existing, request);
         providerMapper.updateById(existing);
         clientRegistry.evictProvider(existing.getId());
+        evictEmbeddingModel();
     }
 
     @Override
@@ -98,6 +102,7 @@ public class AiProviderServiceImpl implements AiProviderService {
         providerMapper.deleteById(id);
         apiKeyMapper.delete(Wrappers.<AiApiKey>lambdaQuery().eq(AiApiKey::getProviderId, id));
         clientRegistry.evictProvider(id);
+        evictEmbeddingModel();
     }
 
     // ---------- 对话侧只读 ----------
@@ -144,6 +149,29 @@ public class AiProviderServiceImpl implements AiProviderService {
         // Key 随归属供应商同租户，供应商归属已在 requireActiveProvider 校验，
         // 这里跨租户直查（平台兜底 Key 在租户上下文下也能取到）
         return apiKeyMapper.selectActiveByProvider(providerId);
+    }
+
+    // ---------- 向量化侧只读（S61） ----------
+
+    @Override
+    public AiProvider findEmbeddingProvider() {
+        return listActiveProviders().stream()
+                .filter(p -> !listActiveEmbeddingKeys(p.getId()).isEmpty())
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Override
+    public List<AiApiKey> listActiveEmbeddingKeys(Long providerId) {
+        return apiKeyMapper.selectActiveByPurpose(providerId, "embedding");
+    }
+
+    @Override
+    public void evictEmbeddingModel() {
+        DelegatingEmbeddingModel model = embeddingModelProvider.getIfAvailable();
+        if (model != null) {
+            model.evict();
+        }
     }
 
     // ---------- Key 健康度 ----------
@@ -204,11 +232,18 @@ public class AiProviderServiceImpl implements AiProviderService {
         AiApiKey entity = new AiApiKey();
         entity.setProviderId(request.getProviderId());
         entity.setLabel(request.getLabel() == null ? "" : request.getLabel());
+        // purpose 默认 all（对话+向量化通用），合法值 chat/embedding/all
+        String purpose = request.getPurpose();
+        entity.setPurpose(purpose == null || purpose.isBlank() ? "all" : purpose.toLowerCase());
         entity.setApiKey(request.getApiKey().strip());
         entity.setStatus(request.getStatus() == null ? 0 : request.getStatus());
         // Key 随归属供应商同租户（平台视角 = 0），同上避免 fill=INSERT 插 NULL
         entity.setTenantId(currentTenantId());
         apiKeyMapper.insert(entity);
+        // 新增 embedding/all 用途 Key 可能影响 EmbeddingModel 解析
+        if ("embedding".equals(entity.getPurpose()) || "all".equals(entity.getPurpose())) {
+            evictEmbeddingModel();
+        }
         return entity.getId();
     }
 
@@ -217,6 +252,9 @@ public class AiProviderServiceImpl implements AiProviderService {
         AiApiKey existing = requireKey(request.getId());
         if (request.getLabel() != null) {
             existing.setLabel(request.getLabel());
+        }
+        if (request.getPurpose() != null && !request.getPurpose().isBlank()) {
+            existing.setPurpose(request.getPurpose().toLowerCase());
         }
         if (request.getStatus() != null) {
             // 停用 → 重新启用视为人工修复，连续失败计数清零，避免一次抖动即再次自动停用
@@ -230,6 +268,8 @@ public class AiProviderServiceImpl implements AiProviderService {
         }
         apiKeyMapper.updateById(existing);
         clientRegistry.evictKey(existing.getProviderId(), existing.getId());
+        // Key 变更可能影响 EmbeddingModel 解析（purpose/status/apiKey 均可变）
+        evictEmbeddingModel();
     }
 
     @Override
@@ -237,6 +277,7 @@ public class AiProviderServiceImpl implements AiProviderService {
         AiApiKey existing = requireKey(id);
         apiKeyMapper.deleteById(id);
         clientRegistry.evictKey(existing.getProviderId(), id);
+        evictEmbeddingModel();
     }
 
     // ---------- 私有工具 ----------
@@ -322,6 +363,7 @@ public class AiProviderServiceImpl implements AiProviderService {
         entity.setCode(request.getCode());
         entity.setBaseUrl(request.getBaseUrl().strip());
         entity.setDefaultModel(request.getDefaultModel() == null ? "" : request.getDefaultModel().strip());
+        entity.setEmbeddingModel(request.getEmbeddingModel() == null ? "" : request.getEmbeddingModel().strip());
         entity.setSort(request.getSort() == null ? 0 : request.getSort());
         entity.setStatus(request.getStatus() == null ? 0 : request.getStatus());
         entity.setRemark(request.getRemark());
@@ -334,6 +376,7 @@ public class AiProviderServiceImpl implements AiProviderService {
         vo.setCode(entity.getCode());
         vo.setBaseUrl(entity.getBaseUrl());
         vo.setDefaultModel(entity.getDefaultModel());
+        vo.setEmbeddingModel(entity.getEmbeddingModel());
         vo.setSort(entity.getSort());
         vo.setStatus(entity.getStatus());
         vo.setRemark(entity.getRemark());
@@ -352,6 +395,7 @@ public class AiProviderServiceImpl implements AiProviderService {
         vo.setId(entity.getId());
         vo.setProviderId(entity.getProviderId());
         vo.setLabel(entity.getLabel());
+        vo.setPurpose(entity.getPurpose());
         vo.setStatus(entity.getStatus());
         vo.setFailCount(entity.getFailCount());
         vo.setCreateTime(entity.getCreateTime());

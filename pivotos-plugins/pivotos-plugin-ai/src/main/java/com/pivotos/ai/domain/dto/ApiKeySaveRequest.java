@@ -23,6 +23,9 @@ public class ApiKeySaveRequest {
     @Size(max = 64, message = "备注名最长 64 字符")
     private String label;
 
+    /** Key 用途（chat=对话, embedding=向量化, all=通用；空默认 all） */
+    private String purpose;
+
     /** API Key 明文（新增必填；修改留空表示不变更） */
     @Size(max = 256, message = "API Key 最长 256 字符")
     private String apiKey;

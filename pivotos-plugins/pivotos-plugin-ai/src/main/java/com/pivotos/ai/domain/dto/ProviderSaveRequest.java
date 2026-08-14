@@ -32,6 +32,10 @@ public class ProviderSaveRequest {
     @Size(max = 64, message = "默认模型最长 64 字符")
     private String defaultModel;
 
+    /** 向量化模型名（空则回退 spring.ai.openai.embedding.options.model） */
+    @Size(max = 64, message = "向量化模型名最长 64 字符")
+    private String embeddingModel;
+
     /** 排序 */
     private Integer sort;
 

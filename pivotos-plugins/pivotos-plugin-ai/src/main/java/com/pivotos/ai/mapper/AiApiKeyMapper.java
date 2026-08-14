@@ -32,6 +32,19 @@ public interface AiApiKeyMapper extends BaseMapper<AiApiKey> {
             + "ORDER BY id ASC")
     List<AiApiKey> selectActiveByProvider(@Param("providerId") Long providerId);
 
+    /**
+     * 供应商启用中且指定用途的 Key（purpose IN ('embedding','all') 或 IN ('chat','all')）。
+     * 向量化解析链专用：按 purpose 过滤可用 Key。
+     */
+    @InterceptorIgnore(tenantLine = "true")
+    @Results({@Result(column = "api_key", property = "apiKey", typeHandler = FieldEncryptTypeHandler.class)})
+    @Select("SELECT * FROM ai_api_key WHERE provider_id = #{providerId} "
+            + "AND status = 0 AND deleted = 0 "
+            + "AND (purpose = #{purpose} OR purpose = 'all') "
+            + "ORDER BY id ASC")
+    List<AiApiKey> selectActiveByPurpose(@Param("providerId") Long providerId,
+                                         @Param("purpose") String purpose);
+
     /** 连续失败计数原子 +1，返回累加后的值需另查（并发安全由行锁保证） */
     @InterceptorIgnore(tenantLine = "true")
     @Update("UPDATE ai_api_key SET fail_count = fail_count + 1 WHERE id = #{id} AND deleted = 0")
