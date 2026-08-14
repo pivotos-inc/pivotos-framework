@@ -211,9 +211,12 @@ public class KbPipelineService {
                     .filterExpression("kb_id == '" + kb.getId() + "'")
                     .build();
             List<Document> vectorResults = vectorStore.similaritySearch(request);
-            return vectorResults.stream()
-                    .map(d -> new RrfFusion.FusedResult(d.getText(), d.getMetadata(), null, 0.0))
-                    .toList();
+            List<RrfFusion.FusedResult> results = new ArrayList<>();
+            for (int i = 0; i < vectorResults.size(); i++) {
+                Document d = vectorResults.get(i);
+                results.add(new RrfFusion.FusedResult(d.getText(), d.getMetadata(), null, 0.0, i + 1, 0));
+            }
+            return results;
         }
 
         // 混合检索：向量 topK*3 + BM25 topK*3 → RRF 融合 topK

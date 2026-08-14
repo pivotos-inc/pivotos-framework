@@ -69,7 +69,8 @@ public class RrfFusion {
             if (entry.bm25Rank > 0) {
                 score += 1.0 / (K + entry.bm25Rank);
             }
-            results.add(new FusedResult(entry.content, entry.metadata, entry.chunk, score));
+            results.add(new FusedResult(entry.content, entry.metadata, entry.chunk, score,
+                    entry.vectorRank, entry.bm25Rank));
         }
 
         results.sort((a, b) -> Double.compare(b.score(), a.score()));
@@ -122,5 +123,6 @@ public class RrfFusion {
      * @param score    RRF 融合分数
      */
     public record FusedResult(String content, Map<String, Object> metadata,
-                              AiKbChunk chunk, double score) {}
+                              AiKbChunk chunk, double score,
+                              int vectorRank, int bm25Rank) {}
 }

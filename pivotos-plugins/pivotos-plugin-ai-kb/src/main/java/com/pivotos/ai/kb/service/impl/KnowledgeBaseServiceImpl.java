@@ -159,6 +159,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         KbSearchResultDTO dto = new KbSearchResultDTO();
         dto.setContent(result.content());
         dto.setScore(result.score());
+        dto.setVectorRank(result.vectorRank());
+        dto.setBm25Rank(result.bm25Rank());
         if (result.metadata() != null) {
             String fileName = (String) result.metadata().get("file_name");
             dto.setFileName(StringUtils.hasText(fileName) ? fileName : null);

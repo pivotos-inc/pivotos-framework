@@ -47,6 +47,15 @@ public interface AiKbChunkMapper extends BaseMapper<AiKbChunk> {
     List<AiKbChunk> selectByKbId(@Param("kbId") Long kbId);
 
     /**
+     * 加载指定文档全部文本块（分块查看/解析预览用）。
+     *
+     * @param docId 文档ID
+     * @return 文本块列表（按块序号升序）
+     */
+    @Select("SELECT * FROM ai_kb_chunk WHERE doc_id = #{docId} ORDER BY chunk_index ASC")
+    List<AiKbChunk> selectByDocId(@Param("docId") Long docId);
+
+    /**
      * 删除知识库全部文本块。
      *
      * @param kbId 知识库ID
