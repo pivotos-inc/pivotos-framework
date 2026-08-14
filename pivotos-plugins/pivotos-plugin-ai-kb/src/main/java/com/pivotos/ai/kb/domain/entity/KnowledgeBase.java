@@ -41,6 +41,9 @@ public class KnowledgeBase extends TenantBaseDO {
     /** 重排开关（true=RRF 融合后经 reranker 精排，默认 true，S65） */
     private Boolean rerank;
 
+    /** 查询改写开关（true=检索前 LLM 改写多轮问题为独立检索语句，默认 false，S68） */
+    private Boolean queryRewrite;
+
     /** 状态：0 正常，1 停用 */
     private Integer status;
 }

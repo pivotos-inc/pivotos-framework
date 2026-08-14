@@ -25,4 +25,13 @@ public class KbSearchResultDTO {
 
     /** 重排相关性分数（null 表示未重排，S65 检索调试用） */
     private Double rerankScore;
+
+    /** 命中分块 ID（ai_kb_chunk.id，null 表示未反查到，S68 溯源下钻用） */
+    private Long chunkId;
+
+    /** 来源文档 ID（ai_kb_document.id，可为 null） */
+    private Long docId;
+
+    /** 来源知识库 ID */
+    private Long kbId;
 }

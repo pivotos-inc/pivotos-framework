@@ -5,10 +5,12 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.pivotos.ai.kb.api.dto.KbSearchResultDTO;
 import com.pivotos.ai.kb.domain.dto.KbBaseSaveRequest;
 import com.pivotos.ai.kb.domain.dto.KbBaseUpdateRequest;
+import com.pivotos.ai.kb.domain.entity.AiKbChunk;
 import com.pivotos.ai.kb.domain.entity.KbDocument;
 import com.pivotos.ai.kb.domain.entity.KnowledgeBase;
 import com.pivotos.ai.kb.domain.vo.KnowledgeBaseVO;
 import com.pivotos.ai.kb.enums.KbVectorStoreTypeEnum;
+import com.pivotos.ai.kb.mapper.AiKbChunkMapper;
 import com.pivotos.ai.kb.mapper.KbDocumentMapper;
 import com.pivotos.ai.kb.mapper.KnowledgeBaseMapper;
 import com.pivotos.ai.kb.retriever.RrfFusion;
@@ -19,15 +21,22 @@ import com.pivotos.common.core.page.PageQuery;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.starter.core.context.TenantContext;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 知识库管理服务实现。
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
@@ -36,6 +45,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final KbDocumentMapper documentMapper;
+    private final AiKbChunkMapper chunkMapper;
     private final KbPipelineService pipelineService;
 
     @Override
@@ -115,6 +125,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         entity.setChunkOverlap(request.getChunkOverlap());
         entity.setHybridSearch(request.getHybridSearch());
         entity.setRerank(request.getRerank());
+        entity.setQueryRewrite(request.getQueryRewrite());
         entity.setStatus(request.getStatus());
     }
 
@@ -135,6 +146,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         vo.setChunkOverlap(entity.getChunkOverlap());
         vo.setHybridSearch(entity.getHybridSearch());
         vo.setRerank(entity.getRerank());
+        vo.setQueryRewrite(entity.getQueryRewrite());
         vo.setStatus(entity.getStatus());
         vo.setTenantId(entity.getTenantId());
         vo.setCreateTime(entity.getCreateTime());
@@ -152,22 +164,88 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Override
     public List<KbSearchResultDTO> search(Long kbId, String query, int topK) {
         KnowledgeBase entity = requireKnowledgeBase(kbId);
-        return pipelineService.search(entity, query, topK).stream()
-                .map(this::toSearchResultDTO)
-                .toList();
+        List<RrfFusion.FusedResult> results = pipelineService.search(entity, query, topK);
+        List<KbSearchResultDTO> dtos = new ArrayList<>(results.size());
+        for (RrfFusion.FusedResult result : results) {
+            dtos.add(toSearchResultDTO(result, kbId));
+        }
+        fillChunkRefs(kbId, results, dtos);
+        return dtos;
     }
 
-    private KbSearchResultDTO toSearchResultDTO(RrfFusion.FusedResult result) {
+    private KbSearchResultDTO toSearchResultDTO(RrfFusion.FusedResult result, Long kbId) {
         KbSearchResultDTO dto = new KbSearchResultDTO();
         dto.setContent(result.content());
         dto.setScore(result.score());
         dto.setVectorRank(result.vectorRank());
         dto.setBm25Rank(result.bm25Rank());
         dto.setRerankScore(result.rerankScore());
+        dto.setKbId(kbId);
         if (result.metadata() != null) {
             String fileName = (String) result.metadata().get("file_name");
             dto.setFileName(StringUtils.hasText(fileName) ? fileName : null);
         }
+        // BM25 通道命中直接携带分块实体（S68 溯源）
+        AiKbChunk chunk = result.chunk();
+        if (chunk != null) {
+            dto.setChunkId(chunk.getId());
+            dto.setDocId(chunk.getDocId());
+        }
         return dto;
+    }
+
+    /**
+     * 补齐纯向量通道结果的 chunkId/docId（S68 溯源下钻）：
+     * 按 content_hash（内容前 100 字 md5，与索引写入口径一致）批量反查 ai_kb_chunk，
+     * 反查失败静默置 null，不影响检索结果本身。
+     */
+    private void fillChunkRefs(Long kbId, List<RrfFusion.FusedResult> results, List<KbSearchResultDTO> dtos) {
+        List<Integer> missingIdx = new ArrayList<>();
+        List<String> hashes = new ArrayList<>();
+        for (int i = 0; i < dtos.size(); i++) {
+            KbSearchResultDTO dto = dtos.get(i);
+            if (dto.getChunkId() == null && StringUtils.hasText(results.get(i).content())) {
+                missingIdx.add(i);
+                hashes.add(contentHashOf(results.get(i).content()));
+            }
+        }
+        if (missingIdx.isEmpty()) {
+            return;
+        }
+        try {
+            List<AiKbChunk> chunks = chunkMapper.selectList(Wrappers.<AiKbChunk>lambdaQuery()
+                    .select(AiKbChunk::getId, AiKbChunk::getDocId, AiKbChunk::getContentHash)
+                    .eq(AiKbChunk::getKbId, kbId)
+                    .in(AiKbChunk::getContentHash, hashes));
+            Map<String, AiKbChunk> byHash = new HashMap<>();
+            for (AiKbChunk chunk : chunks) {
+                byHash.putIfAbsent(chunk.getContentHash(), chunk);
+            }
+            for (int j = 0; j < missingIdx.size(); j++) {
+                AiKbChunk hit = byHash.get(hashes.get(j));
+                if (hit != null) {
+                    dtos.get(missingIdx.get(j)).setChunkId(hit.getId());
+                    dtos.get(missingIdx.get(j)).setDocId(hit.getDocId());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[PivotOS-KB] 分块溯源反查失败，chunkId 置空: kbId={}, reason={}", kbId, e.getMessage());
+        }
+    }
+
+    /** 内容哈希口径与 KbPipelineService 索引写入一致：前 100 字 md5 */
+    private String contentHashOf(String content) {
+        String prefix = content.length() > 100 ? content.substring(0, 100) : content;
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(prefix.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return String.valueOf(prefix.hashCode());
+        }
     }
 }

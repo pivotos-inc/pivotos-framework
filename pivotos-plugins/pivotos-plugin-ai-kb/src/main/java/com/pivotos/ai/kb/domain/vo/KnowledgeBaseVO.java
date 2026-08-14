@@ -24,6 +24,7 @@ public class KnowledgeBaseVO implements Serializable {
     private Integer chunkOverlap;
     private Boolean hybridSearch;
     private Boolean rerank;
+    private Boolean queryRewrite;
     private Integer status;
     private Long tenantId;
     private LocalDateTime createTime;
