@@ -35,6 +35,17 @@ public interface AiProviderService {
     /** 供应商可用模型（OpenAI 兼容 /models，5 分钟缓存） */
     List<String> listModels(Long providerId);
 
+    // ---------- 向量化侧只读（S61 动态 Embedding Key） ----------
+
+    /** 默认向量化供应商：租户自有启用配置优先，无则平台兜底；取 sort 最靠前且有 embedding/all 用途启用 Key 者，无则 null */
+    AiProvider findEmbeddingProvider();
+
+    /** 供应商启用中且用途匹配 embedding/all 的 Key 列表（解密实体，仅供调用链内部使用） */
+    List<AiApiKey> listActiveEmbeddingKeys(Long providerId);
+
+    /** 失效动态 EmbeddingModel 委托缓存（Key/供应商变更时由管理链路调用） */
+    void evictEmbeddingModel();
+
     /** 校验并返回启用中的供应商（不存在/停用/非当前租户且非平台 → 5021） */
     AiProvider requireActiveProvider(Long providerId);
 

@@ -23,6 +23,7 @@ public class KbDocumentVO implements Serializable {
     private Long fileSize;
     private Integer chunkSize;
     private Integer chunkOverlap;
+    private Integer chunkCount;
     private Integer status;
     private String errorMsg;
     private Integer vectorCount;

@@ -1,5 +1,6 @@
 package com.pivotos.ai.kb.config;
 
+import com.pivotos.ai.kb.extractor.OcrExtractor;
 import com.pivotos.ai.kb.vectorstore.KbVectorStoreProvider;
 import com.pivotos.ai.kb.vectorstore.SimpleVectorStoreProvider;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -20,5 +21,10 @@ public class KbConfig {
     @Bean
     public KbVectorStoreProvider simpleVectorStoreProvider(EmbeddingModel embeddingModel, KbProperties properties) {
         return new SimpleVectorStoreProvider(embeddingModel, properties);
+    }
+
+    @Bean
+    public OcrExtractor ocrExtractor(KbProperties properties) {
+        return new OcrExtractor(properties);
     }
 }

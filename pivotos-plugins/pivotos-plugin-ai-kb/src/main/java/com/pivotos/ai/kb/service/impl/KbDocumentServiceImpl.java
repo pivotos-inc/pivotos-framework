@@ -6,8 +6,10 @@ import com.pivotos.ai.kb.domain.dto.KbDocPageQuery;
 import com.pivotos.ai.kb.domain.dto.KbDocUploadRequest;
 import com.pivotos.ai.kb.domain.entity.KbDocument;
 import com.pivotos.ai.kb.domain.entity.KnowledgeBase;
+import com.pivotos.ai.kb.domain.vo.AiKbChunkVO;
 import com.pivotos.ai.kb.domain.vo.KbDocumentVO;
 import com.pivotos.ai.kb.enums.KbDocStatusEnum;
+import com.pivotos.ai.kb.mapper.AiKbChunkMapper;
 import com.pivotos.ai.kb.mapper.KbDocumentMapper;
 import com.pivotos.ai.kb.mapper.KnowledgeBaseMapper;
 import com.pivotos.ai.kb.service.KbDocumentService;
@@ -30,6 +32,7 @@ public class KbDocumentServiceImpl implements KbDocumentService {
 
     private final KbDocumentMapper documentMapper;
     private final KnowledgeBaseMapper knowledgeBaseMapper;
+    private final AiKbChunkMapper chunkMapper;
     private final KbPipelineService pipelineService;
 
     @Override
@@ -67,6 +70,7 @@ public class KbDocumentServiceImpl implements KbDocumentService {
         entity.setChunkOverlap(kb.getChunkOverlap());
         entity.setStatus(KbDocStatusEnum.PENDING.getValue());
         entity.setVectorCount(0);
+        entity.setChunkCount(0);
         documentMapper.insert(entity);
 
         // 同步触发向量化（大文件后续可改异步）
@@ -90,6 +94,21 @@ public class KbDocumentServiceImpl implements KbDocumentService {
         // 先删除旧向量，再重新索引
         pipelineService.deleteByDoc(kb, entity);
         pipelineService.index(kb, entity);
+    }
+
+    @Override
+    public List<AiKbChunkVO> listChunks(Long id) {
+        KbDocument entity = requireDocument(id);
+        return chunkMapper.selectByDocId(entity.getId()).stream()
+                .map(chunk -> {
+                    AiKbChunkVO vo = new AiKbChunkVO();
+                    vo.setId(chunk.getId());
+                    vo.setChunkIndex(chunk.getChunkIndex());
+                    vo.setContent(chunk.getContent());
+                    vo.setContentHash(chunk.getContentHash());
+                    return vo;
+                })
+                .toList();
     }
 
     private KnowledgeBase requireKnowledgeBase(Long id) {
@@ -126,6 +145,7 @@ public class KbDocumentServiceImpl implements KbDocumentService {
         vo.setStatus(entity.getStatus());
         vo.setErrorMsg(entity.getErrorMsg());
         vo.setVectorCount(entity.getVectorCount());
+        vo.setChunkCount(entity.getChunkCount());
         vo.setCreateTime(entity.getCreateTime());
         vo.setUpdateTime(entity.getUpdateTime());
         return vo;

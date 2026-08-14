@@ -16,4 +16,10 @@ public class KbSearchResultDTO {
 
     /** 来源文件名 */
     private String fileName;
+
+    /** 向量通道排名（0 表示未命中，检索调试用） */
+    private Integer vectorRank;
+
+    /** BM25 通道排名（0 表示未命中，检索调试用） */
+    private Integer bm25Rank;
 }

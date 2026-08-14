@@ -1,6 +1,7 @@
 package com.pivotos.ai.kb.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.pivotos.ai.kb.api.dto.KbSearchResultDTO;
 import com.pivotos.ai.kb.domain.dto.KbBaseSaveRequest;
 import com.pivotos.ai.kb.domain.dto.KbBaseUpdateRequest;
 import com.pivotos.ai.kb.domain.dto.KbSearchRequest;
@@ -12,7 +13,6 @@ import com.pivotos.common.core.page.PageResult;
 import com.pivotos.common.core.result.R;
 import com.pivotos.starter.auth.account.StpSysUtil;
 import lombok.RequiredArgsConstructor;
-import org.springframework.ai.document.Document;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,7 +24,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 知识库管理接口。
@@ -84,16 +83,8 @@ public class KnowledgeBaseController {
     /** 相似性检索（调试/管理用） */
     @PostMapping("/search")
     @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
-    public R<List<Map<String, Object>>> search(@Validated @RequestBody KbSearchRequest request) {
-        List<Document> docs = knowledgeBaseService.search(request.getKbId(),
-                request.getQuery(), request.getTopK() == null ? 5 : request.getTopK());
-        // Document.text → content，对齐前端 KbSearchResult 类型
-        List<Map<String, Object>> results = docs.stream()
-                .map(doc -> Map.<String, Object>of(
-                        "content", doc.getText(),
-                        "score", doc.getScore() != null ? doc.getScore() : 0.0,
-                        "metadata", doc.getMetadata()))
-                .toList();
-        return R.ok(results);
+    public R<List<KbSearchResultDTO>> search(@Validated @RequestBody KbSearchRequest request) {
+        return R.ok(knowledgeBaseService.search(request.getKbId(),
+                request.getQuery(), request.getTopK() == null ? 5 : request.getTopK()));
     }
 }

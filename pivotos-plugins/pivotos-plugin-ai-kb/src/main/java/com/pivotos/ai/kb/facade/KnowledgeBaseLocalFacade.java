@@ -6,9 +6,7 @@ import com.pivotos.ai.kb.api.facade.IKnowledgeBaseFacade;
 import com.pivotos.ai.kb.domain.vo.KnowledgeBaseVO;
 import com.pivotos.ai.kb.service.KnowledgeBaseService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.ai.document.Document;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 
 import java.util.List;
 
@@ -30,24 +28,13 @@ public class KnowledgeBaseLocalFacade implements IKnowledgeBaseFacade {
 
     @Override
     public List<KbSearchResultDTO> search(Long kbId, String query, int topK) {
-        return knowledgeBaseService.search(kbId, query, topK).stream()
-                .map(this::toSearchResultDTO)
-                .toList();
+        return knowledgeBaseService.search(kbId, query, topK);
     }
 
     private KbOptionDTO toOptionDTO(KnowledgeBaseVO vo) {
         KbOptionDTO dto = new KbOptionDTO();
         dto.setId(vo.getId());
         dto.setName(vo.getName());
-        return dto;
-    }
-
-    private KbSearchResultDTO toSearchResultDTO(Document doc) {
-        KbSearchResultDTO dto = new KbSearchResultDTO();
-        dto.setContent(doc.getText());
-        dto.setScore(doc.getScore());
-        String fileName = (String) doc.getMetadata().get("file_name");
-        dto.setFileName(StringUtils.hasText(fileName) ? fileName : null);
         return dto;
     }
 }

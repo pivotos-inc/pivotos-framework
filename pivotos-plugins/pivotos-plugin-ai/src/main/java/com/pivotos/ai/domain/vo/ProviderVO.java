@@ -21,6 +21,9 @@ public class ProviderVO extends BaseDTO {
     /** 默认模型 */
     private String defaultModel;
 
+    /** 向量化模型名（空则回退 spring.ai.openai.embedding.options.model） */
+    private String embeddingModel;
+
     /** 排序 */
     private Integer sort;
 

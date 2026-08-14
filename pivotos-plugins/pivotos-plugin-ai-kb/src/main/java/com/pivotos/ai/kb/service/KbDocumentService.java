@@ -2,8 +2,11 @@ package com.pivotos.ai.kb.service;
 
 import com.pivotos.ai.kb.domain.dto.KbDocPageQuery;
 import com.pivotos.ai.kb.domain.dto.KbDocUploadRequest;
+import com.pivotos.ai.kb.domain.vo.AiKbChunkVO;
 import com.pivotos.ai.kb.domain.vo.KbDocumentVO;
 import com.pivotos.common.core.page.PageResult;
+
+import java.util.List;
 
 /**
  * 知识库文档管理服务。
@@ -34,4 +37,9 @@ public interface KbDocumentService {
      * 重新向量化
      */
     void reindex(Long id);
+
+    /**
+     * 查询文档文本块列表（按块序号升序，分块查看/解析预览用）
+     */
+    List<AiKbChunkVO> listChunks(Long id);
 }

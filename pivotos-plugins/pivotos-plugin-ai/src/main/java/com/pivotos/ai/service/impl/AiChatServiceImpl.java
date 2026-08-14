@@ -38,9 +38,11 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * AI 对话服务实现
@@ -340,11 +342,23 @@ public class AiChatServiceImpl implements AiChatService {
             return new RagContext(null, Collections.emptyList());
         }
 
+        // 跨知识库去重：按 content 前 100 字 hash 去重（保留首次出现，丢弃后续重复）
+        Set<String> seenHash = new HashSet<>();
+        List<KbSearchResultDTO> deduped = new ArrayList<>();
+        for (KbSearchResultDTO r : allResults) {
+            String prefix = r.getContent() != null
+                    ? r.getContent().substring(0, Math.min(100, r.getContent().length()))
+                    : "";
+            if (seenHash.add(prefix)) {
+                deduped.add(r);
+            }
+        }
+
         StringBuilder sb = new StringBuilder();
         sb.append("以下是从知识库中检索到的参考资料，请在回答时优先参考这些内容，并在回答中标注引用来源（如 [1]、[2]）：\n\n");
         List<ChatReferenceVO> references = new ArrayList<>();
-        for (int i = 0; i < allResults.size(); i++) {
-            KbSearchResultDTO r = allResults.get(i);
+        for (int i = 0; i < deduped.size(); i++) {
+            KbSearchResultDTO r = deduped.get(i);
             sb.append('[').append(i + 1).append("] ");
             if (r.getFileName() != null) {
                 sb.append("来源：").append(r.getFileName()).append('\n');

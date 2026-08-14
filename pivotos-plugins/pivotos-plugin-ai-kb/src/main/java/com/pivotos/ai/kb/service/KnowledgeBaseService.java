@@ -1,11 +1,11 @@
 package com.pivotos.ai.kb.service;
 
+import com.pivotos.ai.kb.api.dto.KbSearchResultDTO;
 import com.pivotos.ai.kb.domain.dto.KbBaseSaveRequest;
 import com.pivotos.ai.kb.domain.dto.KbBaseUpdateRequest;
 import com.pivotos.ai.kb.domain.vo.KnowledgeBaseVO;
 import com.pivotos.common.core.page.PageQuery;
 import com.pivotos.common.core.page.PageResult;
-import org.springframework.ai.document.Document;
 
 import java.util.List;
 
@@ -47,5 +47,5 @@ public interface KnowledgeBaseService {
     /**
      * 在指定知识库中检索相似文本块
      */
-    List<Document> search(Long kbId, String query, int topK);
+    List<KbSearchResultDTO> search(Long kbId, String query, int topK);
 }

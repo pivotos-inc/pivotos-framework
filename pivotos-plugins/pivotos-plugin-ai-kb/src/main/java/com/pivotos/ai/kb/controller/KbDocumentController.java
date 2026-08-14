@@ -3,6 +3,7 @@ package com.pivotos.ai.kb.controller;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.pivotos.ai.kb.domain.dto.KbDocPageQuery;
 import com.pivotos.ai.kb.domain.dto.KbDocUploadRequest;
+import com.pivotos.ai.kb.domain.vo.AiKbChunkVO;
 import com.pivotos.ai.kb.domain.vo.KbDocumentVO;
 import com.pivotos.ai.kb.service.KbDocumentService;
 import com.pivotos.common.core.page.PageResult;
@@ -17,6 +18,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 知识库文档管理接口。
@@ -63,5 +66,12 @@ public class KbDocumentController {
     public R<Void> reindex(@PathVariable Long id) {
         documentService.reindex(id);
         return R.ok();
+    }
+
+    /** 文本块列表（分块查看/解析预览用） */
+    @GetMapping("/{id}/chunks")
+    @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
+    public R<List<AiKbChunkVO>> listChunks(@PathVariable Long id) {
+        return R.ok(documentService.listChunks(id));
     }
 }

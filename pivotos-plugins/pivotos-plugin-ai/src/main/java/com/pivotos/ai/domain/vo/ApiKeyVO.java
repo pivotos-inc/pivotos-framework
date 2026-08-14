@@ -15,6 +15,9 @@ public class ApiKeyVO extends BaseDTO {
     /** 备注名 */
     private String label;
 
+    /** Key 用途（chat=对话, embedding=向量化, all=通用） */
+    private String purpose;
+
     /** 脱敏 Key（如 sk-****abcd） */
     private String keyMasked;
 
