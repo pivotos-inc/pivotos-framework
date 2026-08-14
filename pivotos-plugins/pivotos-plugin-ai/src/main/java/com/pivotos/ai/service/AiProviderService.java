@@ -46,6 +46,11 @@ public interface AiProviderService {
     /** 失效动态 EmbeddingModel 委托缓存（Key/供应商变更时由管理链路调用） */
     void evictEmbeddingModel();
 
+    // ---------- 重排侧只读（S65 reranker 重排） ----------
+
+    /** 重排供应商：租户自有启用配置优先，无则平台兜底；取 sort 最靠前且 rerankModel 非空、有 embedding/all 用途启用 Key 者，无则 null */
+    AiProvider findRerankProvider();
+
     /** 校验并返回启用中的供应商（不存在/停用/非当前租户且非平台 → 5021） */
     AiProvider requireActiveProvider(Long providerId);
 

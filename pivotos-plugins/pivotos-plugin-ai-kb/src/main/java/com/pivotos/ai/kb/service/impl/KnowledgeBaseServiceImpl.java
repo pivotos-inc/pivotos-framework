@@ -114,6 +114,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         entity.setChunkSize(request.getChunkSize());
         entity.setChunkOverlap(request.getChunkOverlap());
         entity.setHybridSearch(request.getHybridSearch());
+        entity.setRerank(request.getRerank());
         entity.setStatus(request.getStatus());
     }
 
@@ -133,6 +134,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         vo.setChunkSize(entity.getChunkSize());
         vo.setChunkOverlap(entity.getChunkOverlap());
         vo.setHybridSearch(entity.getHybridSearch());
+        vo.setRerank(entity.getRerank());
         vo.setStatus(entity.getStatus());
         vo.setTenantId(entity.getTenantId());
         vo.setCreateTime(entity.getCreateTime());
@@ -161,6 +163,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         dto.setScore(result.score());
         dto.setVectorRank(result.vectorRank());
         dto.setBm25Rank(result.bm25Rank());
+        dto.setRerankScore(result.rerankScore());
         if (result.metadata() != null) {
             String fileName = (String) result.metadata().get("file_name");
             dto.setFileName(StringUtils.hasText(fileName) ? fileName : null);

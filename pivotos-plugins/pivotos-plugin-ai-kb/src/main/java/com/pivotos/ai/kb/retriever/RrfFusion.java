@@ -70,7 +70,7 @@ public class RrfFusion {
                 score += 1.0 / (K + entry.bm25Rank);
             }
             results.add(new FusedResult(entry.content, entry.metadata, entry.chunk, score,
-                    entry.vectorRank, entry.bm25Rank));
+                    entry.vectorRank, entry.bm25Rank, null));
         }
 
         results.sort((a, b) -> Double.compare(b.score(), a.score()));
@@ -117,12 +117,19 @@ public class RrfFusion {
     /**
      * 融合结果：content + metadata（含 file_name 等） + chunk（可能为 null）+ RRF 分数。
      *
-     * @param content  文本块内容
-     * @param metadata 元数据（向量检索结果携带，BM25 独有结果可能为 null）
-     * @param chunk    BM25 文本块（向量独有结果为 null）
-     * @param score    RRF 融合分数
+     * @param content     文本块内容
+     * @param metadata    元数据（向量检索结果携带，BM25 独有结果可能为 null）
+     * @param chunk       BM25 文本块（向量独有结果为 null）
+     * @param score       RRF 融合分数
+     * @param rerankScore 重排相关性分数（null=未重排，S65 检索调试用）
      */
     public record FusedResult(String content, Map<String, Object> metadata,
                               AiKbChunk chunk, double score,
-                              int vectorRank, int bm25Rank) {}
+                              int vectorRank, int bm25Rank, Double rerankScore) {
+
+        /** 回填重排分数（重排后由管线生成新实例，保持 record 不可变） */
+        public FusedResult withRerankScore(Double newRerankScore) {
+            return new FusedResult(content, metadata, chunk, score, vectorRank, bm25Rank, newRerankScore);
+        }
+    }
 }

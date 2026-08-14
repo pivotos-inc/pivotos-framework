@@ -27,6 +27,12 @@
             <artifactId>pivotos-plugin-file-api</artifactId>
         </dependency>
 
+        <!-- 跨插件契约：检索链路尾部 reranker 精排（S65，只依赖 -api） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-ai-api</artifactId>
+        </dependency>
+
         <!-- 底座 Starter -->
         <dependency>
             <groupId>com.pivotos</groupId>

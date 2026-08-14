@@ -174,6 +174,17 @@ public class AiProviderServiceImpl implements AiProviderService {
         }
     }
 
+    // ---------- 重排侧只读（S65） ----------
+
+    @Override
+    public AiProvider findRerankProvider() {
+        return listActiveProviders().stream()
+                .filter(p -> p.getRerankModel() != null && !p.getRerankModel().isBlank())
+                .filter(p -> !listActiveEmbeddingKeys(p.getId()).isEmpty())
+                .findFirst()
+                .orElse(null);
+    }
+
     // ---------- Key 健康度 ----------
 
     @Override
@@ -364,6 +375,7 @@ public class AiProviderServiceImpl implements AiProviderService {
         entity.setBaseUrl(request.getBaseUrl().strip());
         entity.setDefaultModel(request.getDefaultModel() == null ? "" : request.getDefaultModel().strip());
         entity.setEmbeddingModel(request.getEmbeddingModel() == null ? "" : request.getEmbeddingModel().strip());
+        entity.setRerankModel(request.getRerankModel() == null ? "" : request.getRerankModel().strip());
         entity.setSort(request.getSort() == null ? 0 : request.getSort());
         entity.setStatus(request.getStatus() == null ? 0 : request.getStatus());
         entity.setRemark(request.getRemark());
@@ -377,6 +389,7 @@ public class AiProviderServiceImpl implements AiProviderService {
         vo.setBaseUrl(entity.getBaseUrl());
         vo.setDefaultModel(entity.getDefaultModel());
         vo.setEmbeddingModel(entity.getEmbeddingModel());
+        vo.setRerankModel(entity.getRerankModel());
         vo.setSort(entity.getSort());
         vo.setStatus(entity.getStatus());
         vo.setRemark(entity.getRemark());

@@ -36,6 +36,10 @@ public class ProviderSaveRequest {
     @Size(max = 64, message = "向量化模型名最长 64 字符")
     private String embeddingModel;
 
+    /** 重排模型名（如 qwen3-rerank，空则不启用重排，S65） */
+    @Size(max = 100, message = "重排模型名最长 100 字符")
+    private String rerankModel;
+
     /** 排序 */
     private Integer sort;
 
