@@ -3,6 +3,7 @@ package com.pivotos.ai.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.pivotos.ai.api.enums.AiErrorCode;
 import com.pivotos.ai.client.AiClientRegistry;
 import com.pivotos.ai.domain.dto.ChatSendRequest;
@@ -119,6 +120,10 @@ public class AiChatServiceImpl implements AiChatService {
         if (rag.rewrittenQuery() != null) {
             // S68：查询改写发生时的透明化提示（前端展示实际检索词）
             metaData.put("rewrittenQuery", rag.rewrittenQuery());
+        }
+        if (rag.kbRoutedOut()) {
+            // S69：意图路由出局——本轮判定无需知识库检索（前端提示按通用知识回答）
+            metaData.put("kbRoutedOut", true);
         }
         sendEvent(emitter, "meta", metaData);
 
@@ -317,8 +322,11 @@ public class AiChatServiceImpl implements AiChatService {
 
     /* ================= RAG 知识库检索 ================= */
     
-    /** RAG 上下文载体：检索上下文文本 + 引用来源列表 + 改写后的检索词（未改写为 null，S68） */
-    private record RagContext(String context, List<ChatReferenceVO> references, String rewrittenQuery) {}
+    /** RAG 上下文载体：检索上下文文本 + 引用来源列表 + 改写后的检索词（未改写为 null，S68）+ 意图路由出局标记（S69） */
+    private record RagContext(String context, List<ChatReferenceVO> references, String rewrittenQuery, boolean kbRoutedOut) {}
+    
+    /** 意图路由决策：是否需要知识库检索 + 实际检索词（S69，路由与改写合并单次 LLM 调用） */
+    private record RouteDecision(boolean needSearch, String query) {}
     
     /** RAG 上下文展示前 N 字（避免 prompt 过长） */
     private static final int REFERENCE_CONTENT_MAX = 200;
@@ -326,26 +334,28 @@ public class AiChatServiceImpl implements AiChatService {
     private static final int RAG_TOP_K = 5;
     /** 查询改写参考的最近历史消息条数（S68） */
     private static final int REWRITE_HISTORY_LIMIT = 4;
-    /** 查询改写 system 指令（S68）：只输出改写结果，不回答问题 */
-    private static final String REWRITE_SYSTEM_PROMPT = """
-            你是检索查询改写助手。请根据对话历史中的用户问题，把用户最新的问题改写为一条可独立用于知识库检索的查询语句：\
-            补全代词与省略的上下文，保持原意，不加无关内容。\
-            严禁回答问题，严禁输出任何解释或前缀，只输出改写后的查询语句本身。\
-            示例：历史问题「鲫鱼汤怎么做才适合产妇喝？」，最新问题「那要炖多久呢？」→ 输出「产妇喝的鲫鱼汤要炖多久」""";
+    /** 意图路由 + 查询改写 system 指令（S69）：严格只输出 JSON，不回答问题 */
+    private static final String ROUTE_SYSTEM_PROMPT = """
+            你是知识库检索路由助手。根据对话历史中的用户问题，对用户最新的问题做两个判断：\
+            一、是否需要检索知识库：打招呼、闲聊、纯常识或计算类问题输出 needSearch=false，可能需要参考知识库内容的问题输出 needSearch=true；\
+            二、把最新问题改写为可独立检索的查询语句（补全代词与省略的上下文，保持原意，不加无关内容）。\
+            严禁回答问题，严禁输出任何解释，只输出一行 JSON：{"needSearch":true,"query":"..."}。\
+            示例：最新问题「你好」→ {"needSearch":false,"query":"你好"}；\
+            历史问题「鲫鱼汤怎么做才适合产妇喝？」，最新问题「那要炖多久呢？」→ {"needSearch":true,"query":"产妇喝的鲫鱼汤要炖多久"}""";
     
     /**
      * 构建 RAG 上下文：遍历 kbIds 逐个检索，拼接为 system prompt 格式的参考资料文本。
      * kbIds 为空或 kb 门面不可用时返回 null context + 空 references（静默降级）。
-     * S68：任一选中知识库开启查询改写时，检索前用 LLM 将多轮问题改写为独立检索语句（失败降级原问题）；
+     * S69：检索前先做意图路由（与 S68 查询改写合并单次 LLM 调用），判定无需检索则跳过全部检索；
      * 引用携带 kbId/kbName/docId/chunkId 溯源信息。
      */
     private RagContext buildRagContext(List<Long> kbIds, String query, List<Message> history, ChatTarget target) {
         if (kbIds == null || kbIds.isEmpty()) {
-            return new RagContext(null, Collections.emptyList(), null);
+            return new RagContext(null, Collections.emptyList(), null, false);
         }
         IKnowledgeBaseFacade facade = kbFacadeProvider.getIfAvailable();
         if (facade == null) {
-            return new RagContext(null, Collections.emptyList(), null);
+            return new RagContext(null, Collections.emptyList(), null, false);
         }
     
         // 知识库选项映射（名称展示 + 改写开关判断）
@@ -356,14 +366,15 @@ public class AiChatServiceImpl implements AiChatService {
             log.warn("[PivotOS] RAG 加载知识库选项失败，kbName/queryRewrite 降级: {}", e.getMessage());
         }
     
-        // S68 查询改写：任一选中知识库开启即改写，失败静默降级原问题
-        String rewrittenQuery = null;
+        // S69 意图路由 + S68 查询改写：合并单次 LLM 调用（异常降级为检索 + 原问题）
         boolean rewriteEnabled = kbIds.stream()
                 .anyMatch(id -> optionMap.get(id) != null && Boolean.TRUE.equals(optionMap.get(id).getQueryRewrite()));
-        if (rewriteEnabled) {
-            rewrittenQuery = rewriteQuery(target, history, query);
+        RouteDecision decision = routeQuery(target, history, query, rewriteEnabled);
+        if (!decision.needSearch()) {
+            return new RagContext(null, Collections.emptyList(), null, true);
         }
-        String searchQuery = rewrittenQuery != null ? rewrittenQuery : query;
+        String searchQuery = decision.query();
+        String rewrittenQuery = searchQuery.strip().equals(query.strip()) ? null : searchQuery;
     
         List<KbSearchResultDTO> allResults = new ArrayList<>();
         for (Long kbId : kbIds) {
@@ -375,7 +386,7 @@ public class AiChatServiceImpl implements AiChatService {
             }
         }
         if (allResults.isEmpty()) {
-            return new RagContext(null, Collections.emptyList(), rewrittenQuery);
+            return new RagContext(null, Collections.emptyList(), rewrittenQuery, false);
         }
     
         // 跨知识库去重：按 content 前 100 字 hash 去重（保留首次出现，丢弃后续重复）
@@ -414,16 +425,19 @@ public class AiChatServiceImpl implements AiChatService {
                     : r.getContent());
             references.add(ref);
         }
-        return new RagContext(sb.toString().stripTrailing(), references, rewrittenQuery);
+        return new RagContext(sb.toString().stripTrailing(), references, rewrittenQuery, false);
     }
     
     /**
-     * 查询改写（S68）：取最近 {@link #REWRITE_HISTORY_LIMIT} 条历史用户问题 + 当前问题，
-     * 用当前对话目标（轮询起点 Key，不额外消耗轮询位）同步改写为独立检索语句。
-     * 只喂用户消息：assistant 长回复会诱导模型续答而非改写，且徒增 token。
-     * 任何异常 / 空结果 / 与原问题相同均降级为 null（调用方用原问题检索）。
+     * 意图路由 + 查询改写（S69）：取最近 {@link #REWRITE_HISTORY_LIMIT} 条历史用户问题 + 当前问题，
+     * 用当前对话目标（轮询起点 Key，不额外消耗轮询位）单次调用同时完成
+     * 「是否需要检索」与「改写为独立检索语句」两个判断（JSON 输出）。
+     * 只喂用户消息：assistant 长回复会诱导模型续答而非判断，且徒增 token。
+     * rewriteEnabled=false（所有选中知识库改写开关均关）时仅采纳 needSearch，检索词强制原问题。
+     * 任何异常 / JSON 解析失败 / 字段缺失均降级为「检索 + 原问题」（宁可多检不可漏检）。
      */
-    private String rewriteQuery(ChatTarget target, List<Message> history, String query) {
+    private RouteDecision routeQuery(ChatTarget target, List<Message> history, String query, boolean rewriteEnabled) {
+        RouteDecision fallback = new RouteDecision(true, query);
         try {
             List<Message> userMessages = history.stream()
                     .filter(m -> m instanceof UserMessage)
@@ -433,21 +447,37 @@ public class AiChatServiceImpl implements AiChatService {
                     : userMessages;
             ChatClient client = pickClient(target, 0);
             ChatClient.ChatClientRequestSpec spec = client.prompt()
-                    .system(REWRITE_SYSTEM_PROMPT)
+                    .system(ROUTE_SYSTEM_PROMPT)
                     .messages(recent)
                     .user(query);
             if (target.dynamic() && target.model() != null && !target.model().isBlank()) {
                 spec = spec.options(clientRegistry.buildChatOptions(target.provider(), target.model()));
             }
-            String rewritten = spec.call().content();
-            if (rewritten == null || rewritten.isBlank() || rewritten.strip().equals(query.strip())) {
-                return null;
+            String content = spec.call().content();
+            if (content == null || content.isBlank()) {
+                return fallback;
             }
-            log.info("[PivotOS] RAG 查询改写生效：原问题={} 改写后={}", query, rewritten.strip());
-            return rewritten.strip();
+            // 容忍模型包代码围栏等杂质：截取首个 { 到末个 } 之间的 JSON 片段
+            int start = content.indexOf('{');
+            int end = content.lastIndexOf('}');
+            if (start < 0 || end <= start) {
+                log.warn("[PivotOS] RAG 意图路由输出非 JSON，降级检索: {}", content.strip());
+                return fallback;
+            }
+            JSONObject json = JSON.parseObject(content.substring(start, end + 1));
+            if (!json.getBooleanValue("needSearch", true)) {
+                log.info("[PivotOS] RAG 意图路由出局（无需检索）：问题={}", query);
+                return new RouteDecision(false, query);
+            }
+            String routed = json.getString("query");
+            if (!rewriteEnabled || routed == null || routed.isBlank() || routed.strip().equals(query.strip())) {
+                return new RouteDecision(true, query);
+            }
+            log.info("[PivotOS] RAG 查询改写生效：原问题={} 改写后={}", query, routed.strip());
+            return new RouteDecision(true, routed.strip());
         } catch (Exception e) {
-            log.warn("[PivotOS] RAG 查询改写失败，降级原问题检索: {}", e.getMessage());
-            return null;
+            log.warn("[PivotOS] RAG 意图路由调用失败，降级原问题检索: {}", e.getMessage());
+            return fallback;
         }
     }
     
