@@ -1,12 +1,11 @@
 package com.pivotos.workflow.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.common.core.result.R;
-import com.pivotos.starter.auth.account.StpSysUtil;
 import com.pivotos.workflow.domain.dto.CcPageQuery;
 import com.pivotos.workflow.domain.vo.WorkflowCcVO;
 import com.pivotos.workflow.service.FlowCcService;
+import com.pivotos.workflow.support.WorkflowAuthSupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 流程抄送管理（S78 F1）：抄送我的列表 + 已读标记。
+ * <p>
+ * 端点三体系通用（S79）：仅校「已登录」，仅本人数据由 service 层兜底。
  */
 @RestController
 @RequestMapping("/workflow/cc")
@@ -26,15 +27,15 @@ public class WorkflowCcController {
 
     /** 抄送我的分页（仅本人数据） */
     @GetMapping("/page")
-    @SaCheckPermission(value = "workflow:cc:list", type = StpSysUtil.TYPE)
     public R<PageResult<WorkflowCcVO>> page(CcPageQuery query) {
+        WorkflowAuthSupport.requireUserId();
         return R.ok(flowCcService.pageMine(query));
     }
 
     /** 标记已读（仅本人记录） */
     @PutMapping("/{id}/read")
-    @SaCheckPermission(value = "workflow:cc:list", type = StpSysUtil.TYPE)
     public R<Void> markRead(@PathVariable Long id) {
+        WorkflowAuthSupport.requireUserId();
         flowCcService.markRead(id);
         return R.ok();
     }
