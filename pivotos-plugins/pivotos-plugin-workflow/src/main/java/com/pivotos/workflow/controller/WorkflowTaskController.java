@@ -5,6 +5,7 @@ import com.pivotos.common.core.result.R;
 import com.pivotos.workflow.domain.dto.AddSignatureCmd;
 import com.pivotos.workflow.domain.dto.TaskActionCmd;
 import com.pivotos.workflow.domain.dto.TaskPageQuery;
+import com.pivotos.workflow.domain.vo.UserOptionVO;
 import com.pivotos.workflow.domain.vo.WorkflowHisTaskVO;
 import com.pivotos.workflow.domain.vo.WorkflowTaskVO;
 import com.pivotos.workflow.service.FlowTaskService;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -82,5 +84,12 @@ public class WorkflowTaskController {
     public R<List<WorkflowHisTaskVO>> taskHistory(@PathVariable Long instanceId) {
         WorkflowAuthSupport.requireUserId();
         return R.ok(flowTaskService.taskHistory(instanceId));
+    }
+
+    /** 加签选人用户选项（S81）：活跃用户 id/username/nickname，支持关键字检索 */
+    @GetMapping("/user-options")
+    public R<List<UserOptionVO>> userOptions(@RequestParam(required = false) String keyword) {
+        WorkflowAuthSupport.requireUserId();
+        return R.ok(flowTaskService.userOptions(keyword));
     }
 }
