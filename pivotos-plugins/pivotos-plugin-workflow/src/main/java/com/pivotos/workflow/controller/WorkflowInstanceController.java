@@ -47,6 +47,14 @@ public class WorkflowInstanceController {
         return R.ok();
     }
 
+    /** 催办（S77 F2）：发起人催促当前审批人，10 分钟限频 */
+    @PutMapping("/{instanceId}/urge")
+    @SaCheckPermission(value = "workflow:instance:list", type = StpSysUtil.TYPE)
+    public R<Void> urge(@PathVariable Long instanceId) {
+        flowInstanceService.urge(instanceId);
+        return R.ok();
+    }
+
     @GetMapping("/{instanceId}")
     @SaCheckPermission(value = "workflow:instance:detail", type = StpSysUtil.TYPE)
     public R<WorkflowInstanceVO> detail(@PathVariable Long instanceId) {
