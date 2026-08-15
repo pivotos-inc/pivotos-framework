@@ -160,7 +160,7 @@ public class FlowTaskService {
      * <p>
      * 走 warm-flow 原生 addSignature：被加签人写入 flow_user（type=APPROVAL）+
      * his_task 留痕（cooperateType=ADD_SIGNATURE）；或签语义，任一审批人通过即推进。
-     * 权限校验（当前人是否任务处理人）与重复加签拦截由引擎内置完成。
+     * 重复加签拦截由引擎内置；办理人归属校验引擎不做，由 requireApprover 在服务层兜底（S82 L3）。
      */
     public void addSignature(AddSignatureCmd cmd) {
         if (cmd.getTaskId() == null) {
@@ -176,6 +176,7 @@ public class FlowTaskService {
         if (userIds.isEmpty()) {
             throw new ServiceException("加签目标用户不能为空");
         }
+        requireApprover(cmd.getTaskId());
         FlowParams params = FlowParams.build()
                 .handler(currentHandler())
                 .addHandlers(userIds)
@@ -196,8 +197,8 @@ public class FlowTaskService {
      * 减签（S82）：从待办任务移除审批人。
      * <p>
      * 走 warm-flow 原生 reductionSignature：his_task 留痕（cooperateType=REDUCTION_SIGNATURE）。
-     * 安全底线由引擎内置：办理人不足或只有一人时拒绝减签（节点不会减空），
-     * 办理人权限校验同加签口径由引擎完成。
+     * 人数安全底线由引擎内置：办理人不足或只有一人时拒绝减签（节点不会减空）；
+     * 办理人归属校验引擎不做，由 requireApprover 在服务层兜底（S82 L3）。
      */
     public void reductionSignature(ReductionSignatureCmd cmd) {
         if (cmd.getTaskId() == null) {
@@ -213,6 +214,7 @@ public class FlowTaskService {
         if (userIds.isEmpty()) {
             throw new ServiceException("减签目标用户不能为空");
         }
+        requireApprover(cmd.getTaskId());
         FlowParams params = FlowParams.build()
                 .handler(currentHandler())
                 .reductionHandlers(userIds)
@@ -269,6 +271,26 @@ public class FlowTaskService {
             return Long.parseLong(id);
         } catch (NumberFormatException e) {
             return null;
+        }
+    }
+
+    /**
+     * 办理人归属校验（S82 L3）：仅当前任务的待办审批人可加签/减签。
+     * <p>
+     * warm-flow 加签/减签引擎层只校参数与人数，不校调用者归属，
+     * 故在服务层兜底：非本任务审批人拒绝，防止任意登录用户操作他人任务。
+     */
+    private void requireApprover(Long taskId) {
+        Long userId = LoginContext.getUserId();
+        if (userId == null) {
+            throw new ServiceException("未登录或登录已过期");
+        }
+        List<User> users = FlowEngine.userService().listByAssociatedAndTypes(taskId,
+                UserType.APPROVAL.getKey(), UserType.TRANSFER.getKey());
+        boolean isApprover = users != null && users.stream()
+                .anyMatch(u -> String.valueOf(userId).equals(u.getProcessedBy()));
+        if (!isApprover) {
+            throw new ServiceException("仅当前任务的审批人可执行此操作");
         }
     }
 
