@@ -19,6 +19,8 @@ public enum AiErrorCode implements ErrorCode {
     CONVERSATION_NOT_FOUND(5001, "会话不存在"),
     CHAT_CONTENT_EMPTY(5002, "对话内容不能为空"),
     CHAT_FAILED(5003, "AI 对话失败，请稍后重试"),
+    CHART_GEN_FAILED(5004, "AI 图表生成失败，请换个说法再试"),
+    CHART_QUESTION_EMPTY(5005, "图表描述不能为空"),
 
     // ---------- 模型配置 ----------
     AI_NOT_CONFIGURED(5020, "AI 模型未配置"),

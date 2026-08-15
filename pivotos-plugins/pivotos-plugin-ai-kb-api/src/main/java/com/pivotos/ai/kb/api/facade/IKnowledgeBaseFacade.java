@@ -2,6 +2,7 @@ package com.pivotos.ai.kb.api.facade;
 
 import com.pivotos.ai.kb.api.dto.KbOptionDTO;
 import com.pivotos.ai.kb.api.dto.KbSearchResultDTO;
+import com.pivotos.ai.kb.api.dto.KbStatsDTO;
 
 import java.util.List;
 
@@ -27,4 +28,9 @@ public interface IKnowledgeBaseFacade {
      * @return 检索结果列表
      */
     List<KbSearchResultDTO> search(Long kbId, String query, int topK);
+
+    /**
+     * 知识库规模统计（知识库/文档/分块/评测记录计数，S71 运营工作台/数据大屏）
+     */
+    KbStatsDTO kbStats();
 }
