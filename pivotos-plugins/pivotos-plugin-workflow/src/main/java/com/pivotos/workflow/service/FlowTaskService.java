@@ -3,12 +3,15 @@ package com.pivotos.workflow.service;
 import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.starter.core.context.LoginContext;
+import com.pivotos.system.api.facade.IUserFacade;
 import com.pivotos.workflow.domain.dto.AddSignatureCmd;
 import com.pivotos.workflow.domain.dto.TaskActionCmd;
 import com.pivotos.workflow.domain.dto.TaskPageQuery;
+import com.pivotos.workflow.domain.vo.UserOptionVO;
 import com.pivotos.workflow.domain.vo.WorkflowHisTaskVO;
 import com.pivotos.workflow.domain.vo.WorkflowTaskVO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.dromara.warm.flow.core.dto.FlowParams;
 import org.dromara.warm.flow.core.entity.Definition;
 import org.dromara.warm.flow.core.entity.HisTask;
@@ -39,6 +42,7 @@ public class FlowTaskService {
     private final InsService insService;
     private final DefService defService;
     private final WorkflowNotifyService notifyService;
+    private final ObjectProvider<IUserFacade> userFacadeProvider;
 
     /**
      * 我的待办分页（WarmFlow 按 PermissionHandler.permissions() 自动过滤）
@@ -201,6 +205,25 @@ public class FlowTaskService {
         return taskService.selectCount(condition);
     }
 
+    /**
+     * 加签选人用户选项（S81）：活跃用户 id/username/nickname。
+     * <p>
+     * IUserFacade 未装配时降级为空列表（与 S78 通知降级口径一致）。
+     */
+    public List<UserOptionVO> userOptions(String keyword) {
+        IUserFacade facade = userFacadeProvider.getIfAvailable();
+        if (facade == null) {
+            return List.of();
+        }
+        return facade.listActiveOptions(50, keyword).stream().map(u -> {
+            UserOptionVO vo = new UserOptionVO();
+            vo.setId(u.getId());
+            vo.setUsername(u.getUsername());
+            vo.setNickname(u.getNickname());
+            return vo;
+        }).toList();
+    }
+
     private String currentHandler() {
         Long userId = LoginContext.getUserId();
         return userId != null ? String.valueOf(userId) : "anonymous";
@@ -249,6 +272,7 @@ public class FlowTaskService {
         vo.setTargetNodeName(his.getTargetNodeName());
         vo.setApprover(his.getApprover());
         vo.setSkipType(his.getSkipType());
+        vo.setCooperateType(his.getCooperateType());
         vo.setFlowStatus(his.getFlowStatus());
         vo.setMessage(his.getMessage());
         vo.setCreateTime(toLocalDateTime(his.getCreateTime()));

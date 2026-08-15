@@ -62,6 +62,17 @@ public class MessageTestApplication {
             public List<UserDTO> listByIds(Collection<Long> userIds) {
                 return userIds.stream().filter(USERS::containsKey).map(USERS::get).toList();
             }
+
+            @Override
+            public List<UserDTO> listActiveOptions(int limit, String keyword) {
+                int size = Math.min(limit <= 0 ? 50 : limit, 100);
+                return USERS.values().stream()
+                        .filter(u -> keyword == null || keyword.isBlank()
+                                || u.getUsername().contains(keyword)
+                                || (u.getNickname() != null && u.getNickname().contains(keyword)))
+                        .limit(size)
+                        .toList();
+            }
         };
     }
 
