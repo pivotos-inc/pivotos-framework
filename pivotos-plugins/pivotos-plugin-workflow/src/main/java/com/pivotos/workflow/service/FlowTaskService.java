@@ -3,6 +3,7 @@ package com.pivotos.workflow.service;
 import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.starter.core.context.LoginContext;
+import com.pivotos.workflow.domain.dto.AddSignatureCmd;
 import com.pivotos.workflow.domain.dto.TaskActionCmd;
 import com.pivotos.workflow.domain.dto.TaskPageQuery;
 import com.pivotos.workflow.domain.vo.WorkflowHisTaskVO;
@@ -143,6 +144,43 @@ public class FlowTaskService {
             taskService.depute(cmd.getTaskId(), params);
         } catch (org.dromara.warm.flow.core.exception.FlowException e) {
             throw new ServiceException("委派失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 加签（S78 F2）：为待办任务追加审批人。
+     * <p>
+     * 走 warm-flow 原生 addSignature：被加签人写入 flow_user（type=APPROVAL）+
+     * his_task 留痕（cooperateType=ADD_SIGNATURE）；或签语义，任一审批人通过即推进。
+     * 权限校验（当前人是否任务处理人）与重复加签拦截由引擎内置完成。
+     */
+    public void addSignature(AddSignatureCmd cmd) {
+        if (cmd.getTaskId() == null) {
+            throw new ServiceException("任务 ID 不能为空");
+        }
+        if (cmd.getUserIds() == null || cmd.getUserIds().isEmpty()) {
+            throw new ServiceException("加签目标用户不能为空");
+        }
+        List<String> userIds = cmd.getUserIds().stream()
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        if (userIds.isEmpty()) {
+            throw new ServiceException("加签目标用户不能为空");
+        }
+        FlowParams params = FlowParams.build()
+                .handler(currentHandler())
+                .addHandlers(userIds)
+                .message(cmd.getMessage());
+        try {
+            taskService.addSignature(cmd.getTaskId(), params);
+        } catch (org.dromara.warm.flow.core.exception.FlowException e) {
+            throw new ServiceException("加签失败：" + e.getMessage());
+        }
+        // 通知被加签人（任务信息用于补齐流程名/节点名）
+        Task task = taskService.getById(cmd.getTaskId());
+        if (task != null) {
+            notifyService.notifyOnAddSignature(task, userIds);
         }
     }
 

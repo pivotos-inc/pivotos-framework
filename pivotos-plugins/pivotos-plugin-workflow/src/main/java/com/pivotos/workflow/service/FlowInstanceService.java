@@ -38,6 +38,7 @@ public class FlowInstanceService {
     private final TaskService taskService;
     private final DefService defService;
     private final WorkflowNotifyService notifyService;
+    private final FlowCcService ccService;
     private final RedissonClient redissonClient;
 
     /**
@@ -84,6 +85,9 @@ public class FlowInstanceService {
             }
         }
         notifyService.notifyOnStart(instance);
+        // 发起抄送（S78 F1）：落库 flow_cc + 站内信通知收件人（落库返回的实际收件人口径）
+        List<Long> ccReceivers = ccService.recordCc(instance, cmd.getCcUserIds());
+        notifyService.notifyOnCc(instance, ccReceivers);
         return toVO(instance);
     }
 

@@ -2,6 +2,7 @@ package com.pivotos.workflow.domain.dto;
 
 import lombok.Data;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -21,4 +22,7 @@ public class StartInstanceCmd {
 
     /** 流程变量（可传递给流程节点的条件参数） */
     private Map<String, Object> variable;
+
+    /** 抄送收件人用户 ID 集合（可选，S78 F1：发起时抄送） */
+    private List<Long> ccUserIds;
 }
