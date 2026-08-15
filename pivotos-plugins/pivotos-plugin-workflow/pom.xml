@@ -43,6 +43,11 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-message-api</artifactId>
         </dependency>
+        <!-- 系统插件契约（抄送/加签通知解析用户昵称，S78） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-system-api</artifactId>
+        </dependency>
         <!-- Redisson 客户端（催办限频，S77 F2） -->
         <dependency>
             <groupId>org.redisson</groupId>

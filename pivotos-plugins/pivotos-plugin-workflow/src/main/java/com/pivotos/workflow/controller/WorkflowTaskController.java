@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.common.core.result.R;
 import com.pivotos.starter.auth.account.StpSysUtil;
+import com.pivotos.workflow.domain.dto.AddSignatureCmd;
 import com.pivotos.workflow.domain.dto.TaskActionCmd;
 import com.pivotos.workflow.domain.dto.TaskPageQuery;
 import com.pivotos.workflow.domain.vo.WorkflowHisTaskVO;
@@ -20,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 审批任务管理：待办 / 已办 / 审批通过 / 驳回 / 转办 / 委派 / 审批历史。
+ * 审批任务管理：待办 / 已办 / 审批通过 / 驳回 / 转办 / 委派 / 加签 / 审批历史。
  */
 @RestController
 @RequestMapping("/workflow/task")
@@ -66,6 +67,14 @@ public class WorkflowTaskController {
     @SaCheckPermission(value = "workflow:task:depute", type = StpSysUtil.TYPE)
     public R<Void> depute(@RequestBody TaskActionCmd cmd) {
         flowTaskService.depute(cmd);
+        return R.ok();
+    }
+
+    /** 加签（S78 F2）：为待办任务追加审批人（warm-flow 原生或签语义） */
+    @PutMapping("/add-signature")
+    @SaCheckPermission(value = "workflow:task:add-signature", type = StpSysUtil.TYPE)
+    public R<Void> addSignature(@RequestBody AddSignatureCmd cmd) {
+        flowTaskService.addSignature(cmd);
         return R.ok();
     }
 

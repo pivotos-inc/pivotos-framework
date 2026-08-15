@@ -2,6 +2,9 @@ package com.pivotos.workflow.service;
 
 import com.pivotos.message.api.dto.MessageSendCmd;
 import com.pivotos.message.api.facade.IMessageFacade;
+import com.pivotos.starter.core.context.LoginContext;
+import com.pivotos.system.api.dto.UserDTO;
+import com.pivotos.system.api.facade.IUserFacade;
 import org.dromara.warm.flow.core.entity.Definition;
 import org.dromara.warm.flow.core.entity.Instance;
 import org.dromara.warm.flow.core.entity.Task;
@@ -35,15 +38,20 @@ public class WorkflowNotifyService {
 
     private final DefService defService;
 
+    private final IUserFacade userFacade;
+
     /**
-     * 用 ObjectProvider 延迟解析：若未装配 message 插件则静默跳过通知。
+     * 用 ObjectProvider 延迟解析：若未装配 message 插件则静默跳过通知；
+     * IUserFacade 未装配时加签通知中操作人昵称降级为用户 ID（S78）。
      */
     public WorkflowNotifyService(ObjectProvider<IMessageFacade> messageFacadeProvider,
-                                 TaskService taskService, UserService flowUserService, DefService defService) {
+                                 TaskService taskService, UserService flowUserService, DefService defService,
+                                 ObjectProvider<IUserFacade> userFacadeProvider) {
         this.messageFacade = messageFacadeProvider.getIfAvailable();
         this.taskService = taskService;
         this.flowUserService = flowUserService;
         this.defService = defService;
+        this.userFacade = userFacadeProvider.getIfAvailable();
         if (this.messageFacade == null) {
             log.warn("[WorkflowNotify] IMessageFacade 未装配，审批通知将跳过");
         }
@@ -79,6 +87,53 @@ public class WorkflowNotifyService {
                 String.format("发起人催办：流程「%s」请尽快处理", flowNameOf(instance)),
                 instance.getId(),
                 resolvePendingApprovers(instance.getId()));
+    }
+
+    /** 发起抄送（S78 F1）：通知全部抄送收件人 */
+    public void notifyOnCc(Instance instance, List<Long> ccUserIds) {
+        if (ccUserIds == null || ccUserIds.isEmpty()) {
+            return;
+        }
+        sendNotify("流程抄送提醒",
+                String.format("流程「%s」已抄送给您，发起人：%s", flowNameOf(instance), currentNickname()),
+                instance.getId(),
+                ccUserIds,
+                1);
+    }
+
+    /** 加签（S78 F2）：通知被加签人新增待办 */
+    public void notifyOnAddSignature(Task task, List<String> addedUserIds) {
+        if (addedUserIds == null || addedUserIds.isEmpty()) {
+            return;
+        }
+        List<Long> receivers = addedUserIds.stream()
+                .map(this::parseUserId)
+                .filter(Objects::nonNull)
+                .toList();
+        sendNotify("您有一条加签的审批待处理",
+                String.format("流程「%s」节点「%s」由 %s 加签给您处理", flowNameOf(task), task.getNodeName(), currentNickname()),
+                task.getInstanceId(),
+                receivers,
+                3);
+    }
+
+    /** 解析当前登录人昵称（Facade 未装配/解析失败降级为用户 ID） */
+    private String currentNickname() {
+        Long userId = LoginContext.getUserId();
+        if (userId == null) {
+            return "unknown";
+        }
+        if (userFacade != null) {
+            try {
+                UserDTO user = userFacade.getById(userId);
+                if (user != null && user.getNickname() != null && !user.getNickname().isEmpty()) {
+                    return user.getNickname();
+                }
+            } catch (Exception e) {
+                log.warn("[WorkflowNotify] 解析操作人昵称失败: userId={}, error={}", userId, e.getMessage());
+            }
+        }
+        return String.valueOf(userId);
     }
 
     /**
@@ -203,6 +258,14 @@ public class WorkflowNotifyService {
     }
 
     private void sendNotify(String title, String content, Long instanceId, List<Long> receiverIds) {
+        sendNotify(title, content, instanceId, receiverIds, 3);
+    }
+
+    /**
+     * 发送站内信（msgType：1 通知 / 3 待办）。
+     * 失败仅 log 不阻断主事务（最终一致性口径）。
+     */
+    private void sendNotify(String title, String content, Long instanceId, List<Long> receiverIds, int msgType) {
         if (messageFacade == null || receiverIds.isEmpty()) {
             return;
         }
@@ -210,7 +273,7 @@ public class WorkflowNotifyService {
             MessageSendCmd cmd = new MessageSendCmd();
             cmd.setTitle(title);
             cmd.setContent(content);
-            cmd.setMsgType(3); // 待办
+            cmd.setMsgType(msgType);
             cmd.setChannel("inbox");
             cmd.setBizType("workflow");
             cmd.setBizId(String.valueOf(instanceId));
