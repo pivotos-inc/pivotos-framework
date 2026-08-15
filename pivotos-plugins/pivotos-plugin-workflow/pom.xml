@@ -43,6 +43,11 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-message-api</artifactId>
         </dependency>
+        <!-- Redisson 客户端（催办限频，S77 F2） -->
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson-spring-boot-starter</artifactId>
+        </dependency>
 
         <!-- WarmFlow 工作流引擎（SB4 + MyBatis-Plus 版本） -->
         <dependency>
