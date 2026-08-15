@@ -39,6 +39,21 @@ public class AiChartService {
     /** 单系列数据点上限 */
     private static final int MAX_POINTS = 60;
 
+    /**
+     * 权威数据字典（S73 F1）：状态码语义等口径说明喂入 prompt，杜绝 LLM 臆断。
+     * 工作流状态码与前端 FLOW_STATUS_NAMES（home/bigscreen）同源同值，修改须两处同步。
+     */
+    private static final String DATA_DICTIONARY = """
+            Data dictionary (authoritative semantics, MUST be used when labeling categories):
+            - workflow.statusCounts keys are warmflow status codes:
+              0=待提交, 1=审批中, 2=审批通过, 4=终止, 5=作废, 6=撤销, 8=已完成, 9=已退回, 10=失效, 11=拿回
+            - workflow.pendingTasks = 待办任务数（待当前用户处理的任务，不是流程实例状态）
+            - system.todayLogins = 今日成功登录次数；loginTrend 按日统计成功登录数
+            - ai.activeKeyCount = 启用中的 API Key 数；ai.unhealthyKeyCount = 启用中但连续失败计数>0 的 Key 数
+            - file.totalBytes 单位为字节
+            Never guess the meaning of status codes outside this dictionary.
+            """;
+
     private static final String SYSTEM_PROMPT = """
             You are a data visualization assistant for the PivotOS operations dashboard.
             You receive a JSON snapshot of platform operational statistics and a user request in Chinese.
@@ -52,7 +67,10 @@ public class AiChartService {
                For line/bar every series.data must have the same length as categories.
                For pie output exactly one series whose data align with categories.
             6. explanation: one short Chinese sentence describing what the chart shows.
-            7. If the request cannot be answered with the given data, still pick the closest
+            7. When labeling categories or series derived from status codes or dictionary keys,
+               you MUST use the authoritative names from the data dictionary provided with the data;
+               never invent your own interpretation of codes.
+            8. If the request cannot be answered with the given data, still pick the closest
                reasonable visualization of the available data and mention the limitation in explanation.
             Output ONLY JSON, no markdown:
             {"title":"...","chartType":"line|bar|pie","categories":[...],"series":[{"name":"...","data":[...]}],"explanation":"..."}
@@ -75,7 +93,8 @@ public class AiChartService {
         DashboardSummaryVO summary = dashboardService.summary();
         String dataContext = objectMapper.writeValueAsString(summary);
         String userPrompt = "Operational statistics snapshot:\n" + dataContext
-                + "\n\nUser request: " + question.trim() + "\n\nOutput JSON chart spec:";
+                + "\n\n" + DATA_DICTIONARY
+                + "\nUser request: " + question.trim() + "\n\nOutput JSON chart spec:";
 
         String response = facade.chatWithSystem(SYSTEM_PROMPT, userPrompt);
         if (response == null || response.isBlank()) {
