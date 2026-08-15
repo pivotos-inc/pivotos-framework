@@ -5,6 +5,7 @@ import com.pivotos.common.core.page.PageResult;
 import com.pivotos.starter.core.context.LoginContext;
 import com.pivotos.system.api.facade.IUserFacade;
 import com.pivotos.workflow.domain.dto.AddSignatureCmd;
+import com.pivotos.workflow.domain.dto.ReductionSignatureCmd;
 import com.pivotos.workflow.domain.dto.TaskActionCmd;
 import com.pivotos.workflow.domain.dto.TaskPageQuery;
 import com.pivotos.workflow.domain.vo.UserOptionVO;
@@ -12,11 +13,14 @@ import com.pivotos.workflow.domain.vo.WorkflowHisTaskVO;
 import com.pivotos.workflow.domain.vo.WorkflowTaskVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
+import org.dromara.warm.flow.core.FlowEngine;
 import org.dromara.warm.flow.core.dto.FlowParams;
 import org.dromara.warm.flow.core.entity.Definition;
 import org.dromara.warm.flow.core.entity.HisTask;
 import org.dromara.warm.flow.core.entity.Instance;
 import org.dromara.warm.flow.core.entity.Task;
+import org.dromara.warm.flow.core.entity.User;
+import org.dromara.warm.flow.core.enums.UserType;
 import org.dromara.warm.flow.core.service.DefService;
 import org.dromara.warm.flow.core.service.HisTaskService;
 import org.dromara.warm.flow.core.service.InsService;
@@ -185,6 +189,86 @@ public class FlowTaskService {
         Task task = taskService.getById(cmd.getTaskId());
         if (task != null) {
             notifyService.notifyOnAddSignature(task, userIds);
+        }
+    }
+
+    /**
+     * 减签（S82）：从待办任务移除审批人。
+     * <p>
+     * 走 warm-flow 原生 reductionSignature：his_task 留痕（cooperateType=REDUCTION_SIGNATURE）。
+     * 安全底线由引擎内置：办理人不足或只有一人时拒绝减签（节点不会减空），
+     * 办理人权限校验同加签口径由引擎完成。
+     */
+    public void reductionSignature(ReductionSignatureCmd cmd) {
+        if (cmd.getTaskId() == null) {
+            throw new ServiceException("任务 ID 不能为空");
+        }
+        if (cmd.getUserIds() == null || cmd.getUserIds().isEmpty()) {
+            throw new ServiceException("减签目标用户不能为空");
+        }
+        List<String> userIds = cmd.getUserIds().stream()
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        if (userIds.isEmpty()) {
+            throw new ServiceException("减签目标用户不能为空");
+        }
+        FlowParams params = FlowParams.build()
+                .handler(currentHandler())
+                .reductionHandlers(userIds)
+                .message(cmd.getMessage());
+        try {
+            taskService.reductionSignature(cmd.getTaskId(), params);
+        } catch (org.dromara.warm.flow.core.exception.FlowException e) {
+            throw new ServiceException("减签失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 待办任务当前审批人（S82）：减签选人候选。
+     * <p>
+     * 与引擎减签护栏同口径取 APPROVAL + TRANSFER 两类 flow_user；
+     * IUserFacade 未装配时昵称降级为用户 ID。
+     */
+    public List<UserOptionVO> taskApprovers(Long taskId) {
+        if (taskId == null) {
+            throw new ServiceException("任务 ID 不能为空");
+        }
+        List<User> users = FlowEngine.userService().listByAssociatedAndTypes(taskId,
+                UserType.APPROVAL.getKey(), UserType.TRANSFER.getKey());
+        if (users == null || users.isEmpty()) {
+            return List.of();
+        }
+        List<String> processedBys = users.stream().map(User::getProcessedBy).distinct().toList();
+        // 批量补齐昵称（Facade 未装配/解析失败降级为裸 ID）
+        java.util.Map<String, String> nicknameMap = java.util.Map.of();
+        IUserFacade facade = userFacadeProvider.getIfAvailable();
+        if (facade != null) {
+            try {
+                List<Long> ids = processedBys.stream().map(this::parseLongQuiet).filter(java.util.Objects::nonNull).toList();
+                nicknameMap = facade.listByIds(ids).stream()
+                        .collect(java.util.stream.Collectors.toMap(u -> String.valueOf(u.getId()),
+                                u -> u.getNickname() != null ? u.getNickname() : u.getUsername(), (a, b) -> a));
+            } catch (Exception e) {
+                // 降级：不阻塞减签选人
+            }
+        }
+        java.util.Map<String, String> finalMap = nicknameMap;
+        return processedBys.stream().map(id -> {
+            UserOptionVO vo = new UserOptionVO();
+            Long uid = parseLongQuiet(id);
+            vo.setId(uid != null ? uid : 0L);
+            vo.setUsername(id);
+            vo.setNickname(finalMap.get(id));
+            return vo;
+        }).toList();
+    }
+
+    private Long parseLongQuiet(String id) {
+        try {
+            return Long.parseLong(id);
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 
