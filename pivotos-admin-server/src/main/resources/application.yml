@@ -81,3 +81,11 @@ pivotos:
       simple:
         data-path: ./data/kb/simple
         file-name: kb-store.json
+    # OCR（S76 实测）：KB 图片/扫描版 PDF 文本提取，默认启用，未安装 tesseract 自动降级为仅 Tika
+    # macOS（brew）：JVM 需附加 -Djna.library.path=/opt/homebrew/lib 且显式配置 tessdata-path
+    # Linux（apt/yum）：原生库在系统默认搜索路径，tessdata-path 一般为 /usr/share/tesseract-ocr/5/tessdata
+    # 部署口径详见《07-部署上线流程》2.4，踩坑详见《S76-OCR-踩坑记录》
+    # ocr:
+    #   enabled: true
+    #   tessdata-path: /opt/homebrew/share/tessdata
+    #   languages: chi_sim+eng
