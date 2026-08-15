@@ -3,6 +3,7 @@ package com.pivotos.workflow.controller;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.common.core.result.R;
 import com.pivotos.workflow.domain.dto.AddSignatureCmd;
+import com.pivotos.workflow.domain.dto.ReductionSignatureCmd;
 import com.pivotos.workflow.domain.dto.TaskActionCmd;
 import com.pivotos.workflow.domain.dto.TaskPageQuery;
 import com.pivotos.workflow.domain.vo.UserOptionVO;
@@ -22,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 审批任务管理：待办 / 已办 / 审批通过 / 驳回 / 转办 / 委派 / 加签 / 审批历史。
+ * 审批任务管理：待办 / 已办 / 审批通过 / 驳回 / 转办 / 委派 / 加签 / 减签 / 审批历史。
  * <p>端点三体系通用（S79）：仅校「已登录」，待办人归属由 warm-flow 引擎层校验。
  */
 @RestController
@@ -78,6 +79,21 @@ public class WorkflowTaskController {
         WorkflowAuthSupport.requireUserId();
         flowTaskService.addSignature(cmd);
         return R.ok();
+    }
+
+    /** 减签（S82）：从待办任务移除审批人（引擎护栏：办理人不足两人不可减签） */
+    @PutMapping("/reduction-signature")
+    public R<Void> reductionSignature(@RequestBody ReductionSignatureCmd cmd) {
+        WorkflowAuthSupport.requireUserId();
+        flowTaskService.reductionSignature(cmd);
+        return R.ok();
+    }
+
+    /** 待办任务当前审批人（S82）：减签选人候选 */
+    @GetMapping("/{taskId}/approvers")
+    public R<List<UserOptionVO>> taskApprovers(@PathVariable Long taskId) {
+        WorkflowAuthSupport.requireUserId();
+        return R.ok(flowTaskService.taskApprovers(taskId));
     }
 
     @GetMapping("/history/{instanceId}")
