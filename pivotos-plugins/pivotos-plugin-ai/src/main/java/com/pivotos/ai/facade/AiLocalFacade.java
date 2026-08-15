@@ -5,8 +5,10 @@ import com.pivotos.ai.api.dto.AiChatStatsDTO;
 import com.pivotos.ai.api.dto.AiTrendPointDTO;
 import com.pivotos.ai.api.enums.AiErrorCode;
 import com.pivotos.ai.api.facade.IAiFacade;
+import com.pivotos.ai.client.AiClientRegistry;
 import com.pivotos.ai.domain.entity.AiApiKey;
 import com.pivotos.ai.domain.entity.AiChatMessage;
+import com.pivotos.ai.domain.entity.AiProvider;
 import com.pivotos.ai.mapper.AiApiKeyMapper;
 import com.pivotos.ai.mapper.AiChatMessageMapper;
 import com.pivotos.ai.mapper.AiConversationMapper;
@@ -41,6 +43,7 @@ public class AiLocalFacade implements IAiFacade {
 
     /** ChatClient 可能不存在（api-key 未配置），懒获取 + 5020 兜底 */
     private final ObjectProvider<ChatClient> chatClientProvider;
+    private final AiClientRegistry clientRegistry;
     private final AiConversationMapper conversationMapper;
     private final AiChatMessageMapper messageMapper;
     private final AiProviderMapper providerMapper;
@@ -56,6 +59,36 @@ public class AiLocalFacade implements IAiFacade {
             return chatClient.prompt().user(prompt).call().content();
         } catch (Exception e) {
             log.error("[PivotOS] AI 单轮生成失败", e);
+            throw new ServiceException(AiErrorCode.CHAT_FAILED);
+        }
+    }
+
+    @Override
+    public String chatWithSystem(String systemPrompt, String userPrompt) {
+        // 动态解析链：首个启用供应商 + 该供应商首个启用 Key（与 plugin-ai-coding 意图解析同口径）
+        List<AiProvider> providers = providerMapper.selectList(Wrappers.<AiProvider>lambdaQuery()
+                .eq(AiProvider::getStatus, 0)
+                .orderByAsc(AiProvider::getId));
+        if (providers.isEmpty()) {
+            throw new ServiceException(AiErrorCode.AI_NOT_CONFIGURED);
+        }
+        AiProvider provider = providers.get(0);
+        List<AiApiKey> keys = apiKeyMapper.selectList(Wrappers.<AiApiKey>lambdaQuery()
+                .eq(AiApiKey::getProviderId, provider.getId())
+                .eq(AiApiKey::getStatus, 0)
+                .orderByAsc(AiApiKey::getId));
+        if (keys.isEmpty()) {
+            throw new ServiceException(AiErrorCode.NO_AVAILABLE_KEY);
+        }
+        try {
+            return clientRegistry.getChatClient(provider, keys.get(0))
+                    .prompt()
+                    .system(systemPrompt)
+                    .user(userPrompt)
+                    .call()
+                    .content();
+        } catch (Exception e) {
+            log.error("[PivotOS] AI 单轮生成失败 providerId={}", provider.getId(), e);
             throw new ServiceException(AiErrorCode.CHAT_FAILED);
         }
     }
