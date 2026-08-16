@@ -18,9 +18,12 @@ import org.dromara.warm.flow.core.service.TaskService;
 import org.dromara.warm.flow.core.utils.page.Page;
 import org.dromara.warm.flow.orm.entity.FlowInstance;
 import org.dromara.warm.flow.orm.entity.FlowTask;
+import org.redisson.api.RBucket;
+import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.Duration;
 import java.util.Date;
 import java.util.List;
 
@@ -35,6 +38,8 @@ public class FlowInstanceService {
     private final TaskService taskService;
     private final DefService defService;
     private final WorkflowNotifyService notifyService;
+    private final FlowCcService ccService;
+    private final RedissonClient redissonClient;
 
     /**
      * 发起流程实例
@@ -72,8 +77,17 @@ public class FlowInstanceService {
                 }
             }
         }
-        // 通知首个审批节点处理人
+        // 通知首个审批节点处理人（引擎返回的 instance 可能未回填 flowName，从定义补齐）
+        if (!StringUtils.hasText(instance.getFlowName())) {
+            Definition def = defService.getById(instance.getDefinitionId());
+            if (def != null) {
+                instance.setFlowName(def.getFlowName());
+            }
+        }
         notifyService.notifyOnStart(instance);
+        // 发起抄送（S78 F1）：落库 flow_cc + 站内信通知收件人（落库返回的实际收件人口径）
+        List<Long> ccReceivers = ccService.recordCc(instance, cmd.getCcUserIds());
+        notifyService.notifyOnCc(instance, ccReceivers);
         return toVO(instance);
     }
 
@@ -138,6 +152,29 @@ public class FlowInstanceService {
     private String currentHandler() {
         Long userId = LoginContext.getUserId();
         return userId != null ? String.valueOf(userId) : "anonymous";
+    }
+
+    /**
+     * 催办（S77 F2）：仅发起人、仅进行中实例，Redis 限频 10 分钟。
+     */
+    public void urge(Long instanceId) {
+        Instance instance = insService.getById(instanceId);
+        if (instance == null) {
+            throw new ServiceException("流程实例不存在");
+        }
+        Long userId = LoginContext.getUserId();
+        if (userId == null || !String.valueOf(userId).equals(instance.getCreateBy())) {
+            throw new ServiceException("仅流程发起人可催办");
+        }
+        String status = instance.getFlowStatus();
+        if (!"0".equals(status) && !"1".equals(status)) {
+            throw new ServiceException("流程已办结，无需催办");
+        }
+        RBucket<String> bucket = redissonClient.getBucket("workflow:urge:" + instanceId);
+        if (!bucket.setIfAbsent(String.valueOf(userId), Duration.ofMinutes(10))) {
+            throw new ServiceException("催办过于频繁，请 10 分钟后再试");
+        }
+        notifyService.notifyOnUrge(instance);
     }
 
     private WorkflowInstanceVO toVO(Instance ins) {

@@ -36,4 +36,13 @@ public interface IUserFacade {
      * @return 用户列表（不存在的 ID 自动忽略）
      */
     List<UserDTO> listByIds(Collection<Long> userIds);
+
+    /**
+     * 活跃用户选项（移动端加签选人等场景，S81）
+     *
+     * @param limit   返回条数上限（实现侧封顶 100）
+     * @param keyword 关键字（可空：模糊匹配用户名/昵称）
+     * @return 状态正常的用户列表，按 ID 升序
+     */
+    List<UserDTO> listActiveOptions(int limit, String keyword);
 }

@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-plugins</artifactId>
-        <version>2.9.0</version>
+        <version>2.10.0</version>
     </parent>
 
     <artifactId>pivotos-plugin-workflow</artifactId>
@@ -42,6 +42,16 @@
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-message-api</artifactId>
+        </dependency>
+        <!-- 系统插件契约（抄送/加签通知解析用户昵称，S78） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-system-api</artifactId>
+        </dependency>
+        <!-- Redisson 客户端（催办限频，S77 F2） -->
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson-spring-boot-starter</artifactId>
         </dependency>
 
         <!-- WarmFlow 工作流引擎（SB4 + MyBatis-Plus 版本） -->
