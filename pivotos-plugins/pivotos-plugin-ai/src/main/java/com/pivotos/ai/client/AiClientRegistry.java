@@ -40,6 +40,9 @@ public class AiClientRegistry {
     /** 全部供应商工厂（含 OpenAI 兼容兜底），按 code 分派 */
     private final List<ChatModelFactory> factories;
 
+    /** Token 用量记录器（S92：构建 client 时包装 ChatModel 统一计量） */
+    private final AiUsageRecorder usageRecorder;
+
     /** ChatClient 缓存：providerId:keyId → client */
     private final Map<String, ChatClient> clientCache = new ConcurrentHashMap<>();
 
@@ -125,7 +128,10 @@ public class AiClientRegistry {
         ChatModelFactory factory = resolveFactory(provider.getCode());
         log.info("[PivotOS] 动态 ChatClient 构建：providerId={} keyId={} code={} factory={}",
                 provider.getId(), key.getId(), provider.getCode(), factory.getClass().getSimpleName());
-        return ChatClient.builder(factory.buildChatModel(provider, key))
+        // S92：MeteredChatModel 包装——四条 AI 链路凡走动态 Key 体系的调用在此统一计量
+        var meteredModel = new MeteredChatModel(factory.buildChatModel(provider, key),
+                provider.getId(), provider.getCode(), key.getId(), usageRecorder);
+        return ChatClient.builder(meteredModel)
                 .defaultSystem(aiProperties.getSystemPrompt())
                 .build();
     }

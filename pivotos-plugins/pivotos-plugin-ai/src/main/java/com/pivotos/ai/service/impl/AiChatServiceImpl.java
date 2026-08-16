@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.pivotos.ai.api.enums.AiErrorCode;
+import com.pivotos.ai.api.usage.AiUsageContext;
 import com.pivotos.ai.client.AiClientRegistry;
 import com.pivotos.ai.domain.dto.ChatSendRequest;
 import com.pivotos.ai.domain.entity.AiApiKey;
@@ -79,99 +80,111 @@ public class AiChatServiceImpl implements AiChatService {
 
     @Override
     public ChatMessageVO send(Long userId, ChatSendRequest request) {
-        ChatTarget target = resolveTarget(request);
-        AiConversation conversation = resolveConversation(userId, request, target.model());
-        List<Message> history = loadHistory(conversation.getId());
-        saveMessage(conversation, userId, "user", request.getContent(), null);
+        // S92 用量场景标注：对话链路（内嵌 routeQuery 临时切 rag 场景）
+        AiUsageContext.setScene(AiUsageContext.SCENE_CHAT);
+        try {
+            ChatTarget target = resolveTarget(request);
+            AiConversation conversation = resolveConversation(userId, request, target.model());
+            List<Message> history = loadHistory(conversation.getId());
+            saveMessage(conversation, userId, "user", request.getContent(), null);
 
-        // RAG：检索知识库并构建上下文（S68：含查询改写）
-        RagContext rag = buildRagContext(request.getKbIds(), request.getContent(), history, target);
+            // RAG：检索知识库并构建上下文（S68：含查询改写）
+            RagContext rag = buildRagContext(request.getKbIds(), request.getContent(), history, target);
 
-        String reply = callWithFailover(target, history, request.getContent(),
-                conversation.getId(), rag.context());
+            String reply = callWithFailover(target, history, request.getContent(),
+                    conversation.getId(), rag.context());
 
-        AiChatMessage assistant = saveMessage(conversation, userId, "assistant", reply,
-                referencesJson(rag.references()));
-        touchConversation(conversation.getId());
-        ChatMessageVO vo = toMessageVO(assistant);
-        vo.setReferences(rag.references().isEmpty() ? null : rag.references());
-        return vo;
+            AiChatMessage assistant = saveMessage(conversation, userId, "assistant", reply,
+                    referencesJson(rag.references()));
+            touchConversation(conversation.getId());
+            ChatMessageVO vo = toMessageVO(assistant);
+            vo.setReferences(rag.references().isEmpty() ? null : rag.references());
+            return vo;
+        } finally {
+            AiUsageContext.clear();
+        }
     }
 
     @Override
     public SseEmitter stream(Long userId, ChatSendRequest request) {
-        ChatTarget target = resolveTarget(request);
-        // 流式只用轮询起点 Key（不重试），回调里据此记健康度；静态目标无 Key 不记
-        AiApiKey streamKey = pickKey(target, 0);
-        ChatClient chatClient = pickClient(target, 0);
-        AiConversation conversation = resolveConversation(userId, request, target.model());
-        List<Message> history = loadHistory(conversation.getId());
-        AiChatMessage userMessage = saveMessage(conversation, userId, "user", request.getContent(), null);
+        // S92 用量场景标注：对话链路（流式）；计量快照在 flux 组装时于请求线程抓取
+        AiUsageContext.setScene(AiUsageContext.SCENE_CHAT);
+        try {
+            ChatTarget target = resolveTarget(request);
+            // 流式只用轮询起点 Key（不重试），回调里据此记健康度；静态目标无 Key 不记
+            AiApiKey streamKey = pickKey(target, 0);
+            ChatClient chatClient = pickClient(target, 0);
+            AiConversation conversation = resolveConversation(userId, request, target.model());
+            List<Message> history = loadHistory(conversation.getId());
+            AiChatMessage userMessage = saveMessage(conversation, userId, "user", request.getContent(), null);
 
-        // RAG：检索知识库并构建上下文（S68：含查询改写）
-        RagContext rag = buildRagContext(request.getKbIds(), request.getContent(), history, target);
+            // RAG：检索知识库并构建上下文（S68：含查询改写）
+            RagContext rag = buildRagContext(request.getKbIds(), request.getContent(), history, target);
 
-        // 0 = 不超时：长回复由模型流结束或异常驱动完成
-        SseEmitter emitter = new SseEmitter(0L);
-        Map<String, Object> metaData = new LinkedHashMap<>();
-        metaData.put("conversationId", conversation.getId());
-        metaData.put("userMessageId", userMessage.getId());
-        metaData.put("title", conversation.getTitle());
-        if (rag.rewrittenQuery() != null) {
-            // S68：查询改写发生时的透明化提示（前端展示实际检索词）
-            metaData.put("rewrittenQuery", rag.rewrittenQuery());
-        }
-        if (rag.kbRoutedOut()) {
-            // S69：意图路由出局——本轮判定无需知识库检索（前端提示按通用知识回答）
-            metaData.put("kbRoutedOut", true);
-        }
-        sendEvent(emitter, "meta", metaData);
+            // 0 = 不超时：长回复由模型流结束或异常驱动完成
+            SseEmitter emitter = new SseEmitter(0L);
+            Map<String, Object> metaData = new LinkedHashMap<>();
+            metaData.put("conversationId", conversation.getId());
+            metaData.put("userMessageId", userMessage.getId());
+            metaData.put("title", conversation.getTitle());
+            if (rag.rewrittenQuery() != null) {
+                // S68：查询改写发生时的透明化提示（前端展示实际检索词）
+                metaData.put("rewrittenQuery", rag.rewrittenQuery());
+            }
+            if (rag.kbRoutedOut()) {
+                // S69：意图路由出局——本轮判定无需知识库检索（前端提示按通用知识回答）
+                metaData.put("kbRoutedOut", true);
+            }
+            sendEvent(emitter, "meta", metaData);
 
-        Long conversationId = conversation.getId();
-        if (streamKey != null) {
-            // 轮询分摊可审计：每次调用记录实际使用的 keyId
-            log.info("[PivotOS] AI 流式对话使用 Key：conversationId={} providerId={} keyId={}",
-                    conversationId, target.provider().getId(), streamKey.getId());
+            Long conversationId = conversation.getId();
+            if (streamKey != null) {
+                // 轮询分摊可审计：每次调用记录实际使用的 keyId
+                log.info("[PivotOS] AI 流式对话使用 Key：conversationId={} providerId={} keyId={}",
+                        conversationId, target.provider().getId(), streamKey.getId());
+            }
+            StringBuilder answer = new StringBuilder();
+            // 流式已发 meta，失败不换 Key 重试（半途换 Key 会重复输出），直接下发 error 事件
+            Flux<String> flux = buildPrompt(chatClient, target, history, request.getContent(), rag.context())
+                    .stream()
+                    .content();
+            flux.subscribe(
+                    delta -> {
+                        answer.append(delta);
+                        sendEvent(emitter, "delta", Map.of("content", delta));
+                    },
+                    error -> {
+                        log.error("[PivotOS] AI 流式对话失败：conversationId={} keyId={}",
+                                conversationId, streamKey == null ? null : streamKey.getId(), error);
+                        if (streamKey != null) {
+                            aiProviderService.recordKeyFailure(streamKey.getId());
+                        }
+                        sendEvent(emitter, "error", Map.of(
+                                "code", AiErrorCode.CHAT_FAILED.getCode(),
+                                "msg", AiErrorCode.CHAT_FAILED.getMsg()));
+                        emitter.complete();
+                    },
+                    () -> {
+                        if (streamKey != null) {
+                            aiProviderService.recordKeySuccess(streamKey.getId());
+                        }
+                        // 回调线程无 LoginContext，saveMessage 内已显式补齐审计字段
+                        AiChatMessage assistant = saveMessage(conversation, userId, "assistant",
+                                answer.toString(), referencesJson(rag.references()));
+                        touchConversation(conversationId);
+                        Map<String, Object> doneData = new LinkedHashMap<>();
+                        doneData.put("conversationId", conversationId);
+                        doneData.put("messageId", assistant.getId());
+                        if (!rag.references().isEmpty()) {
+                            doneData.put("references", rag.references());
+                        }
+                        sendEvent(emitter, "done", doneData);
+                        emitter.complete();
+                    });
+            return emitter;
+        } finally {
+            AiUsageContext.clear();
         }
-        StringBuilder answer = new StringBuilder();
-        // 流式已发 meta，失败不换 Key 重试（半途换 Key 会重复输出），直接下发 error 事件
-        Flux<String> flux = buildPrompt(chatClient, target, history, request.getContent(), rag.context())
-                .stream()
-                .content();
-        flux.subscribe(
-                delta -> {
-                    answer.append(delta);
-                    sendEvent(emitter, "delta", Map.of("content", delta));
-                },
-                error -> {
-                    log.error("[PivotOS] AI 流式对话失败：conversationId={} keyId={}",
-                            conversationId, streamKey == null ? null : streamKey.getId(), error);
-                    if (streamKey != null) {
-                        aiProviderService.recordKeyFailure(streamKey.getId());
-                    }
-                    sendEvent(emitter, "error", Map.of(
-                            "code", AiErrorCode.CHAT_FAILED.getCode(),
-                            "msg", AiErrorCode.CHAT_FAILED.getMsg()));
-                    emitter.complete();
-                },
-                () -> {
-                    if (streamKey != null) {
-                        aiProviderService.recordKeySuccess(streamKey.getId());
-                    }
-                    // 回调线程无 LoginContext，saveMessage 内已显式补齐审计字段
-                    AiChatMessage assistant = saveMessage(conversation, userId, "assistant",
-                            answer.toString(), referencesJson(rag.references()));
-                    touchConversation(conversationId);
-                    Map<String, Object> doneData = new LinkedHashMap<>();
-                    doneData.put("conversationId", conversationId);
-                    doneData.put("messageId", assistant.getId());
-                    if (!rag.references().isEmpty()) {
-                        doneData.put("references", rag.references());
-                    }
-                    sendEvent(emitter, "done", doneData);
-                    emitter.complete();
-                });
-        return emitter;
     }
 
     @Override
@@ -453,7 +466,9 @@ public class AiChatServiceImpl implements AiChatService {
             if (target.dynamic() && target.model() != null && !target.model().isBlank()) {
                 spec = spec.options(clientRegistry.buildChatOptions(target.provider(), target.model()));
             }
-            String content = spec.call().content();
+            // S68/S69：意图路由 + 查询改写（rag 场景单独计量）
+            ChatClient.ChatClientRequestSpec finalSpec = spec;
+            String content = AiUsageContext.callWithScene(AiUsageContext.SCENE_RAG, () -> finalSpec.call().content());
             if (content == null || content.isBlank()) {
                 return fallback;
             }
