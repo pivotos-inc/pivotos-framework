@@ -43,7 +43,8 @@ class P0ArchitectureTest {
         "pivotos-plugin-ai", "ai_",
         "pivotos-plugin-file", "sys_",
         "pivotos-plugin-workflow", "flow_",
-        "pivotos-plugin-ai-kb", "ai_kb_");
+        "pivotos-plugin-ai-kb", "ai_kb_",
+        "pivotos-plugin-monitor", "mn_");
 
     // ========== A1 + A2：Plugin 实现包之间无编译依赖；跨插件仅可访问对方 api 包 ==========
     // 直接否定式：system 实现包不得依赖任何"其他插件实现包"；其他插件 api 包不在清单内，天然放行。
