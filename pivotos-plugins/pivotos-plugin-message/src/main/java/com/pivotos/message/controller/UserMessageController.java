@@ -1,6 +1,8 @@
 package com.pivotos.message.controller;
 
 import com.pivotos.common.core.enums.error.GlobalErrorCode;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.common.core.result.R;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  * sys / app / wx-mini 三账号体系通用：登录态由 LoginContextFilter 统一解析，
  * 这里只校验"已登录"，PC 与移动端共用同一个消息中心。
  */
+@Tag(name = "我的消息", description = "个人消息中心")
 @RestController
 @RequestMapping("/message/user")
 @RequiredArgsConstructor
@@ -27,22 +30,26 @@ public class UserMessageController {
 
     private final MessageService messageService;
 
+    @Operation(summary = "我的消息分页")
     @GetMapping("/page")
     public R<PageResult<MessageDTO>> page(MessagePageQuery query) {
         return R.ok(messageService.pageByUser(requireUserId(), query));
     }
 
+    @Operation(summary = "标记已读")
     @PutMapping("/read/{userMessageId}")
     public R<Void> read(@PathVariable Long userMessageId) {
         messageService.markRead(userMessageId, requireUserId());
         return R.ok();
     }
 
+    @Operation(summary = "全部已读")
     @PutMapping("/read-all")
     public R<Integer> readAll() {
         return R.ok(messageService.markAllRead(requireUserId()));
     }
 
+    @Operation(summary = "未读消息数")
     @GetMapping("/unread-count")
     public R<Long> unreadCount() {
         return R.ok(messageService.countUnread(requireUserId()));

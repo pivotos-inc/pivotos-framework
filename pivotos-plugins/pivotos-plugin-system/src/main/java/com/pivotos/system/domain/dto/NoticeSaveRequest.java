@@ -5,11 +5,13 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 /** 通知公告新增/修改请求 */
 @Data
 public class NoticeSaveRequest {
 
     /** 公告ID */
+    @Schema(description = "公告ID")
     private Long id;
 
     /** 公告标题 */
@@ -22,8 +24,10 @@ public class NoticeSaveRequest {
     private Integer noticeType;
 
     /** 富文本内容（HTML） */
+    @Schema(description = "富文本内容（HTML）")
     private String content;
 
     /** 备注 */
+    @Schema(description = "备注")
     private String remark;
 }

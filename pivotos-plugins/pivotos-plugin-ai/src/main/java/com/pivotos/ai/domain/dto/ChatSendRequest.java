@@ -3,6 +3,7 @@ package com.pivotos.ai.domain.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
 
@@ -11,9 +12,11 @@ import java.util.List;
 public class ChatSendRequest {
 
     /** 会话ID（空则自动新建会话） */
+    @Schema(description = "会话ID（空则自动新建会话）")
     private Long conversationId;
 
     /** 供应商ID（空则取启用中排序最靠前的供应商，均无则回落静态配置 ChatClient） */
+    @Schema(description = "供应商ID（空则取启用中排序最靠前的供应商，均无则回落静态配置 ChatClient）")
     private Long providerId;
 
     /** 模型标识（空则取供应商默认模型） */

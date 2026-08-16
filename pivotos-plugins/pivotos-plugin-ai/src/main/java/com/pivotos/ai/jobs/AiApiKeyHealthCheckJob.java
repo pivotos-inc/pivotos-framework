@@ -52,7 +52,7 @@ public class AiApiKeyHealthCheckJob {
     /** 自注册：支持管理端手动触发 */
     @PostConstruct
     public void registerManualTrigger() {
-        registry.register(HANDLER, this::execute);
+        registry.register(HANDLER, "AI Key 健康度巡检", this::execute);
     }
 
     /**

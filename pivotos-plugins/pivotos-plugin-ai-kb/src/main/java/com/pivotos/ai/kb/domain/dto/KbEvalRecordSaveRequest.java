@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
 
@@ -30,6 +31,7 @@ public class KbEvalRecordSaveRequest {
     public static class Item {
 
         /** 原评测问题ID */
+        @Schema(description = "原评测问题ID")
         private Long questionId;
 
         /** 评测问题快照 */
@@ -51,6 +53,7 @@ public class KbEvalRecordSaveRequest {
         private Integer rerankRank;
 
         /** 是否改序 */
+        @Schema(description = "是否改序")
         private Boolean orderChanged;
     }
 }

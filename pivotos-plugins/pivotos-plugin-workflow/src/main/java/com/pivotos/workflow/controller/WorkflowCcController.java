@@ -1,6 +1,8 @@
 package com.pivotos.workflow.controller;
 
 import com.pivotos.common.core.page.PageResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.pivotos.common.core.result.R;
 import com.pivotos.workflow.domain.dto.CcPageQuery;
 import com.pivotos.workflow.domain.vo.WorkflowCcVO;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>
  * 端点三体系通用（S79）：仅校「已登录」，仅本人数据由 service 层兜底。
  */
+@Tag(name = "流程抄送", description = "抄送列表 + 已读标记")
 @RestController
 @RequestMapping("/workflow/cc")
 @RequiredArgsConstructor
@@ -26,6 +29,7 @@ public class WorkflowCcController {
     private final FlowCcService flowCcService;
 
     /** 抄送我的分页（仅本人数据） */
+    @Operation(summary = "抄送我的分页（仅本人数据）")
     @GetMapping("/page")
     public R<PageResult<WorkflowCcVO>> page(CcPageQuery query) {
         WorkflowAuthSupport.requireUserId();
@@ -33,6 +37,7 @@ public class WorkflowCcController {
     }
 
     /** 标记已读（仅本人记录） */
+    @Operation(summary = "标记已读（仅本人记录）")
     @PutMapping("/{id}/read")
     public R<Void> markRead(@PathVariable Long id) {
         WorkflowAuthSupport.requireUserId();

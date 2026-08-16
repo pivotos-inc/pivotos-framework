@@ -3,6 +3,7 @@ package com.pivotos.ai.kb.domain.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -21,6 +22,7 @@ public class KbBaseSaveRequest implements Serializable {
     private String name;
 
     /** 知识库描述 */
+    @Schema(description = "知识库描述")
     private String description;
 
     /** 向量存储类型：simple / milvus */
@@ -28,6 +30,7 @@ public class KbBaseSaveRequest implements Serializable {
     private String vectorStoreType;
 
     /** Embedding 模型标识（为空使用系统默认） */
+    @Schema(description = "Embedding 模型标识（为空使用系统默认）")
     private String embeddingModel;
 
     /** 默认分块大小 */
@@ -39,12 +42,15 @@ public class KbBaseSaveRequest implements Serializable {
     private Integer chunkOverlap;
 
     /** 混合检索开关（true=向量+BM25+RRF, false=仅向量，默认 true） */
+    @Schema(description = "混合检索开关（true=向量+BM25+RRF, false=仅向量，默认 true）")
     private Boolean hybridSearch;
 
     /** 重排开关（true=RRF 融合后经 reranker 精排，默认 true，S65） */
+    @Schema(description = "重排开关（true=RRF 融合后经 reranker 精排，默认 true，S65）")
     private Boolean rerank;
 
     /** 查询改写开关（true=检索前 LLM 改写多轮问题，默认 false，S68） */
+    @Schema(description = "查询改写开关（true=检索前 LLM 改写多轮问题，默认 false，S68）")
     private Boolean queryRewrite;
 
     /** 状态：0 正常，1 停用 */

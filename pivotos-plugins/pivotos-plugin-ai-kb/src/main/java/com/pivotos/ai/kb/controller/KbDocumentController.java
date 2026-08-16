@@ -1,6 +1,8 @@
 package com.pivotos.ai.kb.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.pivotos.ai.kb.domain.dto.KbDocPageQuery;
 import com.pivotos.ai.kb.domain.dto.KbDocUploadRequest;
 import com.pivotos.ai.kb.domain.vo.AiKbChunkVO;
@@ -24,6 +26,7 @@ import java.util.List;
 /**
  * 知识库文档管理接口。
  */
+@Tag(name = "知识库文档", description = "知识库文档管理")
 @RestController
 @RequestMapping("/ai/kb/doc")
 @RequiredArgsConstructor
@@ -32,6 +35,7 @@ public class KbDocumentController {
     private final KbDocumentService documentService;
 
     /** 分页列表 */
+    @Operation(summary = "分页列表")
     @GetMapping("/page")
     @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
     public R<PageResult<KbDocumentVO>> page(KbDocPageQuery query) {
@@ -39,6 +43,7 @@ public class KbDocumentController {
     }
 
     /** 详情 */
+    @Operation(summary = "详情")
     @GetMapping("/{id}")
     @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
     public R<KbDocumentVO> get(@PathVariable Long id) {
@@ -46,6 +51,7 @@ public class KbDocumentController {
     }
 
     /** 上传并触发向量化 */
+    @Operation(summary = "上传并触发向量化")
     @PostMapping("/upload")
     @SaCheckPermission(value = "ai:kb:doc:add", type = StpSysUtil.TYPE)
     public R<Long> upload(@Validated @RequestBody KbDocUploadRequest request) {
@@ -53,6 +59,7 @@ public class KbDocumentController {
     }
 
     /** 删除文档并清向量 */
+    @Operation(summary = "删除文档并清向量")
     @DeleteMapping("/{id}")
     @SaCheckPermission(value = "ai:kb:doc:delete", type = StpSysUtil.TYPE)
     public R<Void> delete(@PathVariable Long id) {
@@ -61,6 +68,7 @@ public class KbDocumentController {
     }
 
     /** 重新向量化 */
+    @Operation(summary = "重新向量化")
     @PostMapping("/{id}/reindex")
     @SaCheckPermission(value = "ai:kb:doc:reindex", type = StpSysUtil.TYPE)
     public R<Void> reindex(@PathVariable Long id) {
@@ -69,6 +77,7 @@ public class KbDocumentController {
     }
 
     /** 文本块列表（分块查看/解析预览用） */
+    @Operation(summary = "文本块列表（分块查看/解析预览用）")
     @GetMapping("/{id}/chunks")
     @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
     public R<List<AiKbChunkVO>> listChunks(@PathVariable Long id) {

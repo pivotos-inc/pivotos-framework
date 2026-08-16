@@ -3,6 +3,7 @@ package com.pivotos.ai.kb.domain.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -25,5 +26,6 @@ public class KbSearchRequest implements Serializable {
     private String query;
 
     /** 返回条数（缺省 5） */
+    @Schema(description = "返回条数（缺省 5）")
     private Integer topK = 5;
 }

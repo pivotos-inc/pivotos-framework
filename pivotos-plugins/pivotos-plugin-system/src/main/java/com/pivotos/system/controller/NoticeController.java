@@ -1,6 +1,8 @@
 package com.pivotos.system.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.common.core.result.R;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /** 通知公告（管理 CRUD + 发布/撤回 + 登录可读的已发布公告） */
+@Tag(name = "通知公告", description = "通知公告管理、发布/撤回、已读")
 @RestController
 @RequestMapping("/system/notice")
 @RequiredArgsConstructor
@@ -36,6 +39,7 @@ public class NoticeController {
     // ---------- 已发布公告（登录即可读，PC 首页卡片用） ----------
 
     /** 最新已发布公告 */
+    @Operation(summary = "最新已发布公告")
     @GetMapping("/published")
     @SaCheckLogin(type = StpSysUtil.TYPE)
     public R<List<NoticeVO>> listPublished(@RequestParam(defaultValue = "5") int limit) {
@@ -43,6 +47,7 @@ public class NoticeController {
     }
 
     /** 已发布公告详情 */
+    @Operation(summary = "已发布公告详情")
     @GetMapping("/published/{id}")
     @SaCheckLogin(type = StpSysUtil.TYPE)
     public R<NoticeVO> getPublished(@PathVariable Long id) {
@@ -51,18 +56,21 @@ public class NoticeController {
 
     // ---------- 管理端 ----------
 
+    @Operation(summary = "通知公告分页")
     @GetMapping("/page")
     @SaCheckPermission(value = "system:notice:list", type = StpSysUtil.TYPE)
     public R<PageResult<NoticeVO>> page(NoticeQuery query) {
         return R.ok(noticeService.pageNotices(query));
     }
 
+    @Operation(summary = "通知公告详情")
     @GetMapping("/{id}")
     @SaCheckPermission(value = "system:notice:query", type = StpSysUtil.TYPE)
     public R<NoticeVO> get(@PathVariable Long id) {
         return R.ok(noticeService.getNotice(id));
     }
 
+    @Operation(summary = "新增通知公告")
     @PostMapping
     @SaCheckPermission(value = "system:notice:add", type = StpSysUtil.TYPE)
     @Log(module = "通知公告", type = OperType.CREATE)
@@ -70,6 +78,7 @@ public class NoticeController {
         return R.ok(noticeService.createNotice(request));
     }
 
+    @Operation(summary = "修改通知公告")
     @PutMapping
     @SaCheckPermission(value = "system:notice:edit", type = StpSysUtil.TYPE)
     @Log(module = "通知公告", type = OperType.UPDATE)
@@ -78,6 +87,7 @@ public class NoticeController {
         return R.ok();
     }
 
+    @Operation(summary = "删除通知公告")
     @DeleteMapping("/{id}")
     @SaCheckPermission(value = "system:notice:remove", type = StpSysUtil.TYPE)
     @Log(module = "通知公告", type = OperType.DELETE)
@@ -86,6 +96,7 @@ public class NoticeController {
         return R.ok();
     }
 
+    @Operation(summary = "发布通知公告")
     @PutMapping("/{id}/publish")
     @SaCheckPermission(value = "system:notice:publish", type = StpSysUtil.TYPE)
     @Log(module = "通知公告", type = OperType.PUBLISH)
@@ -94,6 +105,7 @@ public class NoticeController {
         return R.ok();
     }
 
+    @Operation(summary = "撤回通知公告")
     @PutMapping("/{id}/revoke")
     @SaCheckPermission(value = "system:notice:publish", type = StpSysUtil.TYPE)
     @Log(module = "通知公告", type = OperType.REVOKE)

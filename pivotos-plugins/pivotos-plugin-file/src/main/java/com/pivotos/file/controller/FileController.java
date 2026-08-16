@@ -1,6 +1,8 @@
 package com.pivotos.file.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.pivotos.common.core.enums.error.GlobalErrorCode;
 import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.page.PageResult;
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 登录态由 LoginContextFilter 统一解析，只校验"已登录"）；
  * page / delete 是后台管理能力，走 file:file:* 权限（sys 账号体系）。
  */
+@Tag(name = "文件管理", description = "文件预签名上传/下载 + 元数据管理")
 @RestController
 @RequestMapping("/file")
 @RequiredArgsConstructor
@@ -37,6 +40,7 @@ public class FileController {
     private final FileService fileService;
 
     /** 预签名直传地址（PUT） */
+    @Operation(summary = "预签名直传地址（PUT）")
     @GetMapping("/presign")
     public R<PresignResult> presign(@RequestParam String filename) {
         if (!LoginContext.isLogin()) {
@@ -46,6 +50,7 @@ public class FileController {
     }
 
     /** 预签名下载地址（GET，私有桶回显：key 可传对象键或历史完整 fileUrl） */
+    @Operation(summary = "预签名下载地址（GET，私有桶回显：key 可传对象键或历史完整 fileUrl）")
     @GetMapping("/presign-download")
     public R<String> presignDownload(@RequestParam String key) {
         if (!LoginContext.isLogin()) {
@@ -55,6 +60,7 @@ public class FileController {
     }
 
     /** 直传完成回调登记（sys_file 元数据落库，三端通用） */
+    @Operation(summary = "直传完成回调登记（sys_file 元数据落库，三端通用）")
     @PostMapping("/register")
     public R<Long> register(@Validated @RequestBody FileRegisterRequest request) {
         if (!LoginContext.isLogin()) {
@@ -64,6 +70,7 @@ public class FileController {
     }
 
     /** 文件元数据分页（后台管理，多租户行级隔离自动生效） */
+    @Operation(summary = "文件元数据分页（后台管理，多租户行级隔离自动生效）")
     @GetMapping("/page")
     @SaCheckPermission(value = "file:file:list", type = StpSysUtil.TYPE)
     public R<PageResult<SysFileVO>> page(FilePageQuery query) {
@@ -71,6 +78,7 @@ public class FileController {
     }
 
     /** 删除文件（存储对象 + 元数据同删） */
+    @Operation(summary = "删除文件（存储对象 + 元数据同删）")
     @DeleteMapping("/{id}")
     @SaCheckPermission(value = "file:file:remove", type = StpSysUtil.TYPE)
     public R<Void> delete(@PathVariable Long id) {

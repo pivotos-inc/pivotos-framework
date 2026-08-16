@@ -4,11 +4,13 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 /** 消息模板保存请求（新增/更新共用，更新时带 id） */
 @Data
 public class TemplateSaveRequest {
 
     /** 模板ID（更新必填） */
+    @Schema(description = "模板ID（更新必填）")
     private Long id;
 
     /** 模板编码 */
@@ -31,12 +33,15 @@ public class TemplateSaveRequest {
     private String contentTpl;
 
     /** 消息类型（1通知 2公告 3待办） */
+    @Schema(description = "消息类型（1通知 2公告 3待办）")
     private Integer msgType;
 
     /** 默认渠道（inbox/sms/email） */
+    @Schema(description = "默认渠道（inbox/sms/email）")
     private String channel;
 
     /** 状态（0正常 1停用） */
+    @Schema(description = "状态（0正常 1停用）")
     private Integer status;
 
     /** 备注 */

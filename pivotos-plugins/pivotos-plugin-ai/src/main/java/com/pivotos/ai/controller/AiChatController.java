@@ -1,6 +1,8 @@
 package com.pivotos.ai.controller;
 
 import com.pivotos.ai.domain.dto.ChatSendRequest;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.pivotos.ai.domain.vo.ChatMessageVO;
 import com.pivotos.ai.kb.api.dto.KbOptionDTO;
 import com.pivotos.ai.kb.api.facade.IKnowledgeBaseFacade;
@@ -28,6 +30,7 @@ import java.util.List;
  * 流式端点用 POST + SseEmitter：EventSource 带不了 Authorization 头，
  * 前端用 fetch + ReadableStream 消费。
  */
+@Tag(name = "AI 对话", description = "AI 同步/流式对话")
 @RestController
 @RequestMapping("/ai/chat")
 @RequiredArgsConstructor
@@ -38,18 +41,21 @@ public class AiChatController {
     private final ObjectProvider<IKnowledgeBaseFacade> kbFacadeProvider;
 
     /** 同步对话（一次性返回完整回复） */
+    @Operation(summary = "同步对话（一次性返回完整回复）")
     @PostMapping("/send")
     public R<ChatMessageVO> send(@Validated @RequestBody ChatSendRequest request) {
         return R.ok(aiChatService.send(requireUserId(), request));
     }
 
     /** 流式对话（SSE：meta → delta* → done，异常 error） */
+    @Operation(summary = "AI 对话（SSE 流式）")
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@Validated @RequestBody ChatSendRequest request) {
         return aiChatService.stream(requireUserId(), request);
     }
 
     /** 知识库下拉选项（对话页 RAG 选择用，登录即可访问；kb 插件未部署时返回空列表） */
+    @Operation(summary = "知识库下拉选项（对话页 RAG 选择用，登录即可访问；kb 插件未部署时返回空列表）")
     @GetMapping("/kb-options")
     public R<List<KbOptionDTO>> kbOptions() {
         IKnowledgeBaseFacade facade = kbFacadeProvider.getIfAvailable();

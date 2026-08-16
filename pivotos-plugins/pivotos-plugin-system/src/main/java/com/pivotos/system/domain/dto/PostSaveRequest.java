@@ -4,11 +4,13 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 /** 岗位新增/修改请求 */
 @Data
 public class PostSaveRequest {
 
     /** 岗位ID（修改时必传） */
+    @Schema(description = "岗位ID（修改时必传）")
     private Long id;
 
     /** 岗位编码 */
@@ -22,9 +24,11 @@ public class PostSaveRequest {
     private String postName;
 
     /** 显示顺序 */
+    @Schema(description = "显示顺序")
     private Integer sort;
 
     /** 状态（0正常 1停用） */
+    @Schema(description = "状态（0正常 1停用）")
     private Integer status;
 
     /** 备注 */

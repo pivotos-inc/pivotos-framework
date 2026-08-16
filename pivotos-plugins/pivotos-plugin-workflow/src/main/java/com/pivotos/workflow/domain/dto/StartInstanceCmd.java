@@ -1,6 +1,7 @@
 package com.pivotos.workflow.domain.dto;
 
 import lombok.Data;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
 import java.util.Map;
@@ -12,17 +13,22 @@ import java.util.Map;
 public class StartInstanceCmd {
 
     /** 流程编码（必填，对应 flow_definition.flow_code） */
+    @Schema(description = "流程编码（必填，对应 flow_definition.flow_code）")
     private String flowCode;
 
     /** 业务 ID（关联业务表主键） */
+    @Schema(description = "业务 ID（关联业务表主键）")
     private String businessId;
 
     /** 业务名称（展示用，如"张三的请假单"） */
+    @Schema(description = "业务名称（展示用，如\"张三的请假单\"）")
     private String businessName;
 
     /** 流程变量（可传递给流程节点的条件参数） */
+    @Schema(description = "流程变量（可传递给流程节点的条件参数）")
     private Map<String, Object> variable;
 
     /** 抄送收件人用户 ID 集合（可选，S78 F1：发起时抄送） */
+    @Schema(description = "抄送收件人用户 ID 集合（可选，S78 F1：发起时抄送）")
     private List<Long> ccUserIds;
 }

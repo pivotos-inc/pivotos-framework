@@ -1,6 +1,8 @@
 package com.pivotos.system.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.pivotos.common.core.result.R;
 import com.pivotos.starter.auth.account.StpSysUtil;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /** 菜单管理 + 动态路由下发 */
+@Tag(name = "菜单管理", description = "菜单管理 + 动态路由下发")
 @RestController
 @RequestMapping("/system/menu")
 @RequiredArgsConstructor
@@ -31,6 +34,7 @@ public class MenuController {
     private final MenuService menuService;
 
     /** 菜单树查询 */
+    @Operation(summary = "菜单树查询")
     @GetMapping("/tree")
     @SaCheckPermission(value = "system:menu:list", type = StpSysUtil.TYPE)
     public R<List<MenuVO>> tree(MenuQuery query) {
@@ -38,6 +42,7 @@ public class MenuController {
     }
 
     /** 当前用户动态路由（登录即可读） */
+    @Operation(summary = "当前用户动态路由（登录即可读）")
     @GetMapping("/routers")
     @SaCheckLogin(type = StpSysUtil.TYPE)
     public R<List<RouterVO>> routers() {
@@ -46,6 +51,7 @@ public class MenuController {
     }
 
     /** 详情 */
+    @Operation(summary = "详情")
     @GetMapping("/{id}")
     @SaCheckPermission(value = "system:menu:query", type = StpSysUtil.TYPE)
     public R<MenuVO> get(@PathVariable Long id) {
@@ -53,6 +59,7 @@ public class MenuController {
     }
 
     /** 新增 */
+    @Operation(summary = "新增")
     @PostMapping
     @SaCheckPermission(value = "system:menu:add", type = StpSysUtil.TYPE)
     public R<Long> create(@Validated @RequestBody MenuSaveRequest request) {
@@ -60,6 +67,7 @@ public class MenuController {
     }
 
     /** 修改 */
+    @Operation(summary = "修改")
     @PutMapping
     @SaCheckPermission(value = "system:menu:edit", type = StpSysUtil.TYPE)
     public R<Void> update(@Validated @RequestBody MenuSaveRequest request) {
@@ -68,6 +76,7 @@ public class MenuController {
     }
 
     /** 删除 */
+    @Operation(summary = "删除")
     @DeleteMapping("/{id}")
     @SaCheckPermission(value = "system:menu:remove", type = StpSysUtil.TYPE)
     public R<Void> delete(@PathVariable Long id) {

@@ -1,6 +1,8 @@
 package com.pivotos.workflow.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.common.core.result.R;
 import com.pivotos.starter.auth.account.StpSysUtil;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 端点三体系通用（S79）：start/revoke/urge/详情/列表仅校「已登录」，
  * 发起人归属由 service 层校验；终止为管理态操作，保留 sys 权限。
  */
+@Tag(name = "流程实例", description = "发起/撤回/终止/详情")
 @RestController
 @RequestMapping("/workflow/instance")
 @RequiredArgsConstructor
@@ -31,12 +34,14 @@ public class WorkflowInstanceController {
 
     private final FlowInstanceService flowInstanceService;
 
+    @Operation(summary = "发起流程")
     @PostMapping("/start")
     public R<WorkflowInstanceVO> start(@RequestBody StartInstanceCmd cmd) {
         WorkflowAuthSupport.requireUserId();
         return R.ok(flowInstanceService.start(cmd));
     }
 
+    @Operation(summary = "撤回流程实例")
     @PutMapping("/{instanceId}/revoke")
     public R<Void> revoke(@PathVariable Long instanceId) {
         WorkflowAuthSupport.requireUserId();
@@ -44,6 +49,7 @@ public class WorkflowInstanceController {
         return R.ok();
     }
 
+    @Operation(summary = "终止流程实例")
     @PutMapping("/{instanceId}/terminate")
     @SaCheckPermission(value = "workflow:instance:terminate", type = StpSysUtil.TYPE)
     public R<Void> terminate(@PathVariable Long instanceId) {
@@ -52,6 +58,7 @@ public class WorkflowInstanceController {
     }
 
     /** 催办（S77 F2）：发起人催促当前审批人，10 分钟限频 */
+    @Operation(summary = "催办（S77 F2）：发起人催促当前审批人，10 分钟限频")
     @PutMapping("/{instanceId}/urge")
     public R<Void> urge(@PathVariable Long instanceId) {
         WorkflowAuthSupport.requireUserId();
@@ -59,12 +66,14 @@ public class WorkflowInstanceController {
         return R.ok();
     }
 
+    @Operation(summary = "实例详情")
     @GetMapping("/{instanceId}")
     public R<WorkflowInstanceVO> detail(@PathVariable Long instanceId) {
         WorkflowAuthSupport.requireUserId();
         return R.ok(flowInstanceService.detail(instanceId));
     }
 
+    @Operation(summary = "实例分页查询")
     @GetMapping("/page")
     public R<PageResult<WorkflowInstanceVO>> page(TaskPageQuery query) {
         WorkflowAuthSupport.requireUserId();

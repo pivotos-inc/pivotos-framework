@@ -1,6 +1,8 @@
 package com.pivotos.system.controller;
 
 import com.pivotos.common.core.enums.error.GlobalErrorCode;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.result.R;
 import com.pivotos.starter.core.context.LoginContext;
@@ -18,6 +20,7 @@ import java.util.List;
  * 移动端工作台接口（sys / app / wx-mini 三账号体系通用，
  * 登录态由 LoginContextFilter 统一解析）。
  */
+@Tag(name = "移动端工作台", description = "移动端工作台接口（三账号体系通用）")
 @RestController
 @RequestMapping("/app/system")
 @RequiredArgsConstructor
@@ -30,6 +33,7 @@ public class WorkbenchController {
      *
      * @param device 端标识（app / mini），默认 app
      */
+    @Operation(summary = "工作台数据")
     @GetMapping("/workbench")
     public R<List<WorkbenchItemVO>> workbench(@RequestParam(defaultValue = "app") String device) {
         Long userId = LoginContext.getUserId();
