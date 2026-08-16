@@ -1,5 +1,6 @@
 package com.pivotos.starter.job.config;
 
+import com.pivotos.starter.job.client.XxlJobAdminClient;
 import com.xxl.job.core.executor.impl.XxlJobSpringExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,6 +59,14 @@ public class JobAutoConfiguration {
     @FunctionalInterface
     public interface XxlJobSpringExecutorCustomizer {
         void customize(XxlJobSpringExecutor executor);
+    }
+
+    /**
+     * XXL-Job admin Open API 客户端（仅执行器装配时生效）
+     */
+    @Bean
+    public XxlJobAdminClient xxlJobAdminClient(JobProperties properties) {
+        return new XxlJobAdminClient(properties);
     }
 
     /**

@@ -15,6 +15,7 @@ import com.pivotos.common.core.enums.error.ErrorCode;
  *   <li>2100-2119 通知公告</li>
  *   <li>2120-2129 岗位管理</li>
  *   <li>2130-2139 在线用户</li>
+ *   <li>2140-2149 定时任务</li>
  * </ul>
  */
 public enum SystemErrorCode implements ErrorCode {
@@ -67,7 +68,15 @@ public enum SystemErrorCode implements ErrorCode {
 
     // ---------- 在线用户 ----------
     ONLINE_USER_NOT_FOUND(2130, "在线用户不存在或已下线"),
-    ONLINE_USER_KICKOUT_SELF(2131, "不能强退自己");
+    ONLINE_USER_KICKOUT_SELF(2131, "不能强退自己"),
+
+    // ---------- 定时任务 ----------
+    JOB_NOT_FOUND(2140, "任务不存在"),
+    JOB_HANDLER_NOT_REGISTERED(2141, "Handler 未注册或任务未部署"),
+    JOB_STATUS_RUNNING(2142, "任务运行中，无法编辑或删除，请先暂停"),
+    JOB_SCHEDULE_INVALID(2143, "调度配置无效：Cron 表达式或固定速率不合法"),
+    JOB_SYNC_FAILED(2144, "XXL-Job 调度中心同步失败，请检查调度中心是否在线"),
+    JOB_ADMIN_UNREACHABLE(2145, "调度中心不可达，请检查 XXL-Job admin 配置");
 
     private final int code;
     private final String msg;
