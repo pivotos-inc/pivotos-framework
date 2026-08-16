@@ -249,6 +249,20 @@ public class WorkflowNotifyService {
         }
     }
 
+    /** 委派（S93）→ 通知受托人（语义：代审后回到委派人确认） */
+    public void notifyOnDepute(Task task, String targetUserId) {
+        try {
+            Long receiverId = Long.valueOf(targetUserId);
+            sendNotify("您有一条委派的审批待处理",
+                    String.format("流程「%s」节点「%s」由 %s 委派给您代审，您处理后将回到委派人确认",
+                            flowNameOf(task), task.getNodeName(), currentNickname()),
+                    task.getInstanceId(),
+                    List.of(receiverId));
+        } catch (NumberFormatException e) {
+            log.warn("[WorkflowNotify] 委派目标用户 ID 格式异常: {}", targetUserId);
+        }
+    }
+
     /** 撤回 → 通知当前审批人 */
     public void notifyOnRevoke(Instance instance) {
         sendNotify("流程已撤回",
