@@ -180,9 +180,13 @@ class P0ArchitectureTest {
 
     // ========== A7：无 ThreadLocal 直接使用（必须经 core 封装的 ScopedValue 门面） ==========
     // 反向断言：ThreadLocal 类型字段只允许出现在 core 包内
+    // 唯一豁免（S93 补登）：AiUsageContext.SCENE —— AI 用量场景标注需跨插件「先 set 后调」，
+    // ScopedValue 重绑定要求包裹调用块、跨模块改造面大；该类以 try/finally 纪律保证清理，
+    // 设计理由见 AiUsageContext 类注释（S92 引入，S93 补豁免登记）。
     @ArchTest
     static final ArchRule a7_no_direct_threadlocal = noFields()
         .that().haveRawType(ThreadLocal.class)
+        .and().areNotDeclaredIn("com.pivotos.ai.api.usage.AiUsageContext")
         .should().beDeclaredInClassesThat().resideOutsideOfPackage(CORE_PACKAGE)
         .allowEmptyShould(true);
 
