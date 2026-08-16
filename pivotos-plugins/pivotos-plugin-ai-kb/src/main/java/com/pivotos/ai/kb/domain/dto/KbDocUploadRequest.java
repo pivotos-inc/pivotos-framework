@@ -3,6 +3,7 @@ package com.pivotos.ai.kb.domain.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -30,8 +31,10 @@ public class KbDocUploadRequest implements Serializable {
     private String fileUrl;
 
     /** 文件 MIME 类型 */
+    @Schema(description = "文件 MIME 类型")
     private String fileType;
 
     /** 文件大小（字节） */
+    @Schema(description = "文件大小（字节）")
     private Long fileSize;
 }

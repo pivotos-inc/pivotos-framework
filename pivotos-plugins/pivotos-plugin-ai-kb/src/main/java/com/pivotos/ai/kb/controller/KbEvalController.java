@@ -1,6 +1,8 @@
 package com.pivotos.ai.kb.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.pivotos.ai.kb.domain.dto.KbEvalRecordSaveRequest;
 import com.pivotos.ai.kb.domain.dto.KbEvalRunRequest;
 import com.pivotos.ai.kb.domain.dto.KbEvalSaveRequest;
@@ -31,6 +33,7 @@ import java.util.List;
  * <p>问题集 CRUD 复用 ai:kb:edit 权限点，列表/跑分复用 ai:kb:list，不新增权限点。
  * 跑分为单题同步执行（前端逐题调用，天然支持进度展示）。
  */
+@Tag(name = "知识库评测", description = "知识库检索评测")
 @RestController
 @RequestMapping("/ai/kb/eval")
 @RequiredArgsConstructor
@@ -39,6 +42,7 @@ public class KbEvalController {
     private final KbEvalService kbEvalService;
 
     /** 评测问题集列表 */
+    @Operation(summary = "评测问题集列表")
     @GetMapping("/question/list")
     @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
     public R<List<KbEvalQuestionVO>> list(@RequestParam Long kbId) {
@@ -46,6 +50,7 @@ public class KbEvalController {
     }
 
     /** 新增评测问题 */
+    @Operation(summary = "新增评测问题")
     @PostMapping("/question")
     @SaCheckPermission(value = "ai:kb:edit", type = StpSysUtil.TYPE)
     public R<Long> create(@Validated @RequestBody KbEvalSaveRequest request) {
@@ -53,6 +58,7 @@ public class KbEvalController {
     }
 
     /** 修改评测问题 */
+    @Operation(summary = "修改评测问题")
     @PutMapping("/question")
     @SaCheckPermission(value = "ai:kb:edit", type = StpSysUtil.TYPE)
     public R<Void> update(@Validated @RequestBody KbEvalSaveRequest request) {
@@ -61,6 +67,7 @@ public class KbEvalController {
     }
 
     /** 删除评测问题 */
+    @Operation(summary = "删除评测问题")
     @DeleteMapping("/question/{id}")
     @SaCheckPermission(value = "ai:kb:edit", type = StpSysUtil.TYPE)
     public R<Void> delete(@PathVariable Long id) {
@@ -69,6 +76,7 @@ public class KbEvalController {
     }
 
     /** 单题跑分：rerank 关（基线）/ 开 双配置对比 */
+    @Operation(summary = "单题跑分：rerank 关（基线）/ 开 双配置对比")
     @PostMapping("/run")
     @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
     public R<KbEvalCompareVO> run(@Validated @RequestBody KbEvalRunRequest request) {
@@ -77,6 +85,7 @@ public class KbEvalController {
     }
 
     /** 保存一轮全量跑分记录（聚合指标后端统一计算） */
+    @Operation(summary = "保存一轮全量跑分记录（聚合指标后端统一计算）")
     @PostMapping("/record")
     @SaCheckPermission(value = "ai:kb:edit", type = StpSysUtil.TYPE)
     public R<Long> saveRecord(@Validated @RequestBody KbEvalRecordSaveRequest request) {
@@ -84,6 +93,7 @@ public class KbEvalController {
     }
 
     /** 最近跑分记录列表（最近 20 条） */
+    @Operation(summary = "最近跑分记录列表（最近 20 条）")
     @GetMapping("/record/list")
     @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
     public R<List<KbEvalRecordVO>> listRecords(@RequestParam Long kbId) {
@@ -91,6 +101,7 @@ public class KbEvalController {
     }
 
     /** 某轮跑分的逐题明细（快照） */
+    @Operation(summary = "某轮跑分的逐题明细（快照）")
     @GetMapping("/record/{id}")
     @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
     public R<List<KbEvalRecordItemVO>> recordDetail(@PathVariable Long id) {
@@ -98,6 +109,7 @@ public class KbEvalController {
     }
 
     /** 删除跑分记录（级联删除明细） */
+    @Operation(summary = "删除跑分记录（级联删除明细）")
     @DeleteMapping("/record/{id}")
     @SaCheckPermission(value = "ai:kb:edit", type = StpSysUtil.TYPE)
     public R<Void> deleteRecord(@PathVariable Long id) {

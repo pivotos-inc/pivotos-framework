@@ -1,6 +1,8 @@
 package com.pivotos.system.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.common.core.result.R;
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /** 字典管理（类型 + 数据） */
+@Tag(name = "字典管理", description = "字典类型与字典数据管理")
 @RestController
 @RequestMapping("/system/dict")
 @RequiredArgsConstructor
@@ -39,24 +42,28 @@ public class DictController {
 
     // ---------- 字典类型 ----------
 
+    @Operation(summary = "字典类型分页")
     @GetMapping("/type/page")
     @SaCheckPermission(value = "system:dict:list", type = StpSysUtil.TYPE)
     public R<PageResult<DictTypeVO>> typePage(DictTypeQuery query) {
         return R.ok(dictTypeService.pageTypes(query));
     }
 
+    @Operation(summary = "字典类型详情")
     @GetMapping("/type/{id}")
     @SaCheckPermission(value = "system:dict:query", type = StpSysUtil.TYPE)
     public R<DictTypeVO> getType(@PathVariable Long id) {
         return R.ok(dictTypeService.getType(id));
     }
 
+    @Operation(summary = "新增字典类型")
     @PostMapping("/type")
     @SaCheckPermission(value = "system:dict:add", type = StpSysUtil.TYPE)
     public R<Long> createType(@Validated @RequestBody DictTypeSaveRequest request) {
         return R.ok(dictTypeService.createType(request));
     }
 
+    @Operation(summary = "修改字典类型")
     @PutMapping("/type")
     @SaCheckPermission(value = "system:dict:edit", type = StpSysUtil.TYPE)
     public R<Void> updateType(@Validated @RequestBody DictTypeSaveRequest request) {
@@ -64,6 +71,7 @@ public class DictController {
         return R.ok();
     }
 
+    @Operation(summary = "删除字典类型")
     @DeleteMapping("/type/{id}")
     @SaCheckPermission(value = "system:dict:remove", type = StpSysUtil.TYPE)
     public R<Void> deleteType(@PathVariable Long id) {
@@ -73,6 +81,7 @@ public class DictController {
 
     // ---------- 字典数据 ----------
 
+    @Operation(summary = "字典数据分页")
     @GetMapping("/data/page")
     @SaCheckPermission(value = "system:dict:list", type = StpSysUtil.TYPE)
     public R<PageResult<DictDataVO>> dataPage(DictDataQuery query) {
@@ -80,24 +89,28 @@ public class DictController {
     }
 
     /** 按类型取正常字典项（前端字典翻译，登录即可读） */
+    @Operation(summary = "按类型取正常字典项（前端字典翻译，登录即可读）")
     @GetMapping("/data/type/{dictType}")
     @SaCheckLogin(type = StpSysUtil.TYPE)
     public R<List<DictDataVO>> dataByType(@PathVariable String dictType) {
         return R.ok(dictDataConvert.toVoList(dictDataService.listEnabledByType(dictType)));
     }
 
+    @Operation(summary = "字典数据详情")
     @GetMapping("/data/{id}")
     @SaCheckPermission(value = "system:dict:query", type = StpSysUtil.TYPE)
     public R<DictDataVO> getData(@PathVariable Long id) {
         return R.ok(dictDataService.getData(id));
     }
 
+    @Operation(summary = "新增字典数据")
     @PostMapping("/data")
     @SaCheckPermission(value = "system:dict:add", type = StpSysUtil.TYPE)
     public R<Long> createData(@Validated @RequestBody DictDataSaveRequest request) {
         return R.ok(dictDataService.createData(request));
     }
 
+    @Operation(summary = "修改字典数据")
     @PutMapping("/data")
     @SaCheckPermission(value = "system:dict:edit", type = StpSysUtil.TYPE)
     public R<Void> updateData(@Validated @RequestBody DictDataSaveRequest request) {
@@ -105,6 +118,7 @@ public class DictController {
         return R.ok();
     }
 
+    @Operation(summary = "删除字典数据")
     @DeleteMapping("/data/{id}")
     @SaCheckPermission(value = "system:dict:remove", type = StpSysUtil.TYPE)
     public R<Void> deleteData(@PathVariable Long id) {

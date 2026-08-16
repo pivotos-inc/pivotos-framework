@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * 检索评测问题保存请求（S66；id 为空表示新增）。
  */
@@ -12,6 +13,7 @@ import lombok.Data;
 public class KbEvalSaveRequest {
 
     /** 主键（为空=新增） */
+    @Schema(description = "主键（为空=新增）")
     private Long id;
 
     /** 关联知识库ID */
@@ -29,5 +31,6 @@ public class KbEvalSaveRequest {
     private String expectedKeyword;
 
     /** 排序 */
+    @Schema(description = "排序")
     private Integer sort;
 }

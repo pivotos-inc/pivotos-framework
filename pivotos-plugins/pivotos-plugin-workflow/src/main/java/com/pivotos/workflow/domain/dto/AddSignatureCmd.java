@@ -1,6 +1,7 @@
 package com.pivotos.workflow.domain.dto;
 
 import lombok.Data;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
 
@@ -13,11 +14,14 @@ import java.util.List;
 public class AddSignatureCmd {
 
     /** 待办任务 ID */
+    @Schema(description = "待办任务 ID")
     private Long taskId;
 
     /** 被加签人用户 ID 集合（必填，字符串口径对齐 warm-flow handler） */
+    @Schema(description = "被加签人用户 ID 集合（必填，字符串口径对齐 warm-flow handler）")
     private List<String> userIds;
 
     /** 加签说明（可选） */
+    @Schema(description = "加签说明（可选）")
     private String message;
 }

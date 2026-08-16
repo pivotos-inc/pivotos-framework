@@ -1,6 +1,8 @@
 package com.pivotos.ai.kb.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.pivotos.ai.kb.api.dto.KbSearchResultDTO;
 import com.pivotos.ai.kb.domain.dto.KbBaseSaveRequest;
 import com.pivotos.ai.kb.domain.dto.KbBaseUpdateRequest;
@@ -28,6 +30,7 @@ import java.util.List;
 /**
  * 知识库管理接口。
  */
+@Tag(name = "知识库", description = "知识库管理")
 @RestController
 @RequestMapping("/ai/kb/base")
 @RequiredArgsConstructor
@@ -37,6 +40,7 @@ public class KnowledgeBaseController {
     private final KbPipelineService pipelineService;
 
     /** 分页列表 */
+    @Operation(summary = "分页列表")
     @GetMapping("/page")
     @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
     public R<PageResult<KnowledgeBaseVO>> page(PageQuery query) {
@@ -44,6 +48,7 @@ public class KnowledgeBaseController {
     }
 
     /** 下拉选择 */
+    @Operation(summary = "下拉选择")
     @GetMapping("/list")
     @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
     public R<List<KnowledgeBaseVO>> list() {
@@ -51,6 +56,7 @@ public class KnowledgeBaseController {
     }
 
     /** 详情 */
+    @Operation(summary = "详情")
     @GetMapping("/{id}")
     @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
     public R<KnowledgeBaseVO> get(@PathVariable Long id) {
@@ -58,6 +64,7 @@ public class KnowledgeBaseController {
     }
 
     /** 新增 */
+    @Operation(summary = "新增")
     @PostMapping
     @SaCheckPermission(value = "ai:kb:add", type = StpSysUtil.TYPE)
     public R<Long> create(@Validated @RequestBody KbBaseSaveRequest request) {
@@ -65,6 +72,7 @@ public class KnowledgeBaseController {
     }
 
     /** 修改 */
+    @Operation(summary = "修改")
     @PutMapping
     @SaCheckPermission(value = "ai:kb:edit", type = StpSysUtil.TYPE)
     public R<Void> update(@Validated @RequestBody KbBaseUpdateRequest request) {
@@ -73,6 +81,7 @@ public class KnowledgeBaseController {
     }
 
     /** 删除 */
+    @Operation(summary = "删除")
     @DeleteMapping("/{id}")
     @SaCheckPermission(value = "ai:kb:delete", type = StpSysUtil.TYPE)
     public R<Void> delete(@PathVariable Long id) {
@@ -81,6 +90,7 @@ public class KnowledgeBaseController {
     }
 
     /** 相似性检索（调试/管理用） */
+    @Operation(summary = "相似性检索（调试/管理用）")
     @PostMapping("/search")
     @SaCheckPermission(value = "ai:kb:list", type = StpSysUtil.TYPE)
     public R<List<KbSearchResultDTO>> search(@Validated @RequestBody KbSearchRequest request) {

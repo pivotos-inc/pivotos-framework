@@ -33,6 +33,8 @@
         <module>pivotos-plugin-workflow</module>
         <module>pivotos-plugin-ai-kb-api</module>
         <module>pivotos-plugin-ai-kb</module>
+        <module>pivotos-plugin-docsync-api</module>
+        <module>pivotos-plugin-docsync</module>
     </modules>
 
     <dependencyManagement>
@@ -46,4 +48,13 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <!-- Swagger/OpenAPI 注解（@Tag/@Operation/@Schema）提供给所有插件编译使用，版本由 BOM 统一管理 -->
+    <dependencies>
+        <dependency>
+            <groupId>io.swagger.core.v3</groupId>
+            <artifactId>swagger-annotations-jakarta</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
 </project>

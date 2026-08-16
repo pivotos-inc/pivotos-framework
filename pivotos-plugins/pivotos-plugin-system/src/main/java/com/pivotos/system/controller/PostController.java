@@ -1,6 +1,8 @@
 package com.pivotos.system.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.pivotos.common.core.result.R;
 import com.pivotos.starter.auth.account.StpSysUtil;
 import com.pivotos.system.domain.dto.PostQuery;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /** 岗位管理 */
+@Tag(name = "岗位管理", description = "岗位 CRUD")
 @RestController
 @RequestMapping("/system/post")
 @RequiredArgsConstructor
@@ -29,6 +32,7 @@ public class PostController {
     private final PostService postService;
 
     /** 岗位列表 */
+    @Operation(summary = "岗位列表")
     @GetMapping("/list")
     @SaCheckPermission(value = "system:post:query", type = StpSysUtil.TYPE)
     public R<List<PostVO>> list(PostQuery query) {
@@ -36,6 +40,7 @@ public class PostController {
     }
 
     /** 详情 */
+    @Operation(summary = "详情")
     @GetMapping("/{id}")
     @SaCheckPermission(value = "system:post:query", type = StpSysUtil.TYPE)
     public R<PostVO> get(@PathVariable Long id) {
@@ -43,6 +48,7 @@ public class PostController {
     }
 
     /** 新增 */
+    @Operation(summary = "新增")
     @PostMapping
     @SaCheckPermission(value = "system:post:add", type = StpSysUtil.TYPE)
     public R<Long> create(@Validated @RequestBody PostSaveRequest request) {
@@ -50,6 +56,7 @@ public class PostController {
     }
 
     /** 修改 */
+    @Operation(summary = "修改")
     @PutMapping
     @SaCheckPermission(value = "system:post:edit", type = StpSysUtil.TYPE)
     public R<Void> update(@Validated @RequestBody PostSaveRequest request) {
@@ -58,6 +65,7 @@ public class PostController {
     }
 
     /** 删除 */
+    @Operation(summary = "删除")
     @DeleteMapping("/{id}")
     @SaCheckPermission(value = "system:post:remove", type = StpSysUtil.TYPE)
     public R<Void> delete(@PathVariable Long id) {

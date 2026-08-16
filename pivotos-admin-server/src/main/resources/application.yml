@@ -59,13 +59,16 @@ mybatis-plus:
   global-config:
     banner: false
 
-# API 文档
+# API 文档（Knife4j Next 增强 UI，底层复用 SpringDoc OpenAPI 3）
 springdoc:
   api-docs:
     path: /v3/api-docs
-  swagger-ui:
-    path: /doc.html
   default-flat-param-object: true
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
 
 # PivotOS 自定义配置
 pivotos:

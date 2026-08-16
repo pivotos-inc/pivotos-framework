@@ -3,6 +3,7 @@ package com.pivotos.message.domain.dto;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
 
@@ -11,6 +12,7 @@ import java.util.List;
 public class MessageSendRequest {
 
     /** 模板编码（可选） */
+    @Schema(description = "模板编码（可选）")
     private String templateCode;
 
     /** 标题（不使用模板时必填） */
@@ -18,18 +20,23 @@ public class MessageSendRequest {
     private String title;
 
     /** 内容（不使用模板时必填） */
+    @Schema(description = "内容（不使用模板时必填）")
     private String content;
 
     /** 消息类型（1通知 2公告 3待办，默认 1） */
+    @Schema(description = "消息类型（1通知 2公告 3待办，默认 1）")
     private Integer msgType;
 
     /** 渠道（inbox/sms/email，默认 inbox） */
+    @Schema(description = "渠道（inbox/sms/email，默认 inbox）")
     private String channel;
 
     /** 业务类型（可选） */
+    @Schema(description = "业务类型（可选）")
     private String bizType;
 
     /** 业务ID（可选） */
+    @Schema(description = "业务ID（可选）")
     private String bizId;
 
     /** 接收人用户 ID 集合 */
