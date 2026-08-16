@@ -33,6 +33,13 @@
             <artifactId>pivotos-plugin-ai-kb-api</artifactId>
         </dependency>
 
+        <!-- 跨插件契约：用量看板用户名回填（S92，只依赖 -api） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-system-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- 底座契约与 Starter -->
         <dependency>
             <groupId>com.pivotos</groupId>

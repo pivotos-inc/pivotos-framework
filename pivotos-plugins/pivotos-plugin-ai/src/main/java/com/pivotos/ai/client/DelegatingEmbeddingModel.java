@@ -1,5 +1,6 @@
 package com.pivotos.ai.client;
 
+import com.pivotos.ai.client.AiUsageRecorder.Snapshot;
 import com.pivotos.ai.domain.entity.AiApiKey;
 import com.pivotos.ai.domain.entity.AiProvider;
 import com.pivotos.ai.service.AiProviderService;
@@ -33,14 +34,23 @@ public class DelegatingEmbeddingModel implements EmbeddingModel {
 
     private final ObjectProvider<AiProviderService> providerServiceProvider;
     private final Environment environment;
+    /** Token 用量记录器（S92：向量化调用计量，可为 null 表示不计量） */
+    private final AiUsageRecorder usageRecorder;
 
     /** 当前委托（volatile 保证 evict 后立即可见） */
     private volatile EmbeddingModel delegate;
 
+    /** 当前委托对应的供应商/Key/模型身份（静态兜底时 providerId/keyId 为 null） */
+    private volatile Long currentProviderId;
+    private volatile String currentProviderCode;
+    private volatile Long currentKeyId;
+    private volatile String currentModel;
+
     public DelegatingEmbeddingModel(ObjectProvider<AiProviderService> providerServiceProvider,
-                                   Environment environment) {
+                                   Environment environment, AiUsageRecorder usageRecorder) {
         this.providerServiceProvider = providerServiceProvider;
         this.environment = environment;
+        this.usageRecorder = usageRecorder;
     }
 
     /** 失效委托：下次调用按最新配置重建 */
@@ -53,7 +63,36 @@ public class DelegatingEmbeddingModel implements EmbeddingModel {
 
     @Override
     public EmbeddingResponse call(EmbeddingRequest request) {
-        return resolve().call(request);
+        EmbeddingResponse response;
+        try {
+            response = resolve().call(request);
+        } catch (RuntimeException e) {
+            recordUsage(null, true);
+            throw e;
+        }
+        recordUsage(response, false);
+        return response;
+    }
+
+    /** S92：向量化用量落库（usage 缺失记 0，计量异常不影响业务） */
+    private void recordUsage(EmbeddingResponse response, boolean failed) {
+        if (usageRecorder == null) {
+            return;
+        }
+        try {
+            Snapshot snapshot = Snapshot.capture();
+            org.springframework.ai.chat.metadata.Usage usage =
+                    response != null && response.getMetadata() != null
+                            ? response.getMetadata().getUsage() : null;
+            int prompt = usage == null || usage.getPromptTokens() == null ? 0 : usage.getPromptTokens();
+            int completion = usage == null || usage.getCompletionTokens() == null ? 0 : usage.getCompletionTokens();
+            usageRecorder.record(snapshot, currentProviderId,
+                    currentProviderCode == null ? "static" : currentProviderCode,
+                    currentKeyId, currentModel == null ? "" : currentModel,
+                    "embedding", prompt, completion, failed);
+        } catch (Exception e) {
+            log.warn("[PivotOS] 向量化用量记录异常（不影响业务）：{}", e.getMessage());
+        }
     }
 
     @Override
@@ -116,6 +155,7 @@ public class DelegatingEmbeddingModel implements EmbeddingModel {
                     String modelName = resolveEmbeddingModelName(provider);
                     log.info("[PivotOS] 动态 EmbeddingModel 构建：providerId={} keyId={} model={}",
                             provider.getId(), key.getId(), modelName);
+                    setCurrentIdentity(provider.getId(), provider.getCode(), key.getId(), modelName);
                     return buildOpenAiEmbeddingModel(provider.getBaseUrl(), key.getApiKey(), modelName);
                 }
             }
@@ -131,7 +171,16 @@ public class DelegatingEmbeddingModel implements EmbeddingModel {
                             + "且 spring.ai.openai.api-key/base-url 未配置");
         }
         log.info("[PivotOS] EmbeddingModel 回退静态配置：baseUrl={} model={}", baseUrl, modelName);
+        setCurrentIdentity(null, null, null, modelName);
         return buildOpenAiEmbeddingModel(baseUrl, apiKey, modelName);
+    }
+
+    /** 记录当前委托身份（供计量使用，与 delegate 同在锁内更新） */
+    private void setCurrentIdentity(Long providerId, String providerCode, Long keyId, String model) {
+        this.currentProviderId = providerId;
+        this.currentProviderCode = providerCode;
+        this.currentKeyId = keyId;
+        this.currentModel = model;
     }
 
     /** 解析向量化模型名：供应商 embeddingModel 优先，空则回退 spring.ai.openai.embedding.options.model */

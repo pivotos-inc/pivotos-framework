@@ -1,5 +1,6 @@
 package com.pivotos.ai.config;
 
+import com.pivotos.ai.client.AiUsageRecorder;
 import com.pivotos.ai.client.DelegatingEmbeddingModel;
 import com.pivotos.ai.service.AiProviderService;
 import org.slf4j.Logger;
@@ -32,8 +33,10 @@ public class AiEmbeddingAutoConfiguration {
     @Primary
     public DelegatingEmbeddingModel delegatingEmbeddingModel(
             ObjectProvider<AiProviderService> providerServiceProvider,
-            Environment environment) {
+            Environment environment,
+            ObjectProvider<AiUsageRecorder> usageRecorderProvider) {
         log.info("[PivotOS] 动态 EmbeddingModel 装配：@Primary 委托就绪（数据库 Key 优先 → 静态兜底）");
-        return new DelegatingEmbeddingModel(providerServiceProvider, environment);
+        return new DelegatingEmbeddingModel(providerServiceProvider, environment,
+                usageRecorderProvider.getIfAvailable());
     }
 }
