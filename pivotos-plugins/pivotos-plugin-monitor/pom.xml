@@ -12,7 +12,7 @@
     <artifactId>pivotos-plugin-monitor</artifactId>
 
     <name>pivotos-plugin-monitor</name>
-    <description>PivotOS monitor 插件（S48 2.3-F6：服务监控 oshi/JMX/虚拟线程 + 缓存监控 Redis INFO，无表结构）</description>
+    <description>PivotOS monitor 插件（S48 2.3-F6：服务监控 oshi/JMX/虚拟线程 + 缓存监控 Redis INFO；S83 AI 图表历史）</description>
 
     <dependencies>
         <!-- 底座 Starter -->
@@ -27,6 +27,11 @@
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-auth</artifactId>
+        </dependency>
+        <!-- S83 AI 图表历史落库（mn_ai_chart） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-mybatis</artifactId>
         </dependency>
 
         <!-- Redisson 客户端（缓存监控 INFO / DBSIZE 采集） -->
