@@ -101,6 +101,11 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-docsync</artifactId>
         </dependency>
+        <!-- migration 插件（旧系统迁移助手） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-migration</artifactId>
+        </dependency>
 
         <!-- ===== API 文档（Knife4j Next：SB4 兼容增强 UI；jakarta 变体适配 SB4 的 jakarta.servlet） ===== -->
         <dependency>

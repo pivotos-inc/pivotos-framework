@@ -35,6 +35,8 @@
         <module>pivotos-plugin-ai-kb</module>
         <module>pivotos-plugin-docsync-api</module>
         <module>pivotos-plugin-docsync</module>
+        <module>pivotos-plugin-migration-api</module>
+        <module>pivotos-plugin-migration</module>
     </modules>
 
     <dependencyManagement>

@@ -44,6 +44,7 @@ logging:
   level:
     com.pivotos: debug
     org.dromara.warm.flow: debug
+    org.springframework.web.servlet.mvc.method.annotation: trace
 
 pivotos:
   tenant:

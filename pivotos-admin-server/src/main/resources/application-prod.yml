@@ -84,7 +84,7 @@ pivotos:
     admin-addresses: ${XXL_JOB_ADMIN:http://10.0.4.15:8100}
     app-name: pivotos-executor
     port: 9999
-    access-token: ${XXL_JOB_ACCESS_TOKEN:}
+    access-token: ${XXL_JOB_ACCESS_TOKEN:Hu293242}
     group-id: ${XXL_JOB_GROUP_ID:1}
   # 微信小程序（与 dev 一致的测试号；正式号取得后替换）
   wechat:
