@@ -186,6 +186,22 @@ public class AiToolServiceImpl implements AiToolService {
         return new PageResult<>(list, page.getTotal(), query.getPageNum(), query.getPageSize());
     }
 
+    @Override
+    public String invokeTool(String toolName, String argsJson) {
+        if (!StringUtils.hasText(toolName)) {
+            throw new ServiceException(AiErrorCode.AI_TOOL_NOT_FOUND);
+        }
+        for (ToolCallbackProvider provider : toolCallbackProviders) {
+            for (org.springframework.ai.tool.ToolCallback callback : provider.getToolCallbacks()) {
+                if (toolName.equals(callback.getToolDefinition().name())) {
+                    // 命中守卫式回调：注册闸/白名单/二次确认/审计与 MCP 链路同源
+                    return callback.call(StringUtils.hasText(argsJson) ? argsJson : "{}");
+                }
+            }
+        }
+        throw new ServiceException(AiErrorCode.AI_TOOL_NOT_FOUND);
+    }
+
     /**
      * 汇聚容器内全部 ToolCallbackProvider 的活工具（名称 → 描述）
      */
