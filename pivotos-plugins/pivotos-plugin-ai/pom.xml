@@ -40,6 +40,12 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- 跨插件契约：A2 工具查当前用户待办数（S97 Hello World，只依赖 -api） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-workflow-api</artifactId>
+        </dependency>
+
         <!-- 底座契约与 Starter -->
         <dependency>
             <groupId>com.pivotos</groupId>
@@ -85,6 +91,13 @@
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-google-genai</artifactId>
+        </dependency>
+
+        <!-- S97 A2 前置：MCP Server（WebMVC SSE）——@Tool 方法经 ToolCallbackProvider
+             同时供 MCP 端点与对话链路 tools 挂载（版本由 spring-ai-bom 托管） -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
         </dependency>
 
         <dependency>

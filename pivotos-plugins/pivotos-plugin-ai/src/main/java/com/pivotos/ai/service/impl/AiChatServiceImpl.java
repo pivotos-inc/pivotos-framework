@@ -31,6 +31,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
@@ -77,6 +78,8 @@ public class AiChatServiceImpl implements AiChatService {
     private final AiClientRegistry clientRegistry;
     /** 知识库门面（可选依赖：kb 插件未部署时为 null，RAG 功能静默降级） */
     private final ObjectProvider<IKnowledgeBaseFacade> kbFacadeProvider;
+    /** AI 工具回调（可选依赖：S97 起同步对话链路挂载 function calling，工具缺失静默降级） */
+    private final ObjectProvider<ToolCallbackProvider> toolCallbackProvider;
 
     @Override
     public ChatMessageVO send(Long userId, ChatSendRequest request) {
@@ -302,9 +305,14 @@ public class AiChatServiceImpl implements AiChatService {
                         conversationId, target.provider().getId(), key.getId(), i + 1, attempts);
             }
             try {
-                String reply = buildPrompt(pickClient(target, i), target, history, content, ragContext)
-                        .call()
-                        .content();
+                ChatClient.ChatClientRequestSpec spec = buildPrompt(pickClient(target, i), target, history, content, ragContext);
+                // S97：同步对话挂载 AI 工具（function calling）——工具在请求线程内执行，
+                // LoginContext 可用；流式链路不挂（回调线程上下文丢失，工具语义不成立）
+                ToolCallbackProvider tools = toolCallbackProvider.getIfAvailable();
+                if (tools != null) {
+                    spec = spec.toolCallbacks(tools.getToolCallbacks());
+                }
+                String reply = spec.call().content();
                 if (key != null) {
                     aiProviderService.recordKeySuccess(key.getId());
                 }

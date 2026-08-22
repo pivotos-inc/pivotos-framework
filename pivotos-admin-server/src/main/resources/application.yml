@@ -35,6 +35,13 @@ spring:
       embedding:
         options:
           model: text-embedding-v3
+    # S97 A2：MCP Server（WebMVC SSE）——端点 GET /sse + POST /mcp/message，
+    # 鉴权体系为注解式拦截（SaInterceptor 只验 @SaCheck* 注解），端点天然可达；
+    # 工具级权限白名单 S98 建实前，工具自身按 LoginContext 缺失降级
+    mcp:
+      server:
+        name: pivotos-mcp-server
+        version: 2.11.0
 
 sa-token:
   token-name: Authorization
