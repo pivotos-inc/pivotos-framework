@@ -81,10 +81,12 @@ public class AiLocalFacade implements IAiFacade {
             throw new ServiceException(AiErrorCode.NO_AVAILABLE_KEY);
         }
         try {
-            return clientRegistry.getChatClient(provider, keys.get(0))
+            // S96 K7：DashScope 兼容端对 [system, user] 形态的特定结构化 prompt 实测稳定返回空数组（[]），
+            // 同内容拼入单条 user 消息则正常产出；内部生成链路改用单 user 形态规避
+            return clientRegistry.getInternalChatClient(provider, keys.get(0))
                     .prompt()
-                    .system(systemPrompt)
-                    .user(userPrompt)
+                    .user(systemPrompt + "\n\n" + userPrompt)
+                    .options(clientRegistry.buildChatOptions(provider, provider.getDefaultModel()))
                     .call()
                     .content();
         } catch (Exception e) {
