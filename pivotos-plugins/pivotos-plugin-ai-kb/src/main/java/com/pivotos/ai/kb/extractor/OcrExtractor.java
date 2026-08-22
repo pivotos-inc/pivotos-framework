@@ -10,6 +10,7 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.util.StringUtils;
 
 import javax.imageio.ImageIO;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -80,7 +81,8 @@ public class OcrExtractor {
         try (InputStream is = openStream(downloadUrl)) {
             byte[] bytes = is.readAllBytes();
             return extractTextFromBytes(bytes, type);
-        } catch (Exception e) {
+        } catch (Throwable e) {
+            // 捕获 Throwable：tess4j 原生层可能抛出 Error（如 Invalid memory access），不允许穿透为 500
             log.warn("[PivotOS-KB] OCR 提取失败: fileType={}, error={}", type, e.getMessage());
             return "";
         }
@@ -93,7 +95,7 @@ public class OcrExtractor {
             } else {
                 return ocrImage(bytes);
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.warn("[PivotOS-KB] OCR 处理失败: {}", e.getMessage());
             return "";
         }
@@ -105,7 +107,23 @@ public class OcrExtractor {
             return "";
         }
         ITesseract instance = createTesseract();
-        return instance.doOCR(image);
+        // tess4j 对带 alpha 通道的图像（如 RGBA PNG）会原生崩溃（Invalid memory access），
+        // OCR 仅依赖亮度信息，统一归一化为灰度图后再识别
+        return instance.doOCR(toGrayscale(image));
+    }
+
+    private BufferedImage toGrayscale(BufferedImage source) {
+        if (source.getType() == BufferedImage.TYPE_BYTE_GRAY) {
+            return source;
+        }
+        BufferedImage gray = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
+        Graphics2D g = gray.createGraphics();
+        try {
+            g.drawImage(source, 0, 0, null);
+        } finally {
+            g.dispose();
+        }
+        return gray;
     }
 
     private String ocrPdf(byte[] pdfBytes) throws Exception {
@@ -116,9 +134,9 @@ public class OcrExtractor {
             for (int i = 0; i < doc.getNumberOfPages(); i++) {
                 try {
                     BufferedImage image = renderer.renderImageWithDPI(i, PDF_RENDER_DPI);
-                    String pageText = instance.doOCR(image);
+                    String pageText = instance.doOCR(toGrayscale(image));
                     result.append(pageText).append('\n');
-                } catch (Exception e) {
+                } catch (Throwable e) {
                     log.debug("[PivotOS-KB] PDF 第 {} 页 OCR 失败: {}", i + 1, e.getMessage());
                 }
             }
