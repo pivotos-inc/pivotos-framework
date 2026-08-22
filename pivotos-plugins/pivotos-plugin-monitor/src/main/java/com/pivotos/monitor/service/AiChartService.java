@@ -2,6 +2,7 @@ package com.pivotos.monitor.service;
 
 import com.pivotos.ai.api.enums.AiErrorCode;
 import com.pivotos.ai.api.facade.IAiFacade;
+import com.pivotos.ai.api.usage.AiUsageContext;
 import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.monitor.domain.vo.AiChartSpecVO;
 import com.pivotos.monitor.domain.vo.DashboardSummaryVO;
@@ -96,7 +97,9 @@ public class AiChartService {
                 + "\n\n" + DATA_DICTIONARY
                 + "\nUser request: " + question.trim() + "\n\nOutput JSON chart spec:";
 
-        String response = facade.chatWithSystem(SYSTEM_PROMPT, userPrompt);
+        // S92：chart 场景计量（facade 内部走动态 Key 体系时由包装层落 usage）
+        String response = AiUsageContext.callWithScene(AiUsageContext.SCENE_CHART,
+                () -> facade.chatWithSystem(SYSTEM_PROMPT, userPrompt));
         if (response == null || response.isBlank()) {
             throw new ServiceException(AiErrorCode.CHART_GEN_FAILED);
         }

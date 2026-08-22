@@ -4,11 +4,13 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 /** 部门新增/修改请求 */
 @Data
 public class DeptSaveRequest {
 
     /** 部门ID */
+    @Schema(description = "部门ID")
     private Long id;
 
     /** 父部门ID（0为根） */
@@ -20,11 +22,14 @@ public class DeptSaveRequest {
     private String deptName;
 
     /** 负责人用户ID */
+    @Schema(description = "负责人用户ID")
     private Long leaderId;
 
     /** 显示顺序 */
+    @Schema(description = "显示顺序")
     private Integer sort;
 
     /** 状态（0正常 1停用） */
+    @Schema(description = "状态（0正常 1停用）")
     private Integer status;
 }

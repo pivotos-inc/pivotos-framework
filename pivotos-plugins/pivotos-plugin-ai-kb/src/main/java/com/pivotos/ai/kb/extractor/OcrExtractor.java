@@ -10,6 +10,7 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.util.StringUtils;
 
 import javax.imageio.ImageIO;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -36,6 +37,8 @@ public class OcrExtractor {
     private final String tessdataPath;
     private final String languages;
     private volatile boolean available = false;
+    /** 串行化锁：tess4j 原生层与进程内其他 JNA 调用方（如 oshi）并发时存在首次初始化竞态，OCR 调用统一串行执行 */
+    private final Object ocrLock = new Object();
 
     public OcrExtractor(KbProperties properties) {
         KbProperties.Ocr ocr = properties.getOcr();
@@ -50,11 +53,35 @@ public class OcrExtractor {
                 // 用 1x1 空白图片做最小化验证，确认原生库可加载
                 instance.doOCR(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB));
                 available = true;
+                // 真图级预热：实测 fat jar 形态下「进程启动后首次真实图像 OCR」存在原生层间歇性崩溃，
+                // 启动期先跑一遍完整识别管线完成原生初始化，把竞态窗口消化在启动阶段
+                warmupRealPipeline();
                 log.info("[PivotOS-KB] Tesseract OCR 已就绪: languages={}", languages);
             } catch (Throwable e) {
                 available = false;
                 log.warn("[PivotOS-KB] Tesseract OCR 不可用，将跳过 OCR: {}", e.getMessage());
             }
+        }
+    }
+
+    /**
+     * 启动预热：用合成灰度图完整跑一遍 doOCR 管线（语言包加载 + 原生识别），
+     * 失败仅告警不影响就绪判定（请求期仍有重试兜底）。
+     */
+    private void warmupRealPipeline() {
+        try {
+            synchronized (ocrLock) {
+                BufferedImage warmup = new BufferedImage(200, 60, BufferedImage.TYPE_BYTE_GRAY);
+                Graphics2D g = warmup.createGraphics();
+                try {
+                    g.drawString("PivotOS OCR warmup", 10, 30);
+                } finally {
+                    g.dispose();
+                }
+                createTesseract().doOCR(warmup);
+            }
+        } catch (Throwable e) {
+            log.warn("[PivotOS-KB] OCR 预热失败（不阻断就绪，请求期有重试兜底）: {}", e.getMessage());
         }
     }
 
@@ -80,7 +107,8 @@ public class OcrExtractor {
         try (InputStream is = openStream(downloadUrl)) {
             byte[] bytes = is.readAllBytes();
             return extractTextFromBytes(bytes, type);
-        } catch (Exception e) {
+        } catch (Throwable e) {
+            // 捕获 Throwable：tess4j 原生层可能抛出 Error（如 Invalid memory access），不允许穿透为 500
             log.warn("[PivotOS-KB] OCR 提取失败: fileType={}, error={}", type, e.getMessage());
             return "";
         }
@@ -93,7 +121,7 @@ public class OcrExtractor {
             } else {
                 return ocrImage(bytes);
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.warn("[PivotOS-KB] OCR 处理失败: {}", e.getMessage());
             return "";
         }
@@ -104,21 +132,54 @@ public class OcrExtractor {
         if (image == null) {
             return "";
         }
-        ITesseract instance = createTesseract();
-        return instance.doOCR(image);
+        // tess4j 对带 alpha 通道的图像（如 RGBA PNG）会原生崩溃（Invalid memory access），
+        // OCR 仅依赖亮度信息，统一归一化为灰度图后再识别
+        return doOcrWithRetry(toGrayscale(image));
+    }
+
+    /**
+     * 串行 + 单次重试的 doOCR 封装。
+     *
+     * <p>实测 fat jar 形态下进程启动后首次真实图像 OCR 会间歇性抛
+     * {@code java.lang.Error: Invalid memory access}（独立 JVM 探针无法复现，
+     * 疑似与进程内其他 JNA 调用方的原生初始化竞态相关），同进程内重试即恢复，
+     * 故失败后用全新实例重试一次；串行执行进一步收敛原生层并发窗口。
+     */
+    private String doOcrWithRetry(BufferedImage image) throws Exception {
+        synchronized (ocrLock) {
+            try {
+                return createTesseract().doOCR(image);
+            } catch (Throwable first) {
+                log.warn("[PivotOS-KB] OCR 首次识别失败，换新实例重试一次: {}", first.getMessage());
+                return createTesseract().doOCR(image);
+            }
+        }
+    }
+
+    private BufferedImage toGrayscale(BufferedImage source) {
+        if (source.getType() == BufferedImage.TYPE_BYTE_GRAY) {
+            return source;
+        }
+        BufferedImage gray = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
+        Graphics2D g = gray.createGraphics();
+        try {
+            g.drawImage(source, 0, 0, null);
+        } finally {
+            g.dispose();
+        }
+        return gray;
     }
 
     private String ocrPdf(byte[] pdfBytes) throws Exception {
-        ITesseract instance = createTesseract();
         StringBuilder result = new StringBuilder();
         try (PDDocument doc = Loader.loadPDF(pdfBytes)) {
             PDFRenderer renderer = new PDFRenderer(doc);
             for (int i = 0; i < doc.getNumberOfPages(); i++) {
                 try {
                     BufferedImage image = renderer.renderImageWithDPI(i, PDF_RENDER_DPI);
-                    String pageText = instance.doOCR(image);
+                    String pageText = doOcrWithRetry(toGrayscale(image));
                     result.append(pageText).append('\n');
-                } catch (Exception e) {
+                } catch (Throwable e) {
                     log.debug("[PivotOS-KB] PDF 第 {} 页 OCR 失败: {}", i + 1, e.getMessage());
                 }
             }

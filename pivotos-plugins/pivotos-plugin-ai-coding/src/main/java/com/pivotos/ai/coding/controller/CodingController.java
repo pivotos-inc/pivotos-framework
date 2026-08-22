@@ -1,6 +1,8 @@
 package com.pivotos.ai.coding.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.pivotos.ai.coding.api.dto.CodingRequest;
 import com.pivotos.ai.coding.api.dto.CodingSessionVO;
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
  * @author PivotOS
  * @since 2.2.0
  */
+@Tag(name = "AI 代码生成", description = "自然语言生成代码")
 @RestController
 @RequestMapping("/ai-coding")
 @SaCheckLogin(type = StpSysUtil.TYPE)
@@ -42,6 +45,7 @@ public class CodingController {
     /**
      * Parse natural language description and generate code preview.
      */
+    @Operation(summary = "解析需求生成代码")
     @PostMapping("/parse")
     @SaCheckPermission(value = "ai:coding:parse", type = StpSysUtil.TYPE)
     public R<CodingSessionVO> parse(@RequestBody CodingRequest request) {
@@ -51,6 +55,7 @@ public class CodingController {
     /**
      * Parse natural language and generate a new plugin skeleton (S42 / 2.2-F12).
      */
+    @Operation(summary = "解析插件")
     @PostMapping("/plugin/parse")
     @SaCheckPermission(value = "ai:coding:parse", type = StpSysUtil.TYPE)
     public R<CodingSessionVO> parsePlugin(@RequestBody CodingRequest request) {
@@ -60,6 +65,7 @@ public class CodingController {
     /**
      * Parse natural language and generate master-detail (主子表) code (S52 / 2.4-F5).
      */
+    @Operation(summary = "解析子表")
     @PostMapping("/sub/parse")
     @SaCheckPermission(value = "ai:coding:parse", type = StpSysUtil.TYPE)
     public R<CodingSessionVO> parseSub(@RequestBody CodingRequest request) {
@@ -69,6 +75,7 @@ public class CodingController {
     /**
      * Parse natural language and generate tree table code (S54 / tree intent).
      */
+    @Operation(summary = "解析表结构树")
     @PostMapping("/tree/parse")
     @SaCheckPermission(value = "ai:coding:parse", type = StpSysUtil.TYPE)
     public R<CodingSessionVO> parseTree(@RequestBody CodingRequest request) {
@@ -78,6 +85,7 @@ public class CodingController {
     /**
      * Page query coding sessions (list view, without generated files).
      */
+    @Operation(summary = "生成会话分页")
     @GetMapping("/session/page")
     @SaCheckPermission(value = "ai:coding:list", type = StpSysUtil.TYPE)
     public R<PageResult<CodingSessionVO>> pageSessions(
@@ -89,6 +97,7 @@ public class CodingController {
     /**
      * Get session detail with generated file list.
      */
+    @Operation(summary = "生成会话详情")
     @GetMapping("/session/{id}")
     @SaCheckPermission(value = "ai:coding:list", type = StpSysUtil.TYPE)
     public R<CodingSessionVO> session(@PathVariable Long id) {
@@ -98,6 +107,7 @@ public class CodingController {
     /**
      * Apply generated code files to project directories.
      */
+    @Operation(summary = "应用生成代码")
     @PostMapping("/session/{id}/apply")
     @SaCheckPermission(value = "ai:coding:apply", type = StpSysUtil.TYPE)
     public R<Void> apply(@PathVariable Long id) {

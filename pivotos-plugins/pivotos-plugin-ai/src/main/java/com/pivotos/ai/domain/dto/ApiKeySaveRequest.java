@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * API Key 保存请求（id 为空新增、非空修改）。
  * 新增时 apiKey 明文必填（service 层判定）；修改时留空 = 不变更 Key 本体，
@@ -13,6 +14,7 @@ import lombok.Data;
 public class ApiKeySaveRequest {
 
     /** KeyID（修改时必传） */
+    @Schema(description = "KeyID（修改时必传）")
     private Long id;
 
     /** 归属供应商ID */
@@ -24,6 +26,7 @@ public class ApiKeySaveRequest {
     private String label;
 
     /** Key 用途（chat=对话, embedding=向量化, all=通用；空默认 all） */
+    @Schema(description = "Key 用途（chat=对话, embedding=向量化, all=通用；空默认 all）")
     private String purpose;
 
     /** API Key 明文（新增必填；修改留空表示不变更） */
@@ -31,5 +34,6 @@ public class ApiKeySaveRequest {
     private String apiKey;
 
     /** 状态（0启用 1停用） */
+    @Schema(description = "状态（0启用 1停用）")
     private Integer status;
 }

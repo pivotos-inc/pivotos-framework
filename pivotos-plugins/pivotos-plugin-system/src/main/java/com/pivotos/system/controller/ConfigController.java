@@ -1,6 +1,8 @@
 package com.pivotos.system.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.common.core.result.R;
 import com.pivotos.starter.auth.account.StpSysUtil;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 参数配置管理 */
+@Tag(name = "参数配置", description = "系统参数配置管理")
 @RestController
 @RequestMapping("/system/config")
 @RequiredArgsConstructor
@@ -27,24 +30,28 @@ public class ConfigController {
 
     private final ConfigService configService;
 
+    @Operation(summary = "参数配置分页")
     @GetMapping("/page")
     @SaCheckPermission(value = "system:config:list", type = StpSysUtil.TYPE)
     public R<PageResult<ConfigVO>> page(ConfigQuery query) {
         return R.ok(configService.pageConfigs(query));
     }
 
+    @Operation(summary = "参数配置详情")
     @GetMapping("/{id}")
     @SaCheckPermission(value = "system:config:query", type = StpSysUtil.TYPE)
     public R<ConfigVO> get(@PathVariable Long id) {
         return R.ok(configService.getConfig(id));
     }
 
+    @Operation(summary = "新增参数配置")
     @PostMapping
     @SaCheckPermission(value = "system:config:add", type = StpSysUtil.TYPE)
     public R<Long> create(@Validated @RequestBody ConfigSaveRequest request) {
         return R.ok(configService.createConfig(request));
     }
 
+    @Operation(summary = "修改参数配置")
     @PutMapping
     @SaCheckPermission(value = "system:config:edit", type = StpSysUtil.TYPE)
     public R<Void> update(@Validated @RequestBody ConfigSaveRequest request) {
@@ -52,6 +59,7 @@ public class ConfigController {
         return R.ok();
     }
 
+    @Operation(summary = "删除参数配置")
     @DeleteMapping("/{id}")
     @SaCheckPermission(value = "system:config:remove", type = StpSysUtil.TYPE)
     public R<Void> delete(@PathVariable Long id) {

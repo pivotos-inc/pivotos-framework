@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>2.10.0</version>
+        <version>2.11.0</version>
     </parent>
 
     <artifactId>pivotos-plugins</artifactId>
@@ -33,6 +33,10 @@
         <module>pivotos-plugin-workflow</module>
         <module>pivotos-plugin-ai-kb-api</module>
         <module>pivotos-plugin-ai-kb</module>
+        <module>pivotos-plugin-docsync-api</module>
+        <module>pivotos-plugin-docsync</module>
+        <module>pivotos-plugin-migration-api</module>
+        <module>pivotos-plugin-migration</module>
     </modules>
 
     <dependencyManagement>
@@ -46,4 +50,13 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <!-- Swagger/OpenAPI 注解（@Tag/@Operation/@Schema）提供给所有插件编译使用，版本由 BOM 统一管理 -->
+    <dependencies>
+        <dependency>
+            <groupId>io.swagger.core.v3</groupId>
+            <artifactId>swagger-annotations-jakarta</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
 </project>

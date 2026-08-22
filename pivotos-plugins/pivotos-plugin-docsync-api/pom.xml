@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-plugins</artifactId>
+        <version>2.11.0</version>
+    </parent>
+
+    <artifactId>pivotos-plugin-docsync-api</artifactId>
+
+    <name>pivotos-plugin-docsync-api</name>
+    <description>PivotOS docsync 插件契约层（DTO / 枚举 / 错误码，禁框架依赖）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-common-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-common-api</artifactId>
+        </dependency>
+        <!-- Jakarta Validation API（契约层 DTO 校验注解，仅 API 无实现） -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>

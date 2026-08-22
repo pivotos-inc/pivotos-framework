@@ -39,5 +39,8 @@ public class JobProperties {
     /** 执行器日志路径 */
     private String logPath = "./logs/xxl-job";
 
+    /** 执行器组 ID（XXL-Job admin 中执行器注册后的自增 ID，用于 Open API addJob） */
+    private int groupId;
+
 }
 

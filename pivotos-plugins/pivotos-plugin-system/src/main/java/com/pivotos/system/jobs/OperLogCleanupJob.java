@@ -53,7 +53,7 @@ public class OperLogCleanupJob {
     /** 自注册：支持管理端手动触发 */
     @PostConstruct
     public void registerManualTrigger() {
-        registry.register(HANDLER, this::execute);
+        registry.register(HANDLER, "操作日志清理", this::execute);
     }
 
     /**

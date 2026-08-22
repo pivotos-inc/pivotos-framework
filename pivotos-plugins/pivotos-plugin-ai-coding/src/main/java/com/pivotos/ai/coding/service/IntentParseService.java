@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.pivotos.common.core.exception.ServiceException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
+import com.pivotos.ai.api.usage.AiUsageContext;
 import com.pivotos.ai.client.AiClientRegistry;
 import com.pivotos.ai.domain.entity.AiApiKey;
 import com.pivotos.ai.domain.entity.AiProvider;
@@ -186,13 +187,14 @@ public class IntentParseService {
         }
         AiApiKey key = keys.get(0);
 
-        // Intent parse via LLM
-        String response = registry.getChatClient(provider, key)
-                .prompt()
-                .system(systemPrompt)
-                .user(userPrompt)
-                .call()
-                .content();
+        // Intent parse via LLM（S92：coding 场景计量）
+        String response = AiUsageContext.callWithScene(AiUsageContext.SCENE_CODING, () ->
+                registry.getChatClient(provider, key)
+                        .prompt()
+                        .system(systemPrompt)
+                        .user(userPrompt)
+                        .call()
+                        .content());
 
         log.info("[AI Coding] LLM response length={}", response != null ? response.length() : 0);
         if (response == null || response.isBlank()) {

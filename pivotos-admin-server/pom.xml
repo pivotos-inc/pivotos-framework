@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>2.10.0</version>
+        <version>2.11.0</version>
     </parent>
 
     <artifactId>pivotos-admin-server</artifactId>
@@ -96,11 +96,33 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-ai-kb</artifactId>
         </dependency>
-
-        <!-- ===== API 文档 ===== -->
+        <!-- docsync 插件（API 文档多平台同步：Torna/YApi/Apifox/ShowDoc/XXL-API） -->
         <dependency>
-            <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-docsync</artifactId>
+        </dependency>
+        <!-- migration 插件（旧系统迁移助手） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-plugin-migration</artifactId>
+        </dependency>
+
+        <!-- ===== API 文档（Knife4j Next：SB4 兼容增强 UI；jakarta 变体适配 SB4 的 jakarta.servlet） ===== -->
+        <dependency>
+            <groupId>com.baizhukui</groupId>
+            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+        </dependency>
+        <!-- Swagger Core 注解：显式锁定 2.2.47，避免 knife4j/springdoc 传递依赖残留 2.2.38（$dynamicRef 缺失） -->
+        <dependency>
+            <groupId>io.swagger.core.v3</groupId>
+            <artifactId>swagger-annotations-jakarta</artifactId>
+            <version>2.2.47</version>
+        </dependency>
+        <!-- 非 jakarta 变体也锁定 2.2.47（anthropic-java-core 传递依赖旧版 2.2.31） -->
+        <dependency>
+            <groupId>io.swagger.core.v3</groupId>
+            <artifactId>swagger-annotations</artifactId>
+            <version>2.2.47</version>
         </dependency>
 
         <!-- ===== 运行时驱动（plugin 中为 test 作用域，启动器必须自带） ===== -->

@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>2.10.0</version>
+        <version>2.11.0</version>
     </parent>
 
     <artifactId>pivotos-dependencies</artifactId>
@@ -45,7 +45,11 @@
         <hutool.version>5.8.47</hutool.version>
 
         <!-- ==================== 文档 / 任务 / 存储 ==================== -->
+        <!-- Knife4j Next（SB4 社区 fork）：替代原生 Swagger UI，增强文档界面 -->
+        <knife4j-next.version>5.2.4</knife4j-next.version>
         <springdoc.version>3.0.3</springdoc.version>
+        <!-- Swagger Core 统一版本（knife4j / springdoc 传递依赖可能残留旧版，强制对齐） -->
+        <swagger-core.version>2.2.47</swagger-core.version>
         <xxl-job.version>3.4.2</xxl-job.version>
         <minio.version>9.0.3</minio.version>
         <okhttp.version>5.3.2</okhttp.version>
@@ -207,11 +211,41 @@
                 <version>${hutool.version}</version>
             </dependency>
 
-            <!-- ========== SpringDoc ========== -->
+            <!-- ========== SpringDoc（Knife4j Next 底层依赖，版本由其托管） ========== -->
             <dependency>
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
+            </dependency>
+
+            <!-- ========== Knife4j Next（SB4 兼容，社区 fork；jakarta 变体适配 SB4 的 jakarta.servlet） ========== -->
+            <dependency>
+                <groupId>com.baizhukui</groupId>
+                <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+                <version>${knife4j-next.version}</version>
+            </dependency>
+
+            <!-- ========== Swagger Core 统一版本管理（annotations / core / models 三件套必须同版本） ========== -->
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-annotations-jakarta</artifactId>
+                <version>${swagger-core.version}</version>
+            </dependency>
+            <!-- 非 jakarta 变体也锁定到 2.2.47（anthropic-java-core 传递依赖旧版 2.2.31，$dynamicRef 缺失） -->
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-annotations</artifactId>
+                <version>${swagger-core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-core-jakarta</artifactId>
+                <version>${swagger-core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-models-jakarta</artifactId>
+                <version>${swagger-core.version}</version>
             </dependency>
 
             <!-- ========== XXL-Job ========== -->
@@ -467,6 +501,26 @@
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-plugin-ai-kb</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-docsync-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-docsync</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-migration-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-plugin-migration</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

@@ -1,6 +1,8 @@
 package com.pivotos.system.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.pivotos.common.core.page.PageResult;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 手动触发走 JobHandlerRegistry（各 Job 自注册），与 XXL-Job 调度中心解耦，
  * 无调度中心的环境也能验证任务逻辑；执行记录由 Job 侧埋点自动落库。
  */
+@Tag(name = "任务日志", description = "定时任务执行记录查询 + 手动触发")
 @RestController
 @RequestMapping("/system/joblog")
 @RequiredArgsConstructor
@@ -34,6 +37,7 @@ public class JobLogController {
     private final JobHandlerRegistry jobHandlerRegistry;
 
     /** 执行记录分页 */
+    @Operation(summary = "执行记录分页")
     @GetMapping("/page")
     @SaCheckPermission(value = "system:joblog:list", type = StpSysUtil.TYPE)
     public R<PageResult<SysJobLog>> page(JobLogQuery query) {
@@ -48,6 +52,7 @@ public class JobLogController {
     }
 
     /** 手动触发任务（同步执行，返回执行结果） */
+    @Operation(summary = "手动触发任务（同步执行，返回执行结果）")
     @PostMapping("/trigger/{handler}")
     @SaCheckPermission(value = "system:joblog:trigger", type = StpSysUtil.TYPE)
     public R<String> trigger(@PathVariable String handler) {

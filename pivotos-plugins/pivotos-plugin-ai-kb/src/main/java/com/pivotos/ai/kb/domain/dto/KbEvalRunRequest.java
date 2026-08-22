@@ -3,6 +3,7 @@ package com.pivotos.ai.kb.domain.dto;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * 检索评测单题跑分请求（S66）。
  */
@@ -14,5 +15,6 @@ public class KbEvalRunRequest {
     private Long questionId;
 
     /** 召回数量（默认 5） */
+    @Schema(description = "召回数量（默认 5）")
     private Integer topK;
 }

@@ -5,11 +5,13 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 /** 供应商保存请求（id 为空新增、非空修改） */
 @Data
 public class ProviderSaveRequest {
 
     /** 供应商ID（修改时必传） */
+    @Schema(description = "供应商ID（修改时必传）")
     private Long id;
 
     /** 供应商名称 */
@@ -41,9 +43,11 @@ public class ProviderSaveRequest {
     private String rerankModel;
 
     /** 排序 */
+    @Schema(description = "排序")
     private Integer sort;
 
     /** 状态（0启用 1停用） */
+    @Schema(description = "状态（0启用 1停用）")
     private Integer status;
 
     /** 备注 */

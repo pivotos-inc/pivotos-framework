@@ -1,6 +1,8 @@
 package com.pivotos.monitor.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.common.core.result.R;
 import com.pivotos.monitor.domain.dto.AiChartSaveCmd;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
  * AI 图表历史（S83 报表大屏四期）：保存收藏 / 我的历史分页 / 删除。
  * 数据归属在服务层强校验（仅保存人可见可删），权限复用 monitor:dashboard:view。
  */
+@Tag(name = "AI 图表历史", description = "AI 图表历史管理")
 @RestController
 @RequestMapping("/monitor/ai-chart-history")
 @RequiredArgsConstructor
@@ -29,6 +32,7 @@ public class AiChartHistoryController {
     private final AiChartHistoryService aiChartHistoryService;
 
     /** 保存当前生成的图表（收藏制，返回记录 ID） */
+    @Operation(summary = "保存当前生成的图表（收藏制，返回记录 ID）")
     @PostMapping
     @SaCheckPermission(value = "monitor:dashboard:view", type = StpSysUtil.TYPE)
     public R<Long> save(@RequestBody AiChartSaveCmd cmd) {
@@ -36,6 +40,7 @@ public class AiChartHistoryController {
     }
 
     /** 我的历史分页（按保存时间倒序） */
+    @Operation(summary = "我的历史分页（按保存时间倒序）")
     @GetMapping("/page")
     @SaCheckPermission(value = "monitor:dashboard:view", type = StpSysUtil.TYPE)
     public R<PageResult<AiChartHistoryVO>> page(
@@ -45,6 +50,7 @@ public class AiChartHistoryController {
     }
 
     /** 删除（仅归属人可删） */
+    @Operation(summary = "删除（仅归属人可删）")
     @DeleteMapping("/{id}")
     @SaCheckPermission(value = "monitor:dashboard:view", type = StpSysUtil.TYPE)
     public R<Void> delete(@PathVariable Long id) {

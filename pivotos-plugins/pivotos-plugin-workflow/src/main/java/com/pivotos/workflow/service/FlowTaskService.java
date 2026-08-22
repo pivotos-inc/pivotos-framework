@@ -11,6 +11,7 @@ import com.pivotos.workflow.domain.dto.TaskPageQuery;
 import com.pivotos.workflow.domain.vo.UserOptionVO;
 import com.pivotos.workflow.domain.vo.WorkflowHisTaskVO;
 import com.pivotos.workflow.domain.vo.WorkflowTaskVO;
+import com.pivotos.workflow.mapper.WorkflowPendingMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.dromara.warm.flow.core.FlowEngine;
@@ -47,25 +48,26 @@ public class FlowTaskService {
     private final DefService defService;
     private final WorkflowNotifyService notifyService;
     private final ObjectProvider<IUserFacade> userFacadeProvider;
+    private final WorkflowPendingMapper pendingMapper;
 
     /**
-     * 我的待办分页（WarmFlow 按 PermissionHandler.permissions() 自动过滤）
+     * 我的待办分页。
+     * <p>
+     * 归属过滤（S93 修正）：warm-flow 1.8.7 的 taskService.page 是纯实体条件分页，
+     * 不做 PermissionHandler.permissions() 过滤（早期注释有误），任何登录用户会看到全部待办。
+     * 改走 WorkflowPendingMapper 按 flow_user 归属（审批/转办/委派）子查询分页。
      */
     public PageResult<WorkflowTaskVO> pagePending(TaskPageQuery query) {
-        FlowTask condition = new FlowTask();
-        // 仅查询待审批（flowStatus=1）的任务，已处理的任务不应出现在待办中
-        condition.setFlowStatus("1");
-        if (StringUtils.hasText(query.getFlowName())) {
-            condition.setFlowName(query.getFlowName());
+        Long userId = LoginContext.getUserId();
+        if (userId == null) {
+            return new PageResult<>(List.of(), 0L, query.getPageNum(), query.getPageSize());
         }
-        Page<Task> page = new Page<>(query.getPageNum(), query.getPageSize());
-        page.setOrderBy("create_time");
-        page.setIsAsc("desc");
-        Page<Task> result = taskService.page(condition, page);
-        Page<Task> finalPage = result != null ? result : page;
-        List<WorkflowTaskVO> list = finalPage.getList() != null
-                ? finalPage.getList().stream().map(this::toTaskVO).toList() : List.of();
-        return new PageResult<>(list, finalPage.getTotal(), query.getPageNum(), query.getPageSize());
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<FlowTask> page =
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(query.getPageNum(), query.getPageSize());
+        com.baomidou.mybatisplus.core.metadata.IPage<FlowTask> result =
+                pendingMapper.selectPendingPage(page, String.valueOf(userId), query.getFlowName());
+        List<WorkflowTaskVO> list = result.getRecords().stream().map(this::toTaskVO).toList();
+        return new PageResult<>(list, result.getTotal(), query.getPageNum(), query.getPageSize());
     }
 
     /**
@@ -116,14 +118,18 @@ public class FlowTaskService {
 
     /**
      * 转办（将任务转交给目标用户）
+     * <p>
+     * 引擎契约（S93 修正）：transfer 断言 addHandlers 而非 nextHandler，
+     * 且引擎不校办理人归属，由 requireApprover 在服务层兜底（同 S82 L3 口径）。
      */
     public void transfer(TaskActionCmd cmd) {
         if (!StringUtils.hasText(cmd.getTargetUserId())) {
             throw new ServiceException("转办目标用户不能为空");
         }
+        requireApprover(cmd.getTaskId());
         FlowParams params = FlowParams.build()
                 .handler(currentHandler())
-                .nextHandler(cmd.getTargetUserId())
+                .addHandlers(List.of(cmd.getTargetUserId()))
                 .message(cmd.getMessage());
         try {
             taskService.transfer(cmd.getTaskId(), params);
@@ -138,20 +144,28 @@ public class FlowTaskService {
     }
 
     /**
-     * 委派
+     * 委派（受托人代审，通过后任务回到委派人确认）
+     * <p>
+     * 引擎契约（S93 修正）：depute 断言 addHandlers 而非 nextHandler；
+     * 归属校验同转办。委派与转办的语义差异由引擎 cooperateType 留痕区分。
      */
     public void depute(TaskActionCmd cmd) {
         if (!StringUtils.hasText(cmd.getTargetUserId())) {
             throw new ServiceException("委派目标用户不能为空");
         }
+        requireApprover(cmd.getTaskId());
         FlowParams params = FlowParams.build()
                 .handler(currentHandler())
-                .nextHandler(cmd.getTargetUserId())
+                .addHandlers(List.of(cmd.getTargetUserId()))
                 .message(cmd.getMessage());
         try {
             taskService.depute(cmd.getTaskId(), params);
         } catch (org.dromara.warm.flow.core.exception.FlowException e) {
             throw new ServiceException("委派失败：" + e.getMessage());
+        }
+        Task task = taskService.getById(cmd.getTaskId());
+        if (task != null) {
+            notifyService.notifyOnDepute(task, cmd.getTargetUserId());
         }
     }
 
@@ -237,7 +251,7 @@ public class FlowTaskService {
             throw new ServiceException("任务 ID 不能为空");
         }
         List<User> users = FlowEngine.userService().listByAssociatedAndTypes(taskId,
-                UserType.APPROVAL.getKey(), UserType.TRANSFER.getKey());
+                UserType.APPROVAL.getKey(), UserType.TRANSFER.getKey(), UserType.DEPUTE.getKey());
         if (users == null || users.isEmpty()) {
             return List.of();
         }
@@ -286,7 +300,7 @@ public class FlowTaskService {
             throw new ServiceException("未登录或登录已过期");
         }
         List<User> users = FlowEngine.userService().listByAssociatedAndTypes(taskId,
-                UserType.APPROVAL.getKey(), UserType.TRANSFER.getKey());
+                UserType.APPROVAL.getKey(), UserType.TRANSFER.getKey(), UserType.DEPUTE.getKey());
         boolean isApprover = users != null && users.stream()
                 .anyMatch(u -> String.valueOf(userId).equals(u.getProcessedBy()));
         if (!isApprover) {
@@ -303,12 +317,14 @@ public class FlowTaskService {
     }
 
     /**
-     * 待办数量（供 Facade 使用）
+     * 待办数量（供 Facade 使用）：与 pagePending 同口径按归属过滤（S93）。
      */
     public long countPending() {
-        FlowTask condition = new FlowTask();
-        condition.setFlowStatus("1");
-        return taskService.selectCount(condition);
+        Long userId = LoginContext.getUserId();
+        if (userId == null) {
+            return 0L;
+        }
+        return pendingMapper.countPending(String.valueOf(userId), null);
     }
 
     /**
