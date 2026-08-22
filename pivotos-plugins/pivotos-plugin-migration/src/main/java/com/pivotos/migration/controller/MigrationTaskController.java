@@ -6,11 +6,13 @@ import com.pivotos.common.core.result.R;
 import com.pivotos.migration.domain.entity.MigrationTask;
 import com.pivotos.migration.domain.enums.MigrationFileType;
 import com.pivotos.migration.service.MigrationArtifactService;
+import com.pivotos.migration.service.MigrationProgressNotifier;
 import com.pivotos.migration.service.MigrationTaskService;
 import com.pivotos.starter.auth.account.StpSysUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,10 +21,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 
 /**
  * 迁移任务管理端点。
+ * 进度流用 POST + SseEmitter：EventSource 带不了 Authorization 头，
+ * 前端用 fetch + ReadableStream 消费（与 AI 对话流式端点同款约定）。
  */
 @Tag(name = "迁移任务管理")
 @RestController
@@ -32,6 +37,7 @@ public class MigrationTaskController {
 
     private final MigrationTaskService migrationTaskService;
     private final MigrationArtifactService migrationArtifactService;
+    private final MigrationProgressNotifier migrationProgressNotifier;
 
     @Operation(summary = "创建迁移任务")
     @PostMapping
@@ -78,6 +84,12 @@ public class MigrationTaskController {
     @PostMapping("/plan")
     public R<String> plan(@RequestParam("taskId") Long taskId) {
         return R.ok(migrationTaskService.generateMigrationPlan(taskId));
+    }
+
+    @Operation(summary = "迁移进度 SSE 流（PARSE/ANALYZE/PLAN/STEP_PROGRESS/REVIEW/APPLY 事件）")
+    @PostMapping(value = "/progress", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter progress(@RequestParam("taskId") Long taskId) {
+        return migrationProgressNotifier.subscribe(taskId);
     }
 
     @Operation(summary = "完成迁移任务")

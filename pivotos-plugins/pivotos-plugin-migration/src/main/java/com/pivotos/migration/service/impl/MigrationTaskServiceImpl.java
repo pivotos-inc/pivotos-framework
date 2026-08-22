@@ -31,6 +31,7 @@ import com.pivotos.migration.mapper.MigrationLogMapper;
 import com.pivotos.migration.mapper.MigrationStepMapper;
 import com.pivotos.migration.mapper.MigrationTaskMapper;
 import com.pivotos.migration.service.MigrationFileService;
+import com.pivotos.migration.service.MigrationProgressNotifier;
 import com.pivotos.migration.service.MigrationTaskService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -71,6 +72,8 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
     private final SourceCodeParserChain parserChain;
     /** AI Facade 可选：AI 插件未装载时静默降级 */
     private final ObjectProvider<IAiFacade> aiFacadeProvider;
+    /** SSE 进度推送（方案 §9.3）：无订阅者时 publish 空转，无副作用 */
+    private final MigrationProgressNotifier progressNotifier;
 
     private static final String ZIP_EXTENSION = "zip";
     private static final Set<Integer> ALLOWED_UPLOAD_STATUSES = Set.of(
@@ -133,15 +136,25 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
              ZipInputStream zis = new ZipInputStream(in)) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                if (entry.isDirectory()) {
+                // 条目名分隔符归一：Windows 压缩工具（如 Compress-Archive）可能产出 \ 分隔条目，
+                // 不归一则被 resolve 视为单个文件名，创建目录时报 InvalidPath
+                String rawName = entry.getName();
+                String entryName = rawName.replace('\\', '/');
+                // 目录条目判定：isDirectory 仅认 / 结尾，\ 结尾的目录条目（Compress-Archive 产物）会漏判，
+                // 漏判后零字节目录被当文件落盘，后续 createDirectories 撞 FileAlreadyExists
+                if (entry.isDirectory() || rawName.endsWith("/") || rawName.endsWith("\\")) {
                     continue;
                 }
-                Path targetFile = typeDir.resolve(entry.getName()).normalize();
+                Path targetFile = typeDir.resolve(entryName).normalize();
                 if (!targetFile.startsWith(typeDir.normalize())) {
                     // 防御 Zip Slip
                     continue;
                 }
-                Files.createDirectories(targetFile.getParent());
+                // 部分压缩器文件条目先于目录条目产出（copy 隐式建文件），createDirectories 需容忍同名文件已存在
+                Path parent = targetFile.getParent();
+                if (parent != null && !Files.exists(parent)) {
+                    Files.createDirectories(parent);
+                }
                 Files.copy(zis, targetFile, StandardCopyOption.REPLACE_EXISTING);
 
                 String relativePath = sourceRoot.relativize(targetFile).toString().replace('\\', '/');
@@ -199,7 +212,13 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
         int artifactCount = 0;
         int parsedFileCount = 0;
 
+        publishPhase(taskId, "PARSE", "EXECUTING", 0, "开始解析源码，共 " + files.size() + " 个文件");
+        // 进度事件节流：最多推 20 个百分比节点，避免大项目刷屏
+        int progressStride = Math.max(1, files.size() / 20);
+        int fileIndex = 0;
+
         for (MigrationFile file : files) {
+            fileIndex++;
             Path filePath = sourceRoot.resolve(file.getRelativePath());
             if (!Files.exists(filePath)) {
                 log.warn("源文件不存在，跳过解析：{}", filePath);
@@ -224,9 +243,14 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
                 file.setParsed(true);
                 migrationFileMapper.updateById(file);
                 parsedFileCount++;
+                if (fileIndex % progressStride == 0) {
+                    publishPhase(taskId, "PARSE", "EXECUTING", fileIndex * 100 / files.size(),
+                            "正在解析：" + file.getRelativePath());
+                }
             } catch (Exception e) {
                 log.error("解析文件失败：{}", file.getRelativePath(), e);
                 saveLog(taskId, MigrationLogLevel.ERROR, "解析文件失败：" + file.getRelativePath() + "，" + e.getMessage());
+                publishPhase(taskId, "PARSE", "FAILED", -1, "解析失败：" + file.getRelativePath());
                 throw new ServiceException(MigrationErrorCode.PARSE_FAILED);
             }
         }
@@ -241,11 +265,22 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
 
         saveLog(taskId, MigrationLogLevel.INFO,
                 "源码解析完成，文件数=" + parsedFileCount + "，IR 节点数=" + irNodeCount + "，产物数=" + artifactCount);
+        publishPhase(taskId, "PARSE", "DONE", 100,
+                "源码解析完成，IR 节点数=" + irNodeCount + "，产物数=" + artifactCount);
         return irNodeCount;
     }
 
     private void saveLog(Long taskId, MigrationLogLevel level, String message) {
         saveLog(taskId, level, MigrationPhase.PARSE, message);
+    }
+
+    /** 推送阶段级进度事件（PARSE/ANALYZE/PLAN），percent 为 -1 时表示失败事件 */
+    private void publishPhase(Long taskId, String eventType, String status, int percent, String message) {
+        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("status", status);
+        payload.put("progressPercent", percent);
+        payload.put("message", message);
+        progressNotifier.publish(taskId, eventType, payload);
     }
 
     private void saveLog(Long taskId, MigrationLogLevel level, MigrationPhase phase, String message) {
@@ -331,6 +366,7 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
         );
 
         log.info("迁移架构分析开始，taskId={}, irNodes={}", taskId, irNodes.size());
+        publishPhase(taskId, "ANALYZE", "EXECUTING", 10, "正在调用 AI 生成架构分析报告");
         String report;
         try {
             report = aiFacade.chatWithSystem(systemPrompt, userPrompt);
@@ -338,6 +374,7 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
             log.error("迁移架构分析 AI 调用失败，taskId={}", taskId, e);
             saveLog(taskId, MigrationLogLevel.ERROR, MigrationPhase.ANALYZE,
                     "AI 架构分析失败：" + e.getMessage());
+            publishPhase(taskId, "ANALYZE", "FAILED", -1, "AI 架构分析失败：" + e.getMessage());
             throw new ServiceException(MigrationErrorCode.ANALYZE_FAILED);
         }
 
@@ -347,6 +384,7 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
 
         saveLog(taskId, MigrationLogLevel.INFO, MigrationPhase.ANALYZE,
                 "架构分析完成，报告长度=" + report.length());
+        publishPhase(taskId, "ANALYZE", "DONE", 100, "架构分析完成，报告长度=" + report.length());
         log.info("迁移架构分析完成，taskId={}, 报告长度={}", taskId, report.length());
 
         Map<String, Object> result = new java.util.LinkedHashMap<>();
@@ -425,12 +463,14 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
         );
 
         log.info("迁移计划生成开始，taskId={}, irNodes={}", taskId, irNodes.size());
+        publishPhase(taskId, "PLAN", "EXECUTING", 10, "正在调用 AI 生成迁移步骤计划");
         String aiResponse;
         try {
             aiResponse = aiFacade.chatWithSystem(systemPrompt, userPrompt);
         } catch (Exception e) {
             log.error("迁移计划 AI 调用失败，taskId={}", taskId, e);
             saveLog(taskId, MigrationLogLevel.ERROR, MigrationPhase.PLAN, "AI 计划生成失败：" + e.getMessage());
+            publishPhase(taskId, "PLAN", "FAILED", -1, "AI 计划生成失败：" + e.getMessage());
             throw new ServiceException(MigrationErrorCode.ANALYZE_FAILED);
         }
 
@@ -478,6 +518,7 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
 
         saveLog(taskId, MigrationLogLevel.INFO, MigrationPhase.PLAN,
                 "迁移计划生成完成，步骤数=" + steps.size());
+        publishPhase(taskId, "PLAN", "DONE", 100, "迁移计划生成完成，步骤数=" + steps.size());
         log.info("迁移计划生成完成，taskId={}, 步骤数={}", taskId, steps.size());
 
         Map<String, Object> summary = new java.util.LinkedHashMap<>();

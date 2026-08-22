@@ -19,6 +19,7 @@ import com.pivotos.migration.mapper.MigrationLogMapper;
 import com.pivotos.migration.mapper.MigrationStepMapper;
 import com.pivotos.migration.mapper.MigrationTaskMapper;
 import com.pivotos.migration.service.MigrationArtifactService;
+import com.pivotos.migration.service.MigrationProgressNotifier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,7 +30,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -45,6 +48,7 @@ public class MigrationArtifactServiceImpl extends ServiceImpl<MigrationArtifactM
     private final MigrationStepMapper migrationStepMapper;
     private final MigrationTaskMapper migrationTaskMapper;
     private final MigrationLogMapper migrationLogMapper;
+    private final MigrationProgressNotifier progressNotifier;
 
     /** 允许落盘的任务状态：执行中 / 已执行 */
     private static final Set<Integer> ALLOWED_TASK_STATUSES = Set.of(
@@ -87,6 +91,7 @@ public class MigrationArtifactServiceImpl extends ServiceImpl<MigrationArtifactM
         updateById(artifact);
         saveLog(artifact.getTaskId(), artifact.getStepId(), MigrationLogLevel.INFO, MigrationPhase.GENERATE,
                 "产物已落盘：" + artifact.getRelativePath());
+        publishApply(artifact, "APPLIED", "产物已落盘：" + artifact.getRelativePath());
         log.info("产物落盘成功，artifactId={}, path={}", artifactId, target);
     }
 
@@ -107,6 +112,7 @@ public class MigrationArtifactServiceImpl extends ServiceImpl<MigrationArtifactM
         updateById(artifact);
         saveLog(artifact.getTaskId(), artifact.getStepId(), MigrationLogLevel.INFO, MigrationPhase.GENERATE,
                 "产物落盘已撤销：" + artifact.getRelativePath());
+        publishApply(artifact, "UNAPPLIED", "产物落盘已撤销：" + artifact.getRelativePath());
         log.info("产物落盘撤销成功，artifactId={}, path={}", artifactId, target);
     }
 
@@ -159,6 +165,11 @@ public class MigrationArtifactServiceImpl extends ServiceImpl<MigrationArtifactM
 
         saveLog(taskId, null, MigrationLogLevel.INFO, MigrationPhase.ROLLBACK,
                 "任务回滚完成，删除已落盘文件数=" + deletedCount);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("status", "ROLLED_BACK");
+        payload.put("progressPercent", -1);
+        payload.put("message", "任务回滚完成，删除已落盘文件数=" + deletedCount);
+        progressNotifier.publish(taskId, "APPLY", payload);
         log.info("任务回滚完成，taskId={}, 删除文件数={}", taskId, deletedCount);
         return deletedCount;
     }
@@ -179,6 +190,18 @@ public class MigrationArtifactServiceImpl extends ServiceImpl<MigrationArtifactM
             throw new ServiceException(MigrationErrorCode.ARTIFACT_PATH_INVALID);
         }
         return target;
+    }
+
+    /** APPLY 事件广播（技术方案 §9.3），单产物落盘/撤销维度 */
+    private void publishApply(MigrationArtifact artifact, String status, String message) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("stepId", artifact.getStepId());
+        payload.put("artifactId", artifact.getId());
+        payload.put("relativePath", artifact.getRelativePath());
+        payload.put("status", status);
+        payload.put("progressPercent", "APPLIED".equals(status) ? 100 : -1);
+        payload.put("message", message);
+        progressNotifier.publish(artifact.getTaskId(), "APPLY", payload);
     }
 
     private void saveLog(Long taskId, Long stepId, MigrationLogLevel level, MigrationPhase phase, String message) {
