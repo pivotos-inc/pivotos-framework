@@ -39,4 +39,14 @@ public interface AiToolService {
 
     /** 调用审计分页查询 */
     PageResult<AiToolInvokeVO> pageInvokes(AiToolInvokeQuery query);
+
+    /**
+     * REST 直连调用工具（S99 A2 双暴露）：按名称定位守卫式 ToolCallback 执行，
+     * 与 MCP tools/call 共用同一守卫链路（注册闸/白名单/二次确认/审计）。
+     *
+     * @param toolName 工具名
+     * @param argsJson 入参 JSON（与 MCP tools/call 的 arguments 同构）
+     * @return 工具执行结果文本（拒绝/预检亦为文本，与 MCP 语义一致）
+     */
+    String invokeTool(String toolName, String argsJson);
 }

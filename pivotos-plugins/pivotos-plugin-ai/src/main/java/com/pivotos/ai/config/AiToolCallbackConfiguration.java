@@ -3,6 +3,7 @@ package com.pivotos.ai.config;
 import com.pivotos.ai.service.AiToolGuardService;
 import com.pivotos.ai.service.AiToolInvokeRecorder;
 import com.pivotos.ai.tool.GuardedToolCallbackProvider;
+import com.pivotos.ai.tool.MessageTools;
 import com.pivotos.ai.tool.WorkflowQueryTools;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,11 +35,12 @@ public class AiToolCallbackConfiguration {
 
     @Bean
     public ToolCallbackProvider pivotToolCallbackProvider(WorkflowQueryTools workflowQueryTools,
+                                                          MessageTools messageTools,
                                                           AiToolGuardService guardService,
                                                           AiToolInvokeRecorder invokeRecorder) {
-        log.info("[PivotOS] AI 工具回调装配：WorkflowQueryTools（守卫式：白名单 + 二次确认 + 审计）");
+        log.info("[PivotOS] AI 工具回调装配：WorkflowQueryTools + MessageTools（守卫式：白名单 + 二次确认 + 审计）");
         ToolCallbackProvider raw = MethodToolCallbackProvider.builder()
-                .toolObjects(workflowQueryTools)
+                .toolObjects(workflowQueryTools, messageTools)
                 .build();
         return new GuardedToolCallbackProvider(raw, guardService, invokeRecorder);
     }
