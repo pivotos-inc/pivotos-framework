@@ -321,6 +321,12 @@
                 <artifactId>spring-ai-tika-document-reader</artifactId>
                 <version>${spring-ai.version}</version>
             </dependency>
+            <!-- S97 A2 前置：MCP Server（WebMVC SSE 形态，版本由 spring-ai-bom 托管，此处显式列出便于模块引用） -->
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
+                <version>${spring-ai.version}</version>
+            </dependency>
 
             <!-- ========== FreeMarker 模板引擎（代码生成器） ========== -->
             <dependency>
