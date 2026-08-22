@@ -35,9 +35,10 @@ spring:
       embedding:
         options:
           model: text-embedding-v3
-    # S97 A2：MCP Server（WebMVC SSE）——端点 GET /sse + POST /mcp/message，
-    # 鉴权体系为注解式拦截（SaInterceptor 只验 @SaCheck* 注解），端点天然可达；
-    # 工具级权限白名单 S98 建实前，工具自身按 LoginContext 缺失降级
+    # S97 A2：MCP Server（WebMVC SSE）——端点 GET /sse + POST /mcp/message；
+    # S98 建实端点防护：McpEndpointAuthFilter 强制登录（匿名 401），工具调用再经
+    # GuardedToolCallback 过「注册检查 → 角色白名单 → 二次确认预检 → 全量审计」；
+    # MCP 客户端两个请求均须携带 Authorization 头（与登录 token 同值）
     mcp:
       server:
         name: pivotos-mcp-server
