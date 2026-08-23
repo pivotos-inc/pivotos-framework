@@ -13,7 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class AiProperties {
 
     /** 默认系统提示词（ChatClient defaultSystem） */
-    private String systemPrompt = "你是枢磐 PivotOS 企业管理平台的 AI 助手，用简体中文简洁、准确地回答问题。";
+    private String systemPrompt = "你是 PivotOS 企业管理平台的 AI 助手，由胡伟龙（Alex）开发，用简体中文简洁、准确地回答问题。";
 
     /** 单次对话携带的历史消息条数上限（多轮记忆窗口） */
     private Integer maxHistory = 20;

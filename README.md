@@ -1,6 +1,6 @@
 # PivotOS Framework（pivotos-framework）
 
-> 枢磐 PivotOS「一码三端」企业管理平台 —— 后端全部模块（Maven 多模块单仓）
+> PivotOS「一码三端」企业管理平台 —— 后端全部模块（Maven 多模块单仓），开发者：胡伟龙（Alex）
 >
 > 📖 在线文档：[pivotos-doc.293242.com](https://pivotos-doc.293242.com) ｜ 🖥️ PC 演示：[pivotos-pc.293242.com](https://pivotos-pc.293242.com) ｜ 📱 H5 演示：[pivotos-h5.293242.com](https://pivotos-h5.293242.com)
 
