@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.datasource.dynamic.primary=master",
         "spring.datasource.dynamic.datasource.master.url=jdbc:mysql://175.24.176.176:3306/test_tenant_d1?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true",
         "spring.datasource.dynamic.datasource.master.username=root",
-        "spring.datasource.dynamic.datasource.master.password=mysql_DbHEfw",
+        "spring.datasource.dynamic.datasource.master.password=${PIVOTOS_TEST_MYSQL_PASSWORD:}",
         "spring.datasource.dynamic.datasource.master.driver-class-name=com.mysql.cj.jdbc.Driver"
 })
 @AutoConfigureMockMvc

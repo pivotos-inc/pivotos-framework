@@ -7,16 +7,16 @@ spring:
       primary: master
       datasource:
         master:
-          # 账号密码按你本地 MySQL 实际修改；createDatabaseIfNotExist 首次自动建测试库
+          # 凭据从环境变量读取（本机 .env.dev / shell export）；createDatabaseIfNotExist 首次自动建测试库
           url: jdbc:mysql://175.24.176.176:3306/test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
           username: root
-          password: mysql_DbHEfw
+          password: ${PIVOTOS_TEST_MYSQL_PASSWORD:}
           driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
       host: 175.24.176.176
       port: 6379
-      password: redis_wKTrkz
+      password: ${PIVOTOS_TEST_REDIS_PASSWORD:}
       timeout: 5s
 
 sa-token:

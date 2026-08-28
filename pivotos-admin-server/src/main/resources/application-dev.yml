@@ -7,7 +7,7 @@ spring:
           # 开发库 pivotos；中间件已迁至公网服务器 175.24.176.176（2026-07-31 搬迁）
           url: jdbc:mysql://175.24.176.176:3306/pivotos?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
           username: root
-          password: mysql_DbHEfw
+          password: ${MYSQL_PASSWORD:}
           driver-class-name: com.mysql.cj.jdbc.Driver
       druid:
         initial-size: 5
@@ -17,14 +17,13 @@ spring:
     redis:
       host: 175.24.176.176
       port: 6379
-      password: redis_wKTrkz
+      password: ${REDIS_PASSWORD:}
       timeout: 5s
 
   ai:
-    # dev 兜底：IDEA 直接启动（不 source .env.dev）时用此值
-    # 优先级：环境变量 DASHSCOPE_API_KEY > 此兜底值；生产环境必须通过环境变量注入
+    # dev 兼容：统一从环境变量读取（本机 .env.dev / shell export 注入），仓库内不再保留真实 Key 默认值
     openai:
-      api-key: ${DASHSCOPE_API_KEY:sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC}
+      api-key: ${DASHSCOPE_API_KEY:}
     vectorstore:
       milvus:
         client:
@@ -55,8 +54,8 @@ pivotos:
     storage-type: s3
     vendor: cos
     endpoint: https://cos.ap-shanghai.myqcloud.com
-    access-key: AKIDKhrqb9UbVCg3D9B9AA4qPuENXUJvJUSC
-    secret-key: ayBIG1aw51jEVlqiNtDKOL7i5HJ8k9LO
+    access-key: ${PIVOTOS_COS_ACCESS_KEY:}
+    secret-key: ${PIVOTOS_COS_SECRET_KEY:}
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
@@ -66,7 +65,7 @@ pivotos:
     app-name: pivotos-executor
     port: 9999
     group-id: 3   # XXL-Job admin 中 pivotos-executor 执行器组 ID
-    access-token: tttttt
+    access-token: ${XXL_JOB_ACCESS_TOKEN:}
   # 微信小程序（测试号）
   wechat:
     miniapp:

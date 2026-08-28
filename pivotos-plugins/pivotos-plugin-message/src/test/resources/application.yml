@@ -9,13 +9,13 @@ spring:
         master:
           url: jdbc:mysql://175.24.176.176:3306/test_message?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
           username: root
-          password: mysql_DbHEfw
+          password: ${PIVOTOS_TEST_MYSQL_PASSWORD:}
           driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
       host: 175.24.176.176
       port: 6379
-      password: redis_wKTrkz
+      password: ${PIVOTOS_TEST_REDIS_PASSWORD:}
       timeout: 5s
 
 sa-token:
