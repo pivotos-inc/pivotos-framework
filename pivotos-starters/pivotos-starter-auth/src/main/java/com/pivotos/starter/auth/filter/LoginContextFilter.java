@@ -4,6 +4,7 @@ import cn.dev33.satoken.servlet.util.SaTokenContextJakartaServletUtil;
 import cn.dev33.satoken.stp.StpLogic;
 import com.pivotos.common.api.context.LoginUser;
 import com.pivotos.starter.auth.account.StpAppUtil;
+import com.pivotos.starter.auth.account.StpMindUtil;
 import com.pivotos.starter.auth.account.StpSysUtil;
 import com.pivotos.starter.auth.account.StpWxMiniUtil;
 import com.pivotos.starter.auth.support.AuthSessionHolder;
@@ -26,9 +27,9 @@ import java.util.List;
  */
 public class LoginContextFilter extends OncePerRequestFilter {
 
-    /** 账号体系识别顺序：管理端 → App → 小程序 */
+    /** 账号体系识别顺序：管理端 → App → 小程序 → 智域个人端 */
     private static final List<StpLogic> ACCOUNT_LOGICS = List.of(
-        StpSysUtil.STP, StpAppUtil.STP, StpWxMiniUtil.STP);
+        StpSysUtil.STP, StpAppUtil.STP, StpWxMiniUtil.STP, StpMindUtil.STP);
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) {

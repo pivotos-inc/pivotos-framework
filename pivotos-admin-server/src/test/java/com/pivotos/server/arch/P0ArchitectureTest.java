@@ -38,7 +38,7 @@ class P0ArchitectureTest {
         "com.pivotos.message..", "com.pivotos.flow..",
         "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..",
         "com.pivotos.ai..", "com.pivotos.workflow..", "com.pivotos.ai.kb..",
-        "com.pivotos.docsync..", "com.pivotos.migration.."};
+        "com.pivotos.docsync..", "com.pivotos.migration..", "com.pivotos.mind.."};
 
     /** ScopedValue 上下文体系所在包：A6/A7 唯一豁免区 */
     private static final String CORE_PACKAGE = "com.pivotos.starter.core..";
@@ -53,7 +53,8 @@ class P0ArchitectureTest {
         "pivotos-plugin-ai-kb", "ai_kb_",
         "pivotos-plugin-monitor", "mn_",
         "pivotos-plugin-docsync", "doc_sync_",
-        "pivotos-plugin-migration", "migration_");
+        "pivotos-plugin-migration", "migration_",
+        "pivotos-plugin-mind", "mind_");
 
     // ========== A1 + A2：Plugin 实现包之间无编译依赖；跨插件仅可访问对方 api 包 ==========
     // 直接否定式：system 实现包不得依赖任何"其他插件实现包"；其他插件 api 包不在清单内，天然放行。
@@ -76,11 +77,13 @@ class P0ArchitectureTest {
             JavaClass.Predicates.resideInAnyPackage(
                     "com.pivotos.system..", "com.pivotos.flow..", "com.pivotos.file..",
                     "com.pivotos.job..", "com.pivotos.monitor..", "com.pivotos.ai..",
-                    "com.pivotos.workflow..", "com.pivotos.docsync..", "com.pivotos.migration..")
+                    "com.pivotos.workflow..", "com.pivotos.docsync..", "com.pivotos.migration..",
+                    "com.pivotos.mind..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.pivotos.system.api..", "com.pivotos.ai.api..",
                     "com.pivotos.ai.kb.api..", "com.pivotos.workflow.api..",
-                    "com.pivotos.docsync.api..", "com.pivotos.migration.api..")))
+                    "com.pivotos.docsync.api..", "com.pivotos.migration.api..",
+                    "com.pivotos.mind.api..")))
         .allowEmptyShould(true);
 
     // ai 侧对称规则（S19 新增）：ai 实现包只可依赖其他插件的 api 包
@@ -94,11 +97,12 @@ class P0ArchitectureTest {
                     "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
                     "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..",
                     "com.pivotos.ai.kb..", "com.pivotos.workflow..", "com.pivotos.docsync..",
-                    "com.pivotos.migration..")
+                    "com.pivotos.migration..", "com.pivotos.mind..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.pivotos.system.api..", "com.pivotos.message.api..",
                     "com.pivotos.ai.kb.api..", "com.pivotos.workflow.api..",
-                    "com.pivotos.docsync.api..", "com.pivotos.migration.api..")))
+                    "com.pivotos.docsync.api..", "com.pivotos.migration.api..",
+                    "com.pivotos.mind.api..")))
         .allowEmptyShould(true);
 
     // ai-kb 侧对称规则（S58 新增）：ai-kb 实现包只可依赖其他插件的 api 包
@@ -111,12 +115,13 @@ class P0ArchitectureTest {
                     "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
                     "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..",
                     "com.pivotos.ai..", "com.pivotos.workflow..", "com.pivotos.docsync..",
-                    "com.pivotos.migration..")
+                    "com.pivotos.migration..", "com.pivotos.mind..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.pivotos.system.api..", "com.pivotos.message.api..",
                     "com.pivotos.file.api..", "com.pivotos.ai.api..",
                     "com.pivotos.ai.kb..", "com.pivotos.workflow.api..",
-                    "com.pivotos.docsync.api..", "com.pivotos.migration.api..")))
+                    "com.pivotos.docsync.api..", "com.pivotos.migration.api..",
+                    "com.pivotos.mind.api..")))
         .allowEmptyShould(true);
 
     // monitor 侧对称规则（S48 新增，S71 运营看板启用 api 依赖）：monitor 实现包只可依赖其他插件的 api 包
@@ -127,12 +132,14 @@ class P0ArchitectureTest {
             JavaClass.Predicates.resideInAnyPackage(
                     "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
                     "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.ai..",
-                    "com.pivotos.workflow..", "com.pivotos.docsync..", "com.pivotos.migration..")
+                    "com.pivotos.workflow..", "com.pivotos.docsync..", "com.pivotos.migration..",
+                    "com.pivotos.mind..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.pivotos.system.api..", "com.pivotos.message.api..", "com.pivotos.ai.api..",
                     "com.pivotos.file.api..",
                     "com.pivotos.ai.kb.api..", "com.pivotos.workflow.api..",
-                    "com.pivotos.docsync.api..", "com.pivotos.migration.api..")))
+                    "com.pivotos.docsync.api..", "com.pivotos.migration.api..",
+                    "com.pivotos.mind.api..")))
         .allowEmptyShould(true);
 
     // workflow 侧对称规则（S55 新增，S92 补登 migration）：workflow 实现包只可依赖其他插件的 api 包
@@ -144,11 +151,13 @@ class P0ArchitectureTest {
             JavaClass.Predicates.resideInAnyPackage(
                     "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
                     "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..",
-                    "com.pivotos.ai..", "com.pivotos.docsync..", "com.pivotos.migration..")
+                    "com.pivotos.ai..", "com.pivotos.docsync..", "com.pivotos.migration..",
+                    "com.pivotos.mind..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.pivotos.system.api..", "com.pivotos.message.api..",
                     "com.pivotos.ai.api..", "com.pivotos.ai.kb.api..",
-                    "com.pivotos.docsync.api..", "com.pivotos.migration.api..")))
+                    "com.pivotos.docsync.api..", "com.pivotos.migration.api..",
+                    "com.pivotos.mind.api..")))
         .allowEmptyShould(true);
 
     // docsync 侧对称规则（S90 新增，S92 补登 migration）：docsync 实现包只可依赖其他插件的 api 包
@@ -161,12 +170,12 @@ class P0ArchitectureTest {
                     "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
                     "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..",
                     "com.pivotos.ai..", "com.pivotos.workflow..", "com.pivotos.ai.kb..",
-                    "com.pivotos.migration..")
+                    "com.pivotos.migration..", "com.pivotos.mind..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.pivotos.system.api..", "com.pivotos.message.api..",
                     "com.pivotos.ai.api..", "com.pivotos.ai.kb.api..",
                     "com.pivotos.workflow.api..", "com.pivotos.file.api..",
-                    "com.pivotos.migration.api..")))
+                    "com.pivotos.migration.api..", "com.pivotos.mind.api..")))
         .allowEmptyShould(true);
 
     // migration 侧对称规则（S92 新增）：migration 实现包只可依赖其他插件的 api 包
@@ -179,12 +188,31 @@ class P0ArchitectureTest {
                     "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
                     "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..",
                     "com.pivotos.ai..", "com.pivotos.workflow..", "com.pivotos.ai.kb..",
-                    "com.pivotos.docsync..")
+                    "com.pivotos.docsync..", "com.pivotos.mind..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.pivotos.system.api..", "com.pivotos.message.api..",
                     "com.pivotos.file.api..", "com.pivotos.ai.api..",
                     "com.pivotos.ai.kb.api..", "com.pivotos.workflow.api..",
-                    "com.pivotos.docsync.api..", "com.pivotos.generator.api..")))
+                    "com.pivotos.docsync.api..", "com.pivotos.generator.api..",
+                    "com.pivotos.mind.api..")))
+        .allowEmptyShould(true);
+
+    // mind 侧对称规则：mind 实现包只可依赖其他插件的 api 包
+    @ArchTest
+    static final ArchRule a1_a2_mind_impl_must_not_depend_on_other_plugin_impls = noClasses()
+        .that().resideInAPackage("com.pivotos.mind..")
+        .and().resideOutsideOfPackage("com.pivotos.mind.api..")
+        .should().dependOnClassesThat(
+            JavaClass.Predicates.resideInAnyPackage(
+                    "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
+                    "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..",
+                    "com.pivotos.ai..", "com.pivotos.workflow..", "com.pivotos.ai.kb..",
+                    "com.pivotos.docsync..", "com.pivotos.migration..")
+                .and(JavaClass.Predicates.resideOutsideOfPackages(
+                    "com.pivotos.system.api..", "com.pivotos.message.api..",
+                    "com.pivotos.file.api..", "com.pivotos.ai.api..",
+                    "com.pivotos.ai.kb.api..", "com.pivotos.workflow.api..",
+                    "com.pivotos.docsync.api..", "com.pivotos.migration.api..")))
         .allowEmptyShould(true);
 
     // ========== A3：Starter 不依赖 Plugin 任何包（实现 + api 均禁止） ==========    @ArchTest
@@ -194,7 +222,7 @@ class P0ArchitectureTest {
             "com.pivotos.system..", "com.pivotos.message..", "com.pivotos.flow..",
             "com.pivotos.file..", "com.pivotos.job..", "com.pivotos.monitor..",
             "com.pivotos.ai..", "com.pivotos.workflow..", "com.pivotos.docsync..",
-            "com.pivotos.migration..")
+            "com.pivotos.migration..", "com.pivotos.mind..")
         .allowEmptyShould(true);
 
     // ========== A6：无 new Thread / 裸 CompletableFuture.supplyAsync（必须走 ContextExecutor） ==========
