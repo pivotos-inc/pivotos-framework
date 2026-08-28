@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.pivotos.common.core.result.R;
 import com.pivotos.starter.auth.account.StpMindUtil;
+import com.pivotos.starter.core.context.LoginContext;
 import com.pivotos.system.convert.UserConvert;
 import com.pivotos.system.domain.dto.MindLoginBody;
 import com.pivotos.system.domain.dto.MindPasswordBody;
@@ -64,7 +65,11 @@ public class MindAuthController {
     @GetMapping("/getInfo")
     @SaCheckLogin(type = StpMindUtil.TYPE)
     public R<MindUserInfoVO> getInfo() {
-        Long userId = (Long) StpMindUtil.getLoginIdDefaultNull();
+        // Sa-Token loginId 为 String 形态，禁止 (Long) 强转；统一走 LoginContext（与 mind 业务控制器一致）
+        Long userId = LoginContext.getUserId();
+        if (userId == null) {
+            throw new IllegalStateException("登录态异常");
+        }
         return R.ok(new MindUserInfoVO(
                 userConvert.toVo(userService.getById(userId)),
                 Collections.emptyList(),
