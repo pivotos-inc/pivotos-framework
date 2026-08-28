@@ -11,6 +11,7 @@ import com.pivotos.common.core.enums.error.ErrorCode;
  *   <li>5020-5039 模型配置</li>
  *   <li>5040-5059 知识库/RAG（S20 预留）</li>
  *   <li>5060-5079 Agent/MCP/工具体系（S98 启用）</li>
+ *   <li>5080-5099 AI 审批助手（S101 启用）</li>
  * </ul>
  */
 public enum AiErrorCode implements ErrorCode {
@@ -33,7 +34,12 @@ public enum AiErrorCode implements ErrorCode {
 
     // ---------- Agent/MCP/工具体系（S98） ----------
     AI_TOOL_NOT_FOUND(5060, "AI 工具不存在"),
-    AI_TOOL_STATUS_INVALID(5061, "工具状态值非法（0正常 1停用）");
+    AI_TOOL_STATUS_INVALID(5061, "工具状态值非法（0正常 1停用）"),
+
+    // ---------- AI 审批助手（S101） ----------
+    APPROVAL_TASK_NOT_FOUND(5081, "待办任务不存在或已办结"),
+    ADVICE_GEN_FAILED(5082, "AI 审批建议生成失败，请稍后重试"),
+    APPROVAL_NOT_APPROVER(5083, "仅当前任务的审批人可生成建议");
 
     private final int code;
     private final String msg;

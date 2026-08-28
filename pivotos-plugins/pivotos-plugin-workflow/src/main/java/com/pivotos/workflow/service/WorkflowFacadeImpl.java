@@ -2,6 +2,7 @@ package com.pivotos.workflow.service;
 
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.workflow.api.IWorkflowFacade;
+import com.pivotos.workflow.api.dto.ApprovalTaskContextDTO;
 import com.pivotos.workflow.api.dto.WorkflowInstanceDTO;
 import com.pivotos.workflow.api.dto.WorkflowPendingTaskDTO;
 import com.pivotos.workflow.api.dto.WorkflowStatsDTO;
@@ -103,6 +104,13 @@ public class WorkflowFacadeImpl implements IWorkflowFacade {
     @Override
     public void urgeInstance(Long instanceId) {
         flowInstanceService.urge(instanceId);
+    }
+
+    // ---- S101 A3 AI 审批助手待办聚合供给面 ----
+
+    @Override
+    public ApprovalTaskContextDTO getApprovalTaskContext(Long taskId) {
+        return flowTaskService.approvalTaskContext(taskId);
     }
 
     private TaskPageQuery buildPageQuery(int pageNum, int pageSize) {
