@@ -71,3 +71,8 @@ pivotos:
   wechat:
     miniapp:
       appid: wx0a426f6d4bce0b5c
+      # 枢磐·智域小程序（比赛作品）AppID/Secret，默认从环境变量读取
+      configs:
+        mind:
+          appid: ${PIVOTOS_MIND_MINIAPP_APPID:}
+          secret: ${PIVOTOS_MIND_MINIAPP_SECRET:}

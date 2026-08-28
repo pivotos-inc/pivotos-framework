@@ -37,6 +37,8 @@
         <module>pivotos-plugin-docsync</module>
         <module>pivotos-plugin-migration-api</module>
         <module>pivotos-plugin-migration</module>
+        <module>pivotos-plugin-mind-api</module>
+        <module>pivotos-plugin-mind</module>
     </modules>
 
     <dependencyManagement>
