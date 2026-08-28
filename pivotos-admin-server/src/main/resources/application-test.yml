@@ -7,13 +7,13 @@ spring:
         master:
           url: jdbc:mysql://${MYSQL_HOST:175.24.176.176}:3306/pivotos_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
           username: ${MYSQL_USER:root}
-          password: ${MYSQL_PASSWORD:mysql_DbHEfw}
+          password: ${MYSQL_PASSWORD:}
           driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
       host: ${REDIS_HOST:175.24.176.176}
       port: 6379
-      password: ${REDIS_PASSWORD:redis_wKTrkz}
+      password: ${REDIS_PASSWORD:}
       timeout: 5s
 
 mybatis-plus:

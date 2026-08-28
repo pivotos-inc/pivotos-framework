@@ -15,13 +15,13 @@ spring:
         s2:
           url: jdbc:mysql://175.24.176.176:3306/test_tenant_s2?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
           username: root
-          password: mysql_DbHEfw
+          password: ${PIVOTOS_TEST_MYSQL_PASSWORD:}
           driver-class-name: com.mysql.cj.jdbc.Driver
         # datasource 模式的第二数据源（测试用同实例不同库模拟独立数据源）
         d2:
           url: jdbc:mysql://175.24.176.176:3306/test_tenant_d2?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
           username: root
-          password: mysql_DbHEfw
+          password: ${PIVOTOS_TEST_MYSQL_PASSWORD:}
           driver-class-name: com.mysql.cj.jdbc.Driver
 
 mybatis-plus:

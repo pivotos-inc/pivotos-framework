@@ -18,7 +18,7 @@ WORKSPACE = "/Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/
 TARGET_ROOT = os.path.join(WORKSPACE, TASK_ID, "target")
 
 DB = dict(host='175.24.176.176', port=3306, user='root',
-          password='mysql_DbHEfw', database='pivotos', charset='utf8mb4')
+          password=os.environ.get('PIVOTOS_TEST_MYSQL_PASSWORD', ''), database='pivotos', charset='utf8mb4')
 
 def log(tag, msg):
     print(f"[{tag}] {msg}", flush=True)
