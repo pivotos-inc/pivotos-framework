@@ -4,6 +4,7 @@ import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.starter.core.context.LoginContext;
 import com.pivotos.system.api.facade.IUserFacade;
+import com.pivotos.workflow.api.dto.ApprovalTaskContextDTO;
 import com.pivotos.workflow.domain.dto.AddSignatureCmd;
 import com.pivotos.workflow.domain.dto.ReductionSignatureCmd;
 import com.pivotos.workflow.domain.dto.TaskActionCmd;
@@ -34,6 +35,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 审批任务管理服务：待办 / 已办 / 审批通过 / 驳回 / 转办 / 委派。
@@ -314,6 +316,51 @@ public class FlowTaskService {
     public List<WorkflowHisTaskVO> taskHistory(Long instanceId) {
         List<HisTask> list = hisTaskService.getByInsId(instanceId);
         return list.stream().map(this::toHisVO).toList();
+    }
+
+    /**
+     * 审批上下文聚合（S101 A3）：实例信息 + 流程变量 + 审批历史，供跨插件 Facade 消费。
+     * <p>归属闸：仅当前任务的待办审批人可取（口径同 requireApprover）；任务不存在返回 null。
+     */
+    public ApprovalTaskContextDTO approvalTaskContext(Long taskId) {
+        Task task = taskService.getById(taskId);
+        if (task == null) {
+            return null;
+        }
+        requireApprover(taskId);
+        ApprovalTaskContextDTO dto = new ApprovalTaskContextDTO();
+        dto.setTaskId(taskId);
+        dto.setInstanceId(task.getInstanceId());
+        dto.setNodeName(task.getNodeName());
+        Instance ins = insService.getById(task.getInstanceId());
+        if (ins != null) {
+            String flowName = ins.getFlowName();
+            // flow_instance 表不含 flow_name 列，需从 definition 补全（口径同 toTaskVO）
+            if (!StringUtils.hasText(flowName)) {
+                Definition def = defService.getById(ins.getDefinitionId());
+                flowName = def != null ? def.getFlowName() : null;
+            }
+            dto.setFlowName(flowName);
+            dto.setBusinessId(ins.getBusinessId());
+            dto.setFlowStatus(ins.getFlowStatus());
+            dto.setCreateBy(ins.getCreateBy());
+            dto.setInstanceCreateTime(toLocalDateTime(ins.getCreateTime()));
+            Map<String, Object> variables = ins.getVariableMap();
+            dto.setVariables(variables != null ? variables : Map.of());
+        } else {
+            dto.setVariables(Map.of());
+        }
+        List<HisTask> hisList = hisTaskService.getByInsId(task.getInstanceId());
+        dto.setHistory(hisList == null ? List.of() : hisList.stream().map(his -> {
+            ApprovalTaskContextDTO.HistoryItem item = new ApprovalTaskContextDTO.HistoryItem();
+            item.setNodeName(his.getNodeName());
+            item.setApprover(his.getApprover());
+            item.setSkipType(his.getSkipType());
+            item.setMessage(his.getMessage());
+            item.setCreateTime(toLocalDateTime(his.getCreateTime()));
+            return item;
+        }).toList());
+        return dto;
     }
 
     /**

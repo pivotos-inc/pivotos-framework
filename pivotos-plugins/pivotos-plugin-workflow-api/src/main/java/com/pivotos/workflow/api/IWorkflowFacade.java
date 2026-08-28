@@ -1,6 +1,7 @@
 package com.pivotos.workflow.api;
 
 import com.pivotos.common.core.page.PageResult;
+import com.pivotos.workflow.api.dto.ApprovalTaskContextDTO;
 import com.pivotos.workflow.api.dto.WorkflowInstanceDTO;
 import com.pivotos.workflow.api.dto.WorkflowPendingTaskDTO;
 import com.pivotos.workflow.api.dto.WorkflowStatsDTO;
@@ -71,4 +72,15 @@ public interface IWorkflowFacade {
      * @param instanceId 流程实例 ID
      */
     void urgeInstance(Long instanceId);
+
+    // ---- S101 补充：A3 AI 审批助手待办聚合供给面 ----
+
+    /**
+     * 获取待办任务的完整审批上下文（实例信息 + 流程变量 + 审批历史）。
+     * <p>归属校验：仅当前任务的待办审批人可取（口径同加签/减签归属闸）。
+     *
+     * @param taskId 待办任务 ID
+     * @return 审批上下文；任务不存在返回 null，非本人待办抛 ServiceException
+     */
+    ApprovalTaskContextDTO getApprovalTaskContext(Long taskId);
 }
