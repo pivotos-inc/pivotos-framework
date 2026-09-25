@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 微信 API 实现（Hutool HTTP 直连）。
@@ -31,23 +32,22 @@ public class WechatMiniServiceImpl implements WechatMiniService {
 
     private final WechatMiniProperties properties;
 
-    /** access_token 内存缓存（token, 过期时间戳毫秒） */
-    private volatile String cachedToken;
-    private volatile long cachedTokenExpireAt;
+    /** access_token 内存缓存（key = app, value = token + 过期时间戳毫秒） */
+    private final Map<String, TokenCache> tokenCaches = new ConcurrentHashMap<>();
 
     @Override
-    public WechatSession code2Session(String code) {
-        requireConfigured();
+    public WechatSession code2Session(String app, String code) {
+        WechatMiniProperties.MiniAppConfig config = requireConfigured(app);
         String body = HttpUtil.get(CODE2SESSION_URL, Map.of(
-                "appid", properties.getAppid(),
-                "secret", properties.getSecret(),
+                "appid", config.getAppid(),
+                "secret", config.getSecret(),
                 "js_code", code,
                 "grant_type", "authorization_code"));
         JSONObject json = parse(body);
         Integer errcode = json.getInteger("errcode");
         if (errcode != null && errcode != 0) {
             // 40029=code 无效 / 40163=code 已使用，归为客户端可重试错误
-            log.warn("[PivotOS] code2session 失败 errcode={} errmsg={}", errcode, json.getString("errmsg"));
+            log.warn("[PivotOS] code2session 失败 app={} errcode={} errmsg={}", app, errcode, json.getString("errmsg"));
             throw new ServiceException(SystemErrorCode.SOCIAL_CODE_INVALID);
         }
         String openId = json.getString("openid");
@@ -58,14 +58,14 @@ public class WechatMiniServiceImpl implements WechatMiniService {
     }
 
     @Override
-    public String getPhoneNumber(String phoneCode) {
-        requireConfigured();
-        String body = HttpUtil.post(PHONE_URL + "?access_token=" + accessToken(),
+    public String getPhoneNumber(String app, String phoneCode) {
+        requireConfigured(app);
+        String body = HttpUtil.post(PHONE_URL + "?access_token=" + accessToken(app),
                 JSON.toJSONString(Map.of("code", phoneCode)));
         JSONObject json = parse(body);
         Integer errcode = json.getInteger("errcode");
         if (errcode == null || errcode != 0) {
-            log.warn("[PivotOS] getuserphonenumber 失败 errcode={} errmsg={}", errcode, json.getString("errmsg"));
+            log.warn("[PivotOS] getuserphonenumber 失败 app={} errcode={} errmsg={}", app, errcode, json.getString("errmsg"));
             throw new ServiceException(SystemErrorCode.SOCIAL_CODE_INVALID);
         }
         String phone = json.getJSONObject("phone_info") == null ? null
@@ -77,37 +77,41 @@ public class WechatMiniServiceImpl implements WechatMiniService {
     }
 
     /** client_credential 取 access_token，内存缓存 + 双检 */
-    private String accessToken() {
+    private String accessToken(String app) {
+        TokenCache cache = tokenCaches.computeIfAbsent(app, k -> new TokenCache());
         long now = System.currentTimeMillis();
-        if (cachedToken != null && now < cachedTokenExpireAt) {
-            return cachedToken;
+        if (cache.token != null && now < cache.expireAt) {
+            return cache.token;
         }
-        synchronized (this) {
-            if (cachedToken != null && System.currentTimeMillis() < cachedTokenExpireAt) {
-                return cachedToken;
+        synchronized (cache) {
+            if (cache.token != null && System.currentTimeMillis() < cache.expireAt) {
+                return cache.token;
             }
+            WechatMiniProperties.MiniAppConfig config = requireConfigured(app);
             String body = HttpUtil.get(ACCESS_TOKEN_URL, Map.of(
                     "grant_type", "client_credential",
-                    "appid", properties.getAppid(),
-                    "secret", properties.getSecret()));
+                    "appid", config.getAppid(),
+                    "secret", config.getSecret()));
             JSONObject json = parse(body);
             String token = json.getString("access_token");
             if (token == null || token.isBlank()) {
-                log.error("[PivotOS] 获取微信 access_token 失败：{}", body);
+                log.error("[PivotOS] 获取微信 access_token 失败 app={}：{}", app, body);
                 throw new ServiceException(SystemErrorCode.SOCIAL_API_FAILED);
             }
-            cachedToken = token;
+            cache.token = token;
             // 提前 5 分钟过期，抵消时钟偏移与在途请求
-            cachedTokenExpireAt = System.currentTimeMillis()
+            cache.expireAt = System.currentTimeMillis()
                     + (json.getLongValue("expires_in", 7200L) - 300) * 1000;
             return token;
         }
     }
 
-    private void requireConfigured() {
-        if (!properties.configured()) {
+    private WechatMiniProperties.MiniAppConfig requireConfigured(String app) {
+        WechatMiniProperties.MiniAppConfig config = properties.getConfig(app);
+        if (config == null) {
             throw new ServiceException(SystemErrorCode.SOCIAL_NOT_CONFIGURED);
         }
+        return config;
     }
 
     private JSONObject parse(String body) {
@@ -117,5 +121,11 @@ public class WechatMiniServiceImpl implements WechatMiniService {
             log.error("[PivotOS] 微信接口响应解析失败：{}", body, e);
             throw new ServiceException(SystemErrorCode.SOCIAL_API_FAILED);
         }
+    }
+
+    /** 单应用 access_token 缓存 */
+    private static class TokenCache {
+        private volatile String token;
+        private volatile long expireAt;
     }
 }

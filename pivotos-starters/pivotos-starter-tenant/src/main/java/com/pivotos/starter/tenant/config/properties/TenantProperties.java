@@ -45,7 +45,8 @@ public class TenantProperties {
 
     /** 不绑定租户上下文的接口（Ant 风格，如登录、平台管理接口） */
     private List<String> ignoreUrls = new ArrayList<>(List.of("/system/auth/login", "/system/auth/logout",
-            "/app/auth/login", "/mini/auth/login", "/mini/auth/phone", "/mini/auth/bind"));
+            "/app/auth/login", "/mini/auth/login", "/mini/auth/phone", "/mini/auth/bind",
+            "/mind/auth/login", "/mind/auth/password"));
 
     /** 严格模式：true 时启用后解析不到租户 → 403 拒绝（SaaS 强隔离场景） */
     private boolean strict = false;

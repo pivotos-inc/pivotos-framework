@@ -54,7 +54,13 @@ public class FlowInstanceService {
         if (cmd.getVariable() != null) {
             params.variable(cmd.getVariable());
         }
-        Instance instance = insService.start(cmd.getFlowCode(), params);
+        Instance instance;
+        try {
+            instance = insService.start(cmd.getFlowCode(), params);
+        } catch (org.dromara.warm.flow.core.exception.FlowException e) {
+            // L2 清偿：引擎 FlowException 未翻译会落入全局兜底报「系统内部错误」（S93 遗留）
+            throw new ServiceException(translateStartFailure(e));
+        }
         if (instance == null) {
             throw new ServiceException("流程实例创建失败，请检查流程定义是否已发布");
         }
@@ -147,6 +153,18 @@ public class FlowInstanceService {
             throw new ServiceException("流程实例不存在");
         }
         return toVO(instance);
+    }
+
+    /**
+     * 发起失败文案翻译（L2）：网关条件全不匹配等引擎异常转为业务友好提示，
+     * 其余 FlowException 带原文，避免全局兜底的「系统内部错误」。
+     */
+    private String translateStartFailure(org.dromara.warm.flow.core.exception.FlowException e) {
+        String msg = e.getMessage() == null ? "" : e.getMessage();
+        if (msg.contains("条件") || msg.toLowerCase().contains("condition")) {
+            return "发起失败：流程变量未匹配到任何网关分支条件，请检查表单填写或为排他网关配置默认分支";
+        }
+        return "流程发起失败：" + msg;
     }
 
     private String currentHandler() {

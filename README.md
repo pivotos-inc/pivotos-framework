@@ -1,8 +1,8 @@
 # PivotOS Framework（pivotos-framework）
 
-> 枢磐 PivotOS「一码三端」企业管理平台 —— 后端全部模块（Maven 多模块单仓）
+> PivotOS「一码三端」企业管理平台 —— 后端全部模块（Maven 多模块单仓），开发者：胡伟龙（Alex）
 >
-> 📖 在线文档：[pivotos-doc.293242.com](https://pivotos-doc.293242.com) ｜ 🖥️ PC 演示：[pivotos-pc.293242.com](https://pivotos-pc.293242.com) ｜ 📱 H5 演示：[pivotos-h5.293242.com](https://pivotos-h5.293242.com)
+> 📖 在线文档：[pivotos-doc.293242.com](https://pivotos-doc.293242.com) ｜ 🖥️ PC 演示：[pivotos-pc.293242.com](https://pivotos-pc.293242.com) ｜ 📱 H5 演示：[pivotos-h5.293242.com](https://pivotos-h5.293242.com) ｜ [Apache-2.0](./LICENSE)
 
 PivotOS 是对标若依（RuoYi）功能面、以 **AI 为差异化主线** 的企业级快速开发平台：同一套后端支撑 PC 管理端、移动 H5/App、微信小程序三端。架构特色：**轻量微内核 + 彻底插件化 + AI 原生底座 + 单代码库双部署形态（单体/微服务）**。
 
@@ -13,7 +13,7 @@ PivotOS 是对标若依（RuoYi）功能面、以 **AI 为差异化主线** 的�
 | 语言 / 运行时 | Java 25（JDK 25，兼容矩阵含 21） |
 | 核心框架 | Spring Boot 4.x · Spring Framework 7 |
 | ORM | MyBatis-Plus + dynamic-datasource（多数据源/多租户） |
-| 认证鉴权 | Sa-Token 多账号体系（sys-user / app-user / wx-mini-user） |
+| 认证鉴权 | Sa-Token 多账号体系（sys-user / app-user / wx-mini-user / mind-user） |
 | 数据库迁移 | Flyway（脚本随插件 jar 分发，启动自动执行，自动建库建表） |
 | AI 能力 | Spring AI 2.0（OpenAI 兼容模式，多供应商动态装配） |
 | 向量存储 | Milvus（主） / SimpleVectorStore（零中间件兜底），可插拔 |
@@ -24,7 +24,7 @@ PivotOS 是对标若依（RuoYi）功能面、以 **AI 为差异化主线** 的�
 | 序列化 | fastjson2（统一脱敏） |
 | 架构守护 | ArchUnit（CI 每次必跑，10 条边界规则） |
 
-## 模块结构（35 个 Maven 模块）
+## 模块结构（37 个 Maven 模块）
 
 ```
 pivotos-framework (groupId=com.pivotos)
@@ -43,15 +43,18 @@ pivotos-framework (groupId=com.pivotos)
 │   ├── starter-job             #   XXL-Job 执行器装配
 │   ├── starter-ai              #   Spring AI ChatClient / EmbeddingModel 装配
 │   └── starter-datascope       #   数据权限
-├── pivotos-plugins             # 9 个业务插件（每个拆 -api 契约包 + 实现包）
-│   ├── plugin-system           #   用户/角色/菜单/部门/岗位/字典/参数/公告/日志/在线用户/认证
+├── pivotos-plugins             # 12 个业务插件（除 monitor 外均拆 -api 契约包 + 实现包）
+│   ├── plugin-system           #   用户/角色/菜单/部门/岗位/字典/参数/公告/日志/在线用户/认证（含 mind 登录下沉）
 │   ├── plugin-message          #   消息中心（站内信/模板/发送日志）
 │   ├── plugin-file             #   文件存储（多云：腾讯云 COS / MinIO，预签名直传）
 │   ├── plugin-workflow         #   工作流审批（WarmFlow 引擎 + 待办/已办/发起）
 │   ├── plugin-ai               #   AI 对话（多供应商/多 Key/SSE 流式/会话落库）
 │   ├── plugin-ai-coding        #   AI Coding（自然语言生成单表/主子/树表 CRUD）
 │   ├── plugin-ai-kb            #   RAG 知识库（解析/分块/向量化/检索/重排/评测/引用溯源）
+│   ├── plugin-mind             #   枢磐·智域个人端（知识库/待办/AI 拆分，配 pivotos-mind 前端）
 │   ├── plugin-generator        #   代码生成器（crud/sub/tree 三模板族，PC + uni-app 双端产物）
+│   ├── plugin-docsync          #   文档同步（在线文档站内容同步）
+│   ├── plugin-migration        #   迁移引擎（AI 驱动的系统迁移任务编排）
 │   └── plugin-monitor          #   服务监控 / 缓存监控 / 运营看板
 └── pivotos-admin-server        # 单体启动器（monolith 形态，8080 端口）
 ```
@@ -71,6 +74,7 @@ pivotos-framework (groupId=com.pivotos)
 - **代码生成器**：选表即出 CRUD（crud / sub 主子 / tree 树三模板族），前后端 + 菜单一键导入
 - **监控运维**：服务监控、缓存监控、运营看板
 - **任务调度**：XXL-Job 执行器开箱集成
+- **枢磐·智域（个人端）**：mind-user 第四账号体系 + 个人知识库 + 智能待办（AI 拆分）+ SSE 对话，配套前端见 [pivotos-mind](https://github.com/pivotos-inc/pivotos-mind)
 
 ## 快速开始
 
@@ -80,7 +84,8 @@ pivotos-framework (groupId=com.pivotos)
 git clone https://github.com/pivotos-inc/pivotos-framework.git
 cd pivotos-framework
 
-# 1. 准备本地配置（MySQL/Redis 密码等），模板见 .env.example
+# 1. 准备本地配置（MySQL/Redis 密码等），模板见 .env.example；
+#    所有凭据经环境变量注入（MYSQL_PASSWORD / REDIS_PASSWORD / DASHSCOPE_API_KEY 等），仓库内不保留真实密钥
 cp .env.example .env.dev    # 按本机实际修改
 
 # 2. 构建（首次或依赖变更后）
@@ -101,9 +106,16 @@ source .env.dev && java -jar pivotos-admin-server/target/pivotos-admin-server.ja
 | --- | --- |
 | [pivotos-ui](https://github.com/pivotos-inc/pivotos-ui) | PC 管理端（Vue3 + Element Plus，pnpm Monorepo） |
 | [pivotos-app](https://github.com/pivotos-inc/pivotos-app) | 移动端（uni-app 一码三端：H5 / App / 小程序） |
+| [pivotos-mind](https://github.com/pivotos-inc/pivotos-mind) | 枢磐·智域个人端（C 端 AI 助手开源样板间，对接本仓 plugin-mind） |
 | [pivotos-docs](https://github.com/pivotos-inc/pivotos-docs) | 项目文档库（PRD / 架构 / 规范 / 流程 / 踩坑记录） |
 | pivotos-docsite | 在线文档站源码（VitePress，部署于 pivotos-doc.293242.com） |
 
 ## 维护约定
 
 > 新增 Starter / Plugin / 功能特性时，须同步更新本 README 的「模块结构」「功能特性」两节及在线文档对应章节。
+
+## License
+
+[Apache License 2.0](./LICENSE) · Copyright 2026 胡伟龙（Alex）
+
+凭据安全约定：`.env.dev` 等含真实凭据的文件一律不入库（`.gitignore` 已覆盖）；配置文件中凭据一律 `${ENV_VAR:}` 占位经环境变量注入。

@@ -23,6 +23,8 @@ public final class AiUsageContext {
     public static final String SCENE_CODING = "coding";
     /** 场景：AI 图表生成 */
     public static final String SCENE_CHART = "chart";
+    /** 场景：AI 审批助手（S101 A3 建议生成） */
+    public static final String SCENE_APPROVAL = "approval";
     /** 场景：未标注（静态兜底 client、未埋点调用） */
     public static final String SCENE_OTHER = "other";
 

@@ -181,10 +181,12 @@ public class MigrationStepServiceImpl extends ServiceImpl<MigrationStepMapper, M
                     break;
                 }
                 lastError = "AI 返回空产物列表";
-                log.warn("AI 返回空产物列表（第{}次），stepId={}", attempt, stepId);
+                log.warn("AI 返回空产物列表（第{}次），stepId={}, rawLen={}, raw={}", attempt, stepId,
+                        aiResponse.length(), aiResponse.substring(0, Math.min(300, aiResponse.length())));
             } catch (Exception e) {
                 lastError = "AI 返回内容无法解析为 JSON";
-                log.warn("解析 AI 产物 JSON 失败（第{}次），stepId={}", attempt, stepId, e);
+                log.warn("解析 AI 产物 JSON 失败（第{}次），stepId={}, rawLen={}, raw={}", attempt, stepId,
+                        aiResponse.length(), aiResponse.substring(0, Math.min(300, aiResponse.length())), e);
             }
         }
 

@@ -1,5 +1,9 @@
 package com.pivotos.workflow.api;
 
+import com.pivotos.common.core.page.PageResult;
+import com.pivotos.workflow.api.dto.ApprovalTaskContextDTO;
+import com.pivotos.workflow.api.dto.WorkflowInstanceDTO;
+import com.pivotos.workflow.api.dto.WorkflowPendingTaskDTO;
 import com.pivotos.workflow.api.dto.WorkflowStatsDTO;
 
 import java.util.Map;
@@ -41,4 +45,42 @@ public interface IWorkflowFacade {
      * @return 实例统计 DTO
      */
     WorkflowStatsDTO instanceStats();
+
+    // ---- S99 补充：A2 首批业务工具供给面（查待办 / 查实例 / 催办） ----
+
+    /**
+     * 分页查询当前登录用户的待办任务（归属过滤口径同管理端待办列表）
+     *
+     * @param pageNum  页码（从 1 开始）
+     * @param pageSize 每页条数
+     * @return 待办任务分页（未登录返回空页）
+     */
+    PageResult<WorkflowPendingTaskDTO> pagePendingTasks(int pageNum, int pageSize);
+
+    /**
+     * 分页查询当前登录用户发起的流程实例
+     *
+     * @param pageNum  页码（从 1 开始）
+     * @param pageSize 每页条数
+     * @return 实例分页（未登录按匿名口径返回空页）
+     */
+    PageResult<WorkflowInstanceDTO> pageMyInstances(int pageNum, int pageSize);
+
+    /**
+     * 催办流程实例（仅发起人、仅进行中实例，限频口径同管理端催办）
+     *
+     * @param instanceId 流程实例 ID
+     */
+    void urgeInstance(Long instanceId);
+
+    // ---- S101 补充：A3 AI 审批助手待办聚合供给面 ----
+
+    /**
+     * 获取待办任务的完整审批上下文（实例信息 + 流程变量 + 审批历史）。
+     * <p>归属校验：仅当前任务的待办审批人可取（口径同加签/减签归属闸）。
+     *
+     * @param taskId 待办任务 ID
+     * @return 审批上下文；任务不存在返回 null，非本人待办抛 ServiceException
+     */
+    ApprovalTaskContextDTO getApprovalTaskContext(Long taskId);
 }

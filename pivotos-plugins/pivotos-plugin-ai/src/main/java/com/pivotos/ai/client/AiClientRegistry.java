@@ -46,6 +46,9 @@ public class AiClientRegistry {
     /** ChatClient 缓存：providerId:keyId → client */
     private final Map<String, ChatClient> clientCache = new ConcurrentHashMap<>();
 
+    /** 内部结构化生成专用 client 缓存（不带聊天人格 defaultSystem）：providerId:keyId → client */
+    private final Map<String, ChatClient> internalClientCache = new ConcurrentHashMap<>();
+
     /** 轮询计数器：providerId → 单调递增序号 */
     private final Map<Long, AtomicLong> roundRobin = new ConcurrentHashMap<>();
 
@@ -55,7 +58,19 @@ public class AiClientRegistry {
     /** 取（供应商 × Key）对应的 ChatClient（缓存命中则复用底层连接） */
     public ChatClient getChatClient(AiProvider provider, AiApiKey key) {
         String cacheKey = provider.getId() + ":" + key.getId();
-        return clientCache.computeIfAbsent(cacheKey, k -> buildClient(provider, key));
+        return clientCache.computeIfAbsent(cacheKey, k -> buildClient(provider, key, true));
+    }
+
+    /**
+     * 取内部结构化生成专用 ChatClient：不携带聊天人格 defaultSystem，调用方自带完整 system 提示词。
+     *
+     * <p>背景（S96 K7）：defaultSystem + 调用方 system 构成双 system 消息形态，
+     * DashScope OpenAI 兼容端点对该形态行为不稳定（迁移产物生成实测稳定返回空数组），
+     * 内部生成链路（migration analyze/plan/execute、图表等）改用单 system 形态规避。
+     */
+    public ChatClient getInternalChatClient(AiProvider provider, AiApiKey key) {
+        String cacheKey = provider.getId() + ":" + key.getId();
+        return internalClientCache.computeIfAbsent(cacheKey, k -> buildClient(provider, key, false));
     }
 
     /** 轮询起点：同供应商多 Key 依次分摊 */
@@ -68,12 +83,14 @@ public class AiClientRegistry {
     public void evictProvider(Long providerId) {
         String prefix = providerId + ":";
         clientCache.keySet().removeIf(k -> k.startsWith(prefix));
+        internalClientCache.keySet().removeIf(k -> k.startsWith(prefix));
         modelCache.remove(providerId);
     }
 
     /** 单个 Key 变更/删除：只失效对应 client */
     public void evictKey(Long providerId, Long keyId) {
         clientCache.remove(providerId + ":" + keyId);
+        internalClientCache.remove(providerId + ":" + keyId);
     }
 
     /**
@@ -124,16 +141,18 @@ public class AiClientRegistry {
     }
 
     /** 构建动态 ChatClient（模型为供应商默认值，实际对话时按请求 options 覆盖） */
-    private ChatClient buildClient(AiProvider provider, AiApiKey key) {
+    private ChatClient buildClient(AiProvider provider, AiApiKey key, boolean withDefaultSystem) {
         ChatModelFactory factory = resolveFactory(provider.getCode());
-        log.info("[PivotOS] 动态 ChatClient 构建：providerId={} keyId={} code={} factory={}",
-                provider.getId(), key.getId(), provider.getCode(), factory.getClass().getSimpleName());
+        log.info("[PivotOS] 动态 ChatClient 构建：providerId={} keyId={} code={} factory={} internal={}",
+                provider.getId(), key.getId(), provider.getCode(), factory.getClass().getSimpleName(), !withDefaultSystem);
         // S92：MeteredChatModel 包装——四条 AI 链路凡走动态 Key 体系的调用在此统一计量
         var meteredModel = new MeteredChatModel(factory.buildChatModel(provider, key),
                 provider.getId(), provider.getCode(), key.getId(), usageRecorder);
-        return ChatClient.builder(meteredModel)
-                .defaultSystem(aiProperties.getSystemPrompt())
-                .build();
+        ChatClient.Builder builder = ChatClient.builder(meteredModel);
+        if (withDefaultSystem) {
+            builder.defaultSystem(aiProperties.getSystemPrompt());
+        }
+        return builder.build();
     }
 
     private record ModelCacheEntry(List<String> models, long expireAt) {
