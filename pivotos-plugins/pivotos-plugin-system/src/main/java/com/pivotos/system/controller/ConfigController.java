@@ -1,5 +1,6 @@
 package com.pivotos.system.controller;
 
+import cn.dev33.satoken.annotation.SaCheckLogin;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -57,6 +58,14 @@ public class ConfigController {
     public R<Void> update(@Validated @RequestBody ConfigSaveRequest request) {
         configService.updateConfig(request);
         return R.ok();
+    }
+
+    /** 按键名读参数值（登录即可读，供前端读取功能开关；不存在时返回 null） */
+    @Operation(summary = "按键名读参数值（登录即可读）")
+    @GetMapping("/configKey/{configKey}")
+    @SaCheckLogin(type = StpSysUtil.TYPE)
+    public R<String> getByKey(@PathVariable String configKey) {
+        return R.ok(configService.getConfigValue(configKey, null));
     }
 
     @Operation(summary = "删除参数配置")
