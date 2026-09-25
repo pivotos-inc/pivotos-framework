@@ -5,15 +5,15 @@ spring:
       primary: master
       datasource:
         master:
-          url: jdbc:mysql://${MYSQL_HOST:175.24.176.176}:3306/pivotos_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
-          username: ${MYSQL_USER:root}
-          password: ${MYSQL_PASSWORD:}
+          url: jdbc:mysql://175.24.176.176:3306/pivotos_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          username: root
+          password: mysql_DNCi3f
           driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: ${REDIS_HOST:175.24.176.176}
+      host: 175.24.176.176
       port: 6379
-      password: ${REDIS_PASSWORD:}
+      password: redis_Q6aiiX
       timeout: 5s
 
 mybatis-plus:

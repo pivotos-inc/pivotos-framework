@@ -26,7 +26,7 @@ spring:
     model:
       chat: openai
     openai:
-      api-key: ${DASHSCOPE_API_KEY:}
+      api-key: sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC
       # Spring AI 2.0 底层为官方 openai-java SDK，base-url 须含 /v1（SDK 直接追加 /chat/completions）
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       chat:
@@ -90,9 +90,9 @@ pivotos:
     # dev 默认值恰 16 位仅供本地联调，生产必须用环境变量覆盖
     field-encrypt-key: ${PIVOTOS_FIELD_ENCRYPT_KEY:pivotos-dev-key!}
   kb:
-    # 默认向量存储类型：milvus（主用）/ simple（零中间件兜底）
+    # 默认向量存储类型：simple（本地零中间件，Milvus 服务端未部署）/ milvus（部署后改回）
     vector-store:
-      type: ${PIVOTOS_KB_VECTOR_STORE_TYPE:milvus}
+      type: simple
       simple:
         data-path: ./data/kb/simple
         file-name: kb-store.json
