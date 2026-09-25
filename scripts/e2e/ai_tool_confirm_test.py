@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 PivotOS S98 二次确认协议专项 E2E（2026-08-23 第 4 轮）
 前置：ai_tool_registry_test.py 已 ALL-PASS（基础链路成立）。
@@ -9,10 +9,14 @@ PivotOS S98 二次确认协议专项 E2E（2026-08-23 第 4 轮）
   ③ 恢复 confirm_required=0 → 无 confirm 亦放行（只读语义复原）。
 """
 import requests, json, subprocess, threading, queue, time
+import glob, os
 
 BASE = "http://localhost:8080"
-MYSQL_CP = r"C:\Users\huweilong\.m2\repository\com\mysql\mysql-connector-j\9.7.0\mysql-connector-j-9.7.0.jar"
-TOGGLER = r"E:\Develop\Project\PivotOS Inc\PivotOS\pivotos-tmp\S98ConfirmToggle.java"
+# S102 冻结回归 Mac 适配：驱动 jar 与 toggler 改为按环境动态定位（原硬编码 Windows 路径）
+MYSQL_CP = sorted(glob.glob(os.path.expanduser(
+    "~/.m2/repository/com/mysql/mysql-connector-j/*/mysql-connector-j-*.jar")))[-1]
+_WORKSPACE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+TOGGLER = os.path.join(_WORKSPACE, "pivotos-tmp", "S98ConfirmToggle.java")
 
 def log(tag, msg):
     print(f"[{tag}] {msg}", flush=True)

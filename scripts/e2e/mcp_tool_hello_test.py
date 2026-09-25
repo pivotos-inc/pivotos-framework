@@ -21,7 +21,7 @@ def log(tag, msg):
 def sse_reader():
     """SSE 流读取线程：字节累积手工分帧（不用 iter_lines+decode_unicode：UTF-8 多字节
     字符被 chunk 边界切断会产生替换符，中文 description 帧的 JSON 解析会失败——S97 实测坑）"""
-    with requests.get(f"{BASE}/sse", stream=True, timeout=(10, 300)) as r:
+    with requests.get(f"{BASE}/sse", stream=True, timeout=(10, 300), headers=HDR) as r:
         assert r.status_code == 200, f"SSE 连接失败 HTTP {r.status_code}"
         buf = b""
         for chunk in r.iter_content(chunk_size=1024):
@@ -89,6 +89,15 @@ def wait_response(msg_id, timeout=30):
         for item in reversed(stash):
             frames.queue.appendleft(item)
 
+# ── Step 0: 登录（S98 起 MCP 端点强制登录，匿名 401；S102 回归补鉴权头） ──
+log("STEP0", "登录获取 token（MCP 端点防护口径）...")
+r = requests.post(f"{BASE}/system/auth/login",
+                  json={"username": "admin", "password": "admin123"}, timeout=60)
+body = r.json()
+assert r.status_code == 200 and body.get("code") == 0, f"登录失败: {body}"
+HDR = {"Authorization": body["data"]["token"]}
+log("STEP0", "token OK")
+
 # ── Step 1: SSE 连接 + endpoint ───────────────────────────
 log("STEP1", "建立 SSE 连接 ...")
 t = threading.Thread(target=sse_reader, daemon=True)
@@ -98,7 +107,7 @@ msg_url = BASE + (endpoint if endpoint.startswith("/") else "/" + endpoint)
 log("PASS1", f"SSE endpoint 就绪：{msg_url}")
 
 def post(payload, label):
-    r = requests.post(msg_url, json=payload, timeout=30)
+    r = requests.post(msg_url, json=payload, headers=HDR, timeout=30)
     assert r.status_code in (200, 202), f"{label} POST 失败 HTTP {r.status_code}: {r.text[:200]}"
     log("POST", f"{label} → HTTP {r.status_code}（accepted）")
 
@@ -124,8 +133,9 @@ target = next(tool for tool in tools if tool["name"] == "queryMyPendingTaskCount
 log("PASS3", f"queryMyPendingTaskCount 已列出：description={target.get('description', '')[:60]}...")
 
 # ── Step 4: tools/call —— 工具被调用（一票否决点③） ──────
+# S98 起工具协议带 confirm 参数（写操作二次确认口径），缺省会 schema 校验失败（S102 回归适配）
 post({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
-      "params": {"name": "queryMyPendingTaskCount", "arguments": {}}}, "tools/call")
+      "params": {"name": "queryMyPendingTaskCount", "arguments": {"confirm": True}}}, "tools/call")
 resp = wait_response(3)
 result = resp["result"]
 assert not result.get("isError"), f"tools/call 返回错误：{result}"
