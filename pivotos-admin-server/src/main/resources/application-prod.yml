@@ -1,17 +1,7 @@
 # =====================================================================
-# PivotOS 生产环境配置（1Panel 部署 · 2026-08-15）
-# 原则：
-#  1. 已确认的生产参数以「环境变量优先 + 内置默认值」写入，开箱即启动；
-#  2. 未在部署清单中明确的配置与 application-dev.yml 保持一致；
-#  3. 敏感项（字段加密密钥 / AI API Key）必须经环境变量注入，不写死。
-#
-# 必需环境变量（1Panel Java 项目「环境变量」处配置）：
-#   DASHSCOPE_API_KEY          阿里云百炼 API Key（AI 对话/向量化能力）
-#   PIVOTOS_FIELD_ENCRYPT_KEY  字段级 AES 加密密钥（16/24/32 位，生产勿用 dev 默认值）
-# 可选环境变量：
-#   XXL_JOB_ACCESS_TOKEN       调度中心通信 Token（与 xxl-job-admin 保持一致，留空不校验）
-#   PIVOTOS_KB_VECTOR_STORE_TYPE  向量存储类型（默认 milvus；无 Milvus 时设 simple）
-#   MYSQL_*/REDIS_*            覆盖下方默认连接参数
+# PivotOS 生产环境配置（1Panel 部署 · 内网 10.0.4.15）
+# 用户口径（2026-09-25）：连接凭据采用本地明文直写，不走环境变量。
+# 注意：生产日志保持 info、接口文档保持关闭，勿照搬 dev 的 debug 配置。
 # =====================================================================
 spring:
   datasource:
@@ -19,10 +9,10 @@ spring:
       primary: master
       datasource:
         master:
-          # 全新库 pivotos：createDatabaseIfNotExist=true 自动建库，表结构由 Flyway 随启动自动迁移
-          url: jdbc:mysql://${MYSQL_HOST:10.0.4.15}:${MYSQL_PORT:3306}/${MYSQL_DB:pivotos}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
-          username: ${MYSQL_USER:root}
-          password: ${MYSQL_PASSWORD:}
+          # 生产库 pivotos：createDatabaseIfNotExist=true 自动建库，表结构由 Flyway 随启动自动迁移
+          url: jdbc:mysql://10.0.4.15:3306/pivotos?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          username: root
+          password: CBafpG8yDPJHVHiSPE8DDUBU
           driver-class-name: com.mysql.cj.jdbc.Driver
       druid:
         initial-size: 10
@@ -30,18 +20,18 @@ spring:
         max-active: 50
   data:
     redis:
-      host: ${REDIS_HOST:10.0.4.15}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+      host: 10.0.4.15
+      port: 6379
+      password: W8vh8yGwyXV89Fnl3Czy0V8A
       timeout: 5s
 
   ai:
-    # 向量存储（RAG 知识库）：与 dev 一致，地址可用环境变量覆盖
+    # 向量存储（RAG 知识库）：Milvus 未部署前，生产启动须将 spring.ai.vectorstore.type 置 simple
     vectorstore:
       milvus:
         client:
-          host: ${MILVUS_HOST:175.24.176.176}
-          port: ${MILVUS_PORT:19530}
+          host: 10.0.4.15
+          port: 19530
         database-name: default
         collection-name: pivotos_kb
         embedding-dimension: 1024
@@ -69,24 +59,23 @@ pivotos:
   tenant:
     enabled: true
     mode: column
-  # 文件存储：腾讯云 COS（与 dev 一致；生产桶/密钥如需隔离可经环境变量覆盖）
+  # 文件存储：腾讯云 COS（与 dev 同桶；如需隔离在此直接替换明文）
   file:
     storage-type: s3
     vendor: cos
-    # 生产桶/密钥一律经环境变量注入，仓库内不保留真实凭据
     endpoint: https://cos.ap-shanghai.myqcloud.com
-    access-key: ${PIVOTOS_COS_ACCESS_KEY:}
-    secret-key: ${PIVOTOS_COS_SECRET_KEY:}
+    access-key: AKIDKhrqb9UbVCg3D9B9AA4qPuENXUJvJUSC
+    secret-key: ayBIG1aw51jEVlqiNtDKOL7i5HJ8k9LO
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
   # XXL-Job 调度中心（生产调度中心地址）
   job:
-    admin-addresses: ${XXL_JOB_ADMIN:http://10.0.4.15:8100}
+    admin-addresses: http://10.0.4.15:8101
     app-name: pivotos-executor
     port: 9999
-    access-token: ${XXL_JOB_ACCESS_TOKEN:}
-    group-id: ${XXL_JOB_GROUP_ID:1}
+    access-token: 123456
+    group-id: 3
   # 微信小程序（与 dev 一致的测试号；正式号取得后替换）
   wechat:
     miniapp:

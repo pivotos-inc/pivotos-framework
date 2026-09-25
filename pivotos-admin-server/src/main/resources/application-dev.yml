@@ -4,10 +4,10 @@ spring:
       primary: master
       datasource:
         master:
-          # 开发库 pivotos；中间件已迁至公网服务器 175.24.176.176（2026-07-31 搬迁）
-          url: jdbc:mysql://175.24.176.176:3306/pivotos?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          # 开发库 pivotos_dev；中间件在公网服务器 175.24.176.176
+          url: jdbc:mysql://175.24.176.176:3306/pivotos_dev?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
           username: root
-          password: ${MYSQL_PASSWORD:}
+          password: mysql_DNCi3f
           driver-class-name: com.mysql.cj.jdbc.Driver
       druid:
         initial-size: 5
@@ -17,23 +17,30 @@ spring:
     redis:
       host: 175.24.176.176
       port: 6379
-      password: ${REDIS_PASSWORD:}
+      password: redis_Q6aiiX
       timeout: 5s
+      database: 0
 
   ai:
-    # dev 兼容：统一从环境变量读取（本机 .env.dev / shell export 注入），仓库内不再保留真实 Key 默认值
+    # 本地明文（用户口径 2026-09-25：配置文件直写，不走环境变量）
     openai:
-      api-key: ${DASHSCOPE_API_KEY:}
+      api-key: sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC
+    # Milvus 服务端未部署（2026-09-24 实测 19530 不通）：
+    # ① spring.ai.vectorstore.type 显式 simple——MilvusVectorStoreAutoConfiguration matchIfMissing=true，
+    #    不配则按默认 localhost:19530 装配 milvusClient，启动即挂；
+    # ② 知识库默认存储走 pivotos.kb.vector-store.type=simple（application.yml，内存 + JSON 快照，零中间件）；
+    # 将来部署 Milvus 后：改回 milvus 并恢复下方注释段。
     vectorstore:
-      milvus:
-        client:
-          host: 175.24.176.176
-          port: 19530
-        database-name: default
-        collection-name: pivotos_kb
-        embedding-dimension: 1024
-        initialize-schema: true
-        metric-type: COSINE
+      type: simple
+    #   milvus:
+    #     client:
+    #       host: 175.24.176.176
+    #       port: 19530
+    #     database-name: default
+    #     collection-name: pivotos_dev_kb
+    #     embedding-dimension: 1024
+    #     initialize-schema: true
+    #     metric-type: COSINE
 
 mybatis-plus:
   configuration:
@@ -49,28 +56,28 @@ pivotos:
   tenant:
     enabled: true        # 默认 false，不写=单租户
     mode: column         # column / schema / datasource
-  # 文件存储：腾讯云 COS（测试环境）
+  # 文件存储：腾讯云 COS（本地明文）
   file:
     storage-type: s3
     vendor: cos
     endpoint: https://cos.ap-shanghai.myqcloud.com
-    access-key: ${PIVOTOS_COS_ACCESS_KEY:}
-    secret-key: ${PIVOTOS_COS_SECRET_KEY:}
+    access-key: AKIDKhrqb9UbVCg3D9B9AA4qPuENXUJvJUSC
+    secret-key: ayBIG1aw51jEVlqiNtDKOL7i5HJ8k9LO
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
-  # XXL-Job 调度中心（测试环境本地）
+  # XXL-Job 调度中心（公网测试环境，8101）
   job:
-    admin-addresses: http://175.24.176.176:8100
-    app-name: pivotos-executor
+    admin-addresses: http://175.24.176.176:8101
+    app-name: pivotos-dev-executor
     port: 9999
-    group-id: 3   # XXL-Job admin 中 pivotos-executor 执行器组 ID
-    access-token: ${XXL_JOB_ACCESS_TOKEN:}
+    group-id: 3   # XXL-Job admin 中 pivotos-dev-executor 执行器组 ID
+    access-token: 123456
   # 微信小程序（测试号）
   wechat:
     miniapp:
       appid: wx0a426f6d4bce0b5c
-      # 枢磐·智域小程序（比赛作品）AppID/Secret，默认从环境变量读取
+      # 枢磐·智域小程序（比赛作品）AppID/Secret，待用户提供后填明文
       configs:
         mind:
           appid: ${PIVOTOS_MIND_MINIAPP_APPID:}
