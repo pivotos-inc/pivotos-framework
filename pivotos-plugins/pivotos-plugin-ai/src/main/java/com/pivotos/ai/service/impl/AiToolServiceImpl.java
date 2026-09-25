@@ -142,7 +142,9 @@ public class AiToolServiceImpl implements AiToolService {
         List<String> distinct = roles == null ? List.of() : roles.stream()
                 .filter(StringUtils::hasText).map(String::trim).distinct().toList();
         // 全量替换：删旧插新（口径同代码生成器子表更新语义）
-        aiToolRoleMapper.delete(Wrappers.<AiToolRole>lambdaQuery().eq(AiToolRole::getToolId, toolId));
+        // 注意：必须物理删除——uk_tool_role(tool_id, role_code) 不含 deleted，
+        // 逻辑删除后再加回同名角色会撞唯一键（S102 冻结回归实测 1500）
+        aiToolRoleMapper.physicalDeleteByToolId(toolId);
         if (!distinct.isEmpty()) {
             List<AiToolRole> entities = distinct.stream().map(roleCode -> {
                 AiToolRole role = new AiToolRole();
