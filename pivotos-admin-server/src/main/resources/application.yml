@@ -42,7 +42,7 @@ spring:
     mcp:
       server:
         name: pivotos-mcp-server
-        version: 2.11.0
+        version: 2.12.0
 
 sa-token:
   token-name: Authorization
