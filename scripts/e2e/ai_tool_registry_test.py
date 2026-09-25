@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 PivotOS S98 A2 工具注册与权限体系主 E2E（2026-08-23 第 4 轮）
 链路：MCP 端点防护 → 注册表同步 → 守卫鉴权 → 调用审计 → 白名单/停用闸 → 对话链路回归
@@ -180,7 +180,13 @@ r = requests.post(f"{BASE}/ai/chat/send",
 chat = r.json()
 assert chat.get("code") == 0, f"对话接口失败: {str(chat)[:200]}"
 answer = chat["data"]["content"]
-assert rest_total is not None and str(rest_total) in answer, f"AI 回复未命中 REST 基线 {rest_total}: {answer[:200]}"
+# S102 冻结回归加固：LLM 措辞非确定（实测「您当前没有待办任务。」不含数字 0），
+# 基线为 0 时接受同义措辞；非零基线仍严格要求数字命中
+if rest_total == 0:
+    hit = ("0" in answer) or ("零" in answer) or ("没有" in answer) or ("暂无" in answer) or ("无待办" in answer)
+else:
+    hit = str(rest_total) in answer
+assert rest_total is not None and hit, f"AI 回复未命中 REST 基线 {rest_total}: {answer[:200]}"
 log("PASS8", f"对话链路回归 OK：REST 基线={rest_total}，AI 回复片段={answer[:120]}")
 
 log("ALL-PASS", "S98 主 E2E 全链路通过：端点防护/注册同步/鉴权调用/审计/白名单/停用闸/对话回归")
