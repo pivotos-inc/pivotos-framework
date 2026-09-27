@@ -19,13 +19,14 @@ import java.util.concurrent.ConcurrentHashMap;
 @ConfigurationProperties(prefix = "pivotos.tenant")
 public class TenantProperties {
 
-    /** 内置忽略表：sys_* 平台共享表（S14 设计评审 D1 决议）+ Flyway 历史表 */
+    /** 内置忽略表：sys_* 平台共享表（S14 设计评审 D1 决议）+ Flyway 历史表 + S106 租户登记表（平台侧管理表，本身不属任何租户） */
     public static final Set<String> BUILTIN_IGNORE_TABLES = Set.of(
             "sys_dept", "sys_post", "sys_user", "sys_role", "sys_menu",
             "sys_user_role", "sys_user_post", "sys_role_menu",
             "sys_dict_type", "sys_dict_data", "sys_config",
             "sys_social_user",
             "sys_login_log", "sys_oper_log", "sys_notice", "sys_job_log",
+            "sys_tenant", "sys_tenant_package",
             "flyway_schema_history");
 
     /** 总开关（条件装配锚点），默认关闭 */

@@ -87,9 +87,11 @@ pivotos:
 
 ## 平台共享表约定（S14 设计评审 D1 决议）
 
-`sys_*` 全部 11 张表为**平台共享表**（菜单/字典/配置天然平台级），内置进 `ignore-tables`，
-多租户启用后行为不变。租户管理业务（sys_tenant / 用户-租户绑定）不属于本 Starter，
-后续以 Plugin 形式提供并实现 `TenantResolver` SPI 接入。
+`sys_*` 平台共享表（菜单/字典/配置天然平台级）内置进 `ignore-tables`，
+多租户启用后行为不变。**S106 起 `sys_tenant` / `sys_tenant_package` 同属平台共享表**
+（租户登记表本身不属任何租户；不加忽略则租户用户查询即被行级过滤改写报 Unknown column）。
+租户管理业务（S106 起由 system 插件提供）经 `LoginUser.tenantId` 填充接入，
+默认解析器第 1 优先级直接消费，无需自注册 `TenantResolver`。
 
 ## 验证
 
