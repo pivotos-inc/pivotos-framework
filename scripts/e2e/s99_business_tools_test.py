@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PivotOS S99 A2 首批业务工具 + REST/MCP 双入口主 E2E（2026-08-23 第 5 轮）
-链路：注册表同步 6 工具 → REST 直连只读三工具（与 REST 业务基线对账）
+链路：注册表同步 8 工具 → REST 直连只读三工具（与 REST 业务基线对账）
      → MCP 双暴露一致性（tools/list 集合一致 + 调用结果一致）
      → 写操作二次确认（预检拦截 + confirm=true 放行 + 副作用实证）→ 审计落库 → 未注册工具拒绝
 """
@@ -105,6 +105,9 @@ def audit_total(tool_name, status=None):
     r = requests.get(f"{BASE}/ai/tool/invoke/page", params=params, headers=HDR, timeout=15)
     return int(r.json()["data"]["total"])
 
+# S112 A2 工具化后新增 readCodeFile / writeCodeFile（经 ToolObjectContributor 扩展点登记，
+# 由 AiToolRegistrySynchronizer 自动 upsert 入 ai_tool，零 Flyway），注册表由 6 → 8。
+# S114 回归批同步断言（原 6 为 S99 时代口径，S112 起已过期）。
 EXPECT_TOOLS = {
     "queryMyPendingTaskCount": ("read", 0),
     "queryMyPendingTasks": ("read", 0),
@@ -112,7 +115,10 @@ EXPECT_TOOLS = {
     "queryMyMessages": ("read", 0),
     "urgeFlowInstance": ("write", 1),
     "sendInboxMessage": ("write", 1),
+    "readCodeFile": ("read", 0),
+    "writeCodeFile": ("write", 1),
 }
+EXPECT_TOOL_COUNT = len(EXPECT_TOOLS)
 
 # ── Step 1: 登录 ──────────────────────────────────────────────────────────
 r = requests.post(f"{BASE}/system/auth/login",
@@ -122,19 +128,19 @@ assert r.status_code == 200 and body.get("code") == 0, f"登录失败: {body}"
 HDR = {"Authorization": body["data"]["token"]}
 log("PASS1", "admin 登录成功")
 
-# ── Step 2: 注册表同步 6 工具 + 元数据正确 ────────────────────────────────
+# ── Step 2: 注册表同步 8 工具 + 元数据正确 ────────────────────────────────
 r = requests.get(f"{BASE}/ai/tool/page", params={"pageNum": 1, "pageSize": 20}, headers=HDR, timeout=15)
 page = r.json()
 assert page.get("code") == 0, f"注册表分页失败: {page}"
 tools = {t["toolName"]: t for t in page["data"]["list"]}
-assert int(page["data"]["total"]) == 6, f"注册表工具数异常: {page['data']['total']}"
+assert int(page["data"]["total"]) == EXPECT_TOOL_COUNT, f"注册表工具数异常: {page['data']['total']}"
 for name, (ttype, confirm) in EXPECT_TOOLS.items():
     assert name in tools, f"工具 {name} 未同步入注册表: {list(tools)}"
     t = tools[name]
     assert t["toolType"] == ttype, f"{name} 类型异常: {t['toolType']} != {ttype}"
     assert t["confirmRequired"] == confirm, f"{name} confirm_required 异常: {t['confirmRequired']}"
     assert t["status"] == 0, f"{name} 状态异常: {t['status']}"
-log("PASS2", "注册表同步 6 工具，类型/二次确认元数据全部正确")
+log("PASS2", f"注册表同步 {EXPECT_TOOL_COUNT} 工具，类型/二次确认元数据全部正确")
 
 # ── Step 3: REST 直连只读工具 + 业务基线对账 ─────────────────────────────
 r = requests.get(f"{BASE}/workflow/task/pending/page",
@@ -230,4 +236,4 @@ body = r.json()
 assert body.get("code") != 0, "未注册工具未被拒绝"
 log("PASS7b", f"未注册工具 REST 直连被拒：code={body.get('code')} msg={body.get('msg')}")
 
-log("ALL-PASS", "S99 主 E2E 全链路通过：注册同步 6 工具/REST 三基线对账/MCP 双暴露一致/双写操作二次确认+副作用实证/审计/未注册拒绝")
+log("ALL-PASS", "S99 主 E2E 全链路通过：注册同步 8 工具/REST 三基线对账/MCP 双暴露一致/双写操作二次确认+副作用实证/审计/未注册拒绝")
