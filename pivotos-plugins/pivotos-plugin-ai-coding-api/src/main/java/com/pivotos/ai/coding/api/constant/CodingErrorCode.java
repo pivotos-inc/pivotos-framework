@@ -59,6 +59,37 @@ public enum CodingErrorCode implements ErrorCode {
     /** 定位失败（LLM 调用或结果解析异常） */
     CODING_LOCATE_FAILED(7015, "代码定位失败，请重试或用更明确的业务描述"),
 
+    /** 修改型能力未开启（S111 A4-2） */
+    CODING_MODIFY_DISABLED(7016, "代码修改能力未开启，请配置 pivotos.ai.coding.modify"),
+
+    /** 目标文件不可读（路径不合法 / 不在登记仓库 / 读取失败） */
+    CODING_MODIFY_FILE_UNREADABLE(7017, "目标文件不可读，请检查定位结果或仓库配置"),
+
+    /** edit 指令解析失败（LLM 输出不合 schema） */
+    CODING_EDIT_PARSE_FAILED(7018, "编辑指令解析失败，请重试或用更明确的业务描述"),
+
+    /** search 段在原文中不存在——存在性闸门（spike K1 根治点） */
+    CODING_EDIT_SEARCH_MISSING(7019, "待替换片段在目标文件中不存在，已拒绝生成补丁"),
+
+    /** search 段多处命中且未指定 occurrence——歧义闸门 */
+    CODING_EDIT_SEARCH_AMBIGUOUS(7020, "待替换片段在目标文件中存在多处，无法确定唯一位置"),
+
+    /** diff 未能通过 git apply --check（含 --recount 兜底后仍失败） */
+    CODING_DIFF_CHECK_FAILED(7021, "补丁可应用性校验未通过，已拒绝落盘"),
+
+    /** 编译/typecheck 门禁未通过（改码已回滚） */
+    CODING_GATE_BUILD_FAILED(7022, "编译/类型检查门禁未通过，改动已回滚"),
+
+    /** 会话状态不允许应用（仅 status=1 待评审可应用；S111 补齐的状态守卫，spike I4 真实诉求） */
+    CODING_SESSION_STATUS_INVALID(7023, "会话状态不允许应用（仅待评审状态可应用）"),
+
+    /**
+     * edit 指令应用后与原文无差异（S111 实测 spike I4：LLM 给出 blocks=1 但 replace 与 search 同义，
+     * 属「改了个寂寞」的模型行为，不是 schema 问题）。单列一码以免与 7018「解析失败」混淆——
+     * 两者处置不同：7018 可重试同一描述，7024 必须让描述更具体或人工指定落点。
+     */
+    CODING_EDIT_NO_CHANGE(7024, "编辑指令未产生实际改动，请细化描述或指定改动位置"),
+
     ;
 
     private final int code;

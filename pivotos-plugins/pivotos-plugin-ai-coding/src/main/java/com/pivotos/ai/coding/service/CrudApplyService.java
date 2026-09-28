@@ -3,6 +3,7 @@ package com.pivotos.ai.coding.service;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import com.pivotos.ai.coding.domain.entity.CodingSession;
+import com.pivotos.ai.coding.modify.CodingPathWhitelist;
 import com.pivotos.common.core.exception.ServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,12 +39,10 @@ public class CrudApplyService {
     private static final Logger log = LoggerFactory.getLogger(CrudApplyService.class);
 
     /** 产物路径白名单 */
-    private static final Pattern PLUGIN_FILE_PATTERN = Pattern.compile(
-            "^pivotos-plugins/pivotos-plugin-[a-z0-9-]+/src/main/(java|resources)/.+");
-    private static final Pattern PC_FILE_PATTERN = Pattern.compile(
-            "^pivotos-ui/apps/admin/src/(api|views)/.+");
-    private static final Pattern APP_FILE_PATTERN = Pattern.compile(
-            "^pivotos-app/src/(api|pages-gen)/.+");
+    // S111：白名单提取为 CodingPathWhitelist 单一事实源（修改型落盘共用同一道闸门）
+    private static final Pattern PLUGIN_FILE_PATTERN = CodingPathWhitelist.PLUGIN_FILE;
+    private static final Pattern PC_FILE_PATTERN = CodingPathWhitelist.PC_FILE;
+    private static final Pattern APP_FILE_PATTERN = CodingPathWhitelist.APP_FILE;
 
     private static final Pattern FLYWAY_FILE_PATTERN = Pattern.compile("^V(.+)__.*\\.sql$");
 
