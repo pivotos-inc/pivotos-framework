@@ -91,6 +91,13 @@ pivotos:
             includes:
               - apps/admin/src/**/*.ts
               - apps/admin/src/**/*.vue
+      # S111 A4-2 修改型：会写工程文件，dev 显式开启；落盘路径走与生成型同一道白名单
+      # 注意缩进：modify 与 locate 同级（同属 pivotos.ai.coding），缩进错了会静默绑不上
+      modify:
+        enabled: true
+        gate:
+          build-enabled: true      # 落盘后跑 mvn compile / pnpm typecheck，不过即回滚
+          timeout-seconds: 600
   # 微信小程序（测试号）
   wechat:
     miniapp:

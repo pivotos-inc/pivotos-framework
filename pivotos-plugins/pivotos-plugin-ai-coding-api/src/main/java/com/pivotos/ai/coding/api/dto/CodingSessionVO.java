@@ -52,6 +52,18 @@ public class CodingSessionVO implements Serializable {
     /** 生成的文件列表（文件路径 → 文件内容） */
     private Map<String, String> generatedFiles;
 
+    /** A4-1 定位结果快照（taskType=5 修改型；见 LocateResultVO） */
+    private Map<String, Object> locate;
+
+    /** 结构化 edit 指令（taskType=5 修改型） */
+    private Map<String, Object> edit;
+
+    /** 确定性渲染的 unified diff（taskType=5 修改型；评审面展示物） */
+    private String diff;
+
+    /** 自动门禁结果（taskType=5 修改型） */
+    private Map<String, Object> gate;
+
     /** 创建人 */
     private Long createBy;
 
