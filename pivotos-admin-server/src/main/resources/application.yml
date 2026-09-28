@@ -56,7 +56,8 @@ sa-token:
 # WarmFlow 工作流引擎（S55 2.5-F1 引擎底座）
 warm-flow:
   enabled: true
-  ui: true              # 开启内置设计器 UI（/warm-flow-ui/**）
+  ui: true              # 内置设计器 UI 装配（/warm-flow-ui/**）；v2.14.0 D1 起入口由 pivotos.workflow.legacy-designer 守卫拦截，
+                        # 此处保持 true 以便仅改一处开关即可回滚到并存态（jar 依赖保留不剔除，剔除留 v2.15.0 再议）
   banner: false
   token-name: Authorization   # 复用 Sa-Token 同一 header
   logic_delete: true          # WarmFlow 自带逻辑删除（del_flag）
@@ -103,3 +104,9 @@ pivotos:
     #   enabled: true
     #   tessdata-path: /opt/homebrew/share/tessdata
     #   languages: chi_sim+eng
+  workflow:
+    # D1（v2.14.0）：旧内置设计器（warm-flow 自带 jar，/warm-flow-ui/）入口退役。
+    # false / 缺省 —— 守卫拦截旧入口（HTTP 410 + code=4100），单入口为 bpmn-js 新版设计器；
+    # true —— 放行旧入口，回滚到并存态（仅改这一处即可，无需重新打包）
+    legacy-designer:
+      enabled: ${PIVOTOS_WORKFLOW_LEGACY_DESIGNER_ENABLED:false}

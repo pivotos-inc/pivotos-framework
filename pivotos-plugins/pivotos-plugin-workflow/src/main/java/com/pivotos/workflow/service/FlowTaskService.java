@@ -44,6 +44,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class FlowTaskService {
 
+    /** 退回态状态码（warm-flow FlowStatus.REJECT：9=已退回），W1 重新提交的前置校验口径 */
+    private static final String REJECT_STATUS = "9";
+
     private final TaskService taskService;
     private final HisTaskService hisTaskService;
     private final InsService insService;
@@ -115,6 +118,42 @@ public class FlowTaskService {
         }
         if (result != null) {
             notifyService.notifyOnReject(result, cmd.getMessage());
+        }
+    }
+
+    /**
+     * 重新提交（W1 / S113）：发起人把被退回的任务重新提交，走引擎 pass 重走流程。
+     * <p>
+     * 引擎事实（S113 开工简报真库实证）：驳回后 {@code flow_task} 记录保留且
+     * {@code flow_status=9}（node_code 回到发起节点）、{@code flow_user} 归属仍为发起人；
+     * warm-flow 1.8.7 无 restart 原语（{@code RE_START} 枚举为死代码），
+     * 但对退回态任务调用 {@code taskService.pass} **原生接受**——实例 {@code 9 → 1}、
+     * 推进下一节点、实例 ID 不变、审批历史连续（驳回留痕 + 重新提交留痕同链）。
+     * 故本动作不动引擎、不重置状态，只做前置校验后复用 pass。
+     * <p>
+     * 守卫：① 任务存在；② 任务必须处于退回态（9）—— 避免「通过」语义被滥用；
+     * ③ 归属校验（同 S82 L3 口径）—— 仅该任务的办理人（即发起人）可重新提交。
+     */
+    public void resubmit(TaskActionCmd cmd) {
+        if (cmd.getTaskId() == null) {
+            throw new ServiceException("任务 ID 不能为空");
+        }
+        Task task = taskService.getById(cmd.getTaskId());
+        if (task == null) {
+            throw new ServiceException("任务不存在或已办结");
+        }
+        if (!REJECT_STATUS.equals(String.valueOf(task.getFlowStatus()))) {
+            throw new ServiceException("仅已退回的任务可重新提交");
+        }
+        requireApprover(cmd.getTaskId());
+        Instance result;
+        try {
+            result = taskService.pass(cmd.getTaskId(), cmd.getMessage(), cmd.getVariable());
+        } catch (org.dromara.warm.flow.core.exception.FlowException e) {
+            throw new ServiceException("重新提交失败：" + e.getMessage());
+        }
+        if (result != null) {
+            notifyService.notifyOnPass(result, cmd.getMessage());
         }
     }
 

@@ -66,6 +66,18 @@ public class WorkflowTaskController {
         return R.ok();
     }
 
+    /**
+     * 重新提交（W1 / S113）：发起人将「已退回」任务重新提交，实例 ID 与审批历史保持连续。
+     * 权限口径同 pass/reject（仅校登录 + 服务层归属校验），零新增权限码。
+     */
+    @Operation(summary = "重新提交（W1：退回任务重新提交，实例与历史连续）")
+    @PutMapping("/resubmit")
+    public R<Void> resubmit(@RequestBody TaskActionCmd cmd) {
+        WorkflowAuthSupport.requireUserId();
+        flowTaskService.resubmit(cmd);
+        return R.ok();
+    }
+
     @Operation(summary = "转办任务")
     @PutMapping("/transfer")
     public R<Void> transfer(@RequestBody TaskActionCmd cmd) {
