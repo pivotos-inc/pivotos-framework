@@ -24,26 +24,23 @@ import static com.pivotos.ai.coding.api.constant.CodingErrorCode.CODING_EDIT_SEA
  *   <li>删除：{@code search} 非空且 replace 为空串。</li>
  * </ol>
  *
+ * <p><b>必须是 record（S112 修复）</b>：本对象会经 {@code objectMapper.writeValueAsString}
+ * 入库 {@code edit_json} 并在 apply 时反序列化重放。曾用「普通类 + record 风格访问器
+ * （{@code path()}/{@code blocks()}）」的写法——Jackson 3 按 getter 序列化普通类，
+ * 无 getter 即序列化成 {@code {}}：入库空对象、apply 必报 7018、评审面 edit 恒空
+ * （S111 遗留断点，E2E 当时只跑 prepare 不落盘故未暴露）。record 的组件访问器
+ * 天然是 Jackson 属性，序列化输出 {@code {"path":…,"blocks":[…]}}，
+ * 与 {@link EditInstructionParser} 的 {@code blocks} 键名兼容，读写闭环。
+ *
  * @author PivotOS
- * @since 2.14.0（S111 A4-2）
+ * @since 2.14.0（S111 A4-2；S112 修复序列化断点）
  */
-public final class EditInstruction {
+public record EditInstruction(String path, List<Block> blocks) {
 
-    private final String path;
-    private final List<Block> blocks;
-
-    public EditInstruction(String path, List<Block> blocks) {
-        this.path = path;
-        this.blocks = blocks == null ? List.of() : List.copyOf(blocks);
+    public EditInstruction {
+        blocks = blocks == null ? List.of() : List.copyOf(blocks);
     }
 
-    public String path() {
-        return path;
-    }
-
-    public List<Block> blocks() {
-        return blocks;
-    }
 
     /**
      * 在原文上应用全部 edit 块，返回改后文本。
