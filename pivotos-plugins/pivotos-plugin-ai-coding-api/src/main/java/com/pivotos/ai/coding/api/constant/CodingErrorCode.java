@@ -47,6 +47,18 @@ public enum CodingErrorCode implements ErrorCode {
     /** 多表意图关系不闭合/标识符非法（S52 / 2.4-F5） */
     CODING_RELATION_INVALID(7011, "多表结构校验未通过（关系不闭合或命名非法），请调整业务描述"),
 
+    /** 定位能力未开启（S110 A4-1） */
+    CODING_LOCATE_DISABLED(7012, "代码定位能力未开启，请配置 pivotos.ai.coding.locate"),
+
+    /** 目标仓库未登记（repos 中无此 name） */
+    CODING_LOCATE_REPO_UNKNOWN(7013, "目标代码仓库未登记，请检查 locate.repos 配置"),
+
+    /** 索引为空（根路径不可读或 include 未命中任何文件） */
+    CODING_LOCATE_INDEX_EMPTY(7014, "代码索引为空，请检查仓库根路径与 include 通配"),
+
+    /** 定位失败（LLM 调用或结果解析异常） */
+    CODING_LOCATE_FAILED(7015, "代码定位失败，请重试或用更明确的业务描述"),
+
     ;
 
     private final int code;

@@ -73,6 +73,24 @@ pivotos:
     port: 9999
     group-id: 1   # XXL-Job admin 中 pivotos-executor 执行器组 ID
     access-token: qaz123
+  # A4-1 代码索引与定位（S110）：默认关闭（要扫仓库源码），dev 显式开启
+  ai:
+    coding:
+      locate:
+        enabled: true
+        top-n: 5              # LLM 粗筛候选数
+        keyword-top-k: 5      # 确定性关键词召回条数（与粗筛选并集，保召回下限）
+        max-candidates: 8     # 进入并行精定位的候选上限
+        repos:
+          - name: fw
+            root: /Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-framework
+            includes:
+              - pivotos-plugins/**/src/main/java/**/*.java
+          - name: ui
+            root: /Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-ui
+            includes:
+              - apps/admin/src/**/*.ts
+              - apps/admin/src/**/*.vue
   # 微信小程序（测试号）
   wechat:
     miniapp:
