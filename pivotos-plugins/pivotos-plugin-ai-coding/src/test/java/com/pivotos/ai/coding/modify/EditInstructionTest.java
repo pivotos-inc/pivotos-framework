@@ -118,4 +118,30 @@ class EditInstructionTest {
                 > EditInstruction.indexOfOccurrence(SOURCE, "log();", 1));
         assertEquals(-1, EditInstruction.indexOfOccurrence(SOURCE, "nope", 1));
     }
+
+    /**
+     * S112 修复回归：EditInstruction 曾是「普通类 + record 风格访问器」，Jackson 3 按
+     * getter 序列化普通类 → edit_json 入库恒为 {}，apply 必报 7018、评审面 edit 恒空
+     * （S111 遗留断点：E2E 只跑 prepare 不落盘故未暴露）。此用例锁死「入库 → 读回 →
+     * 重放」完整往返：序列化必须带出 path/blocks，且 parser 能按 blocks 键解析回来。
+     */
+    @Test
+    @DisplayName("Jackson 序列化往返：入库 JSON 带出 path/blocks 且 parser 可重放（S112 修复回归）")
+    void jacksonRoundTrip() {
+        tools.jackson.databind.ObjectMapper mapper = new tools.jackson.databind.ObjectMapper();
+        EditInstruction instruction = new EditInstruction("x/Demo.java", List.of(
+                new EditInstruction.Block("    public void b() { log(); }\n",
+                        "    public void b() { safeLog(); }\n", 0, false, "换日志")));
+
+        String json = mapper.writeValueAsString(instruction);
+        assertTrue(json.contains("\"path\"") && json.contains("\"blocks\""),
+                "序列化必须带出 path/blocks（否则入库即断点）：" + json);
+
+        EditInstruction back = EditInstructionParser.parse(json, "fallback/Demo.java", mapper);
+        assertEquals("x/Demo.java", back.path());
+        assertEquals(1, back.blocks().size());
+        assertEquals("换日志", back.blocks().get(0).reason());
+        String result = back.apply(SOURCE);
+        assertTrue(result.contains("safeLog();"), "读回指令必须能重放改动");
+    }
 }

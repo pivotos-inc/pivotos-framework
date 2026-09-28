@@ -267,12 +267,17 @@ class P0ArchitectureTest {
 
     // ========== A9：AI 工具层规则（S99 补工具层） ==========
 
-    // A9a：@Tool 方法只允许声明在 com.pivotos.ai.tool 包内——
+    // A9a：@Tool 方法只允许声明在专用 tool 包内——
     // 工具必须经 AiToolCallbackConfiguration 汇聚 + GuardedToolCallbackProvider
     // 包裹守卫（注册闸/白名单/二次确认/审计），散落他处的 @Tool 会绕过守卫装配。
+    // S112 扩展口径：plugin-ai 的 ToolObjectContributor 扩展点允许下游插件在
+    // **自己的 .tool 包**里声明 @Tool（如 ai-coding 的 com.pivotos.ai.coding.tool，
+    // 工程文件读写工具），经扩展点登记后共享同一套守卫与审计——依赖方向仍是
+    // 下游 → plugin-ai，守卫装配单点不破。故白名单 = 各插件的 .tool.. 包。
     @ArchTest
     static final ArchRule a9a_tool_methods_confined_to_ai_tool_package = noMethods()
         .that().areDeclaredInClassesThat().resideOutsideOfPackage("com.pivotos.ai.tool..")
+        .and().areDeclaredInClassesThat().resideOutsideOfPackage("com.pivotos.ai.coding.tool..")
         .should().beAnnotatedWith(org.springframework.ai.tool.annotation.Tool.class)
         .allowEmptyShould(true);
 
