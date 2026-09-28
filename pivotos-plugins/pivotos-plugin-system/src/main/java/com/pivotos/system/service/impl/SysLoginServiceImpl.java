@@ -21,9 +21,11 @@ import com.pivotos.system.service.LoginLogService;
 import com.pivotos.system.service.MenuService;
 import com.pivotos.system.service.RoleService;
 import com.pivotos.system.service.SysLoginService;
+import com.pivotos.system.service.TenantService;
 import com.pivotos.system.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -39,7 +41,12 @@ public class SysLoginServiceImpl implements SysLoginService {
     private final MenuService menuService;
     private final UserConvert userConvert;
     private final LoginLogService loginLogService;
+    private final TenantService tenantService;
     private final HttpServletRequest request;
+
+    /** S106 增量①：多租户总开关（读 pivotos.tenant.enabled，与 starter-tenant 同键；false 时零行为差异） */
+    @Value("${pivotos.tenant.enabled:false}")
+    private boolean tenantEnabled;
 
     @Override
     public LoginVO login(LoginBody body) {
@@ -88,12 +95,23 @@ public class SysLoginServiceImpl implements SysLoginService {
             loginLogService.record(body.getUsername(), false, SystemErrorCode.USER_DISABLED.getMsg());
             throw new ServiceException(SystemErrorCode.USER_DISABLED);
         }
+        // S106 增量①：租户接线——启用多租户且用户有绑定时，校验租户可用性并填充 LoginUser.tenantId；
+        // tenant.enabled=false 或用户无绑定（平台用户）时 tenantId 恒 null，与既有行为逐字节一致。
+        Long tenantId = null;
+        if (tenantEnabled && user.getTenantId() != null) {
+            try {
+                tenantId = tenantService.requireActiveTenant(user.getTenantId()).getId();
+            } catch (ServiceException e) {
+                loginLogService.record(body.getUsername(), false, e.getMessage());
+                throw e;
+            }
+        }
         stpLogic.login(user.getId());
         loginLogService.record(user.getUsername(), true, null);
         String tokenValue = stpLogic.getTokenValue();
         SaSession tokenSession = stpLogic.getTokenSessionByToken(tokenValue);
         AuthSessionHolder.saveLoginUser(tokenSession,
-                new LoginUser(user.getId(), user.getUsername(), loginType, null));
+                new LoginUser(user.getId(), user.getUsername(), loginType, tenantId));
         // S29：写入登录元信息（IP + 时间）到 Token Session，供在线用户列表使用
         tokenSession.set("LOGIN_IP", getClientIP(request));
         long now = System.currentTimeMillis();

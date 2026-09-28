@@ -34,6 +34,10 @@ public class UserSaveRequest {
     @Schema(description = "岗位ID")
     private Long postId;
 
+    /** 租户绑定（租户管理向导内部使用，用户管理页不暴露） */
+    @Schema(description = "租户绑定（sys_tenant.id，NULL=平台用户）", hidden = true)
+    private Long tenantId;
+
     /** 邮箱 */
     @Schema(description = "邮箱")
     private String email;

@@ -6,6 +6,7 @@ import com.pivotos.workflow.domain.dto.FlowDefinitionQuery;
 import com.pivotos.workflow.domain.vo.FlowDefinitionVO;
 import lombok.RequiredArgsConstructor;
 import org.dromara.warm.flow.core.entity.Definition;
+import org.dromara.warm.flow.core.exception.FlowException;
 import org.dromara.warm.flow.core.service.DefService;
 import org.dromara.warm.flow.core.utils.page.Page;
 import org.dromara.warm.flow.orm.entity.FlowDefinition;
@@ -94,7 +95,13 @@ public class FlowDefinitionService {
      * 删除流程定义（WarmFlow 逻辑删除）
      */
     public void delete(Long id) {
-        defService.removeDef(List.of(id));
+        try {
+            defService.removeDef(List.of(id));
+        } catch (FlowException e) {
+            // S108 回归发现：引擎对「已存在流程实例（含已终止）」的定义拒绝删除并抛 FlowException，
+            // 未翻译会落入全局兜底报「系统内部错误」（同 L2 口径，S93 遗留同类缺口）
+            throw new ServiceException("删除失败：" + e.getMessage());
+        }
     }
 
     private FlowDefinitionVO toVO(Definition def) {

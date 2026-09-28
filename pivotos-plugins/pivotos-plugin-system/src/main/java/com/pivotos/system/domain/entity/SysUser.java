@@ -26,6 +26,9 @@ public class SysUser extends BaseDO {
     /** 岗位ID */
     private Long postId;
 
+    /** 租户绑定（sys_tenant.id，NULL=平台用户；只作绑定/解析，不参与行级过滤） */
+    private Long tenantId;
+
     /** 邮箱 */
     private String email;
 

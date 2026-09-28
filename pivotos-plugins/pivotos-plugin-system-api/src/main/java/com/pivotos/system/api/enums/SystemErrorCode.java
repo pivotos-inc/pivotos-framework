@@ -16,6 +16,7 @@ import com.pivotos.common.core.enums.error.ErrorCode;
  *   <li>2120-2129 岗位管理</li>
  *   <li>2130-2139 在线用户</li>
  *   <li>2140-2149 定时任务</li>
+ *   <li>2150-2159 租户与套餐</li>
  * </ul>
  */
 public enum SystemErrorCode implements ErrorCode {
@@ -76,7 +77,18 @@ public enum SystemErrorCode implements ErrorCode {
     JOB_STATUS_RUNNING(2142, "任务运行中，无法编辑或删除，请先暂停"),
     JOB_SCHEDULE_INVALID(2143, "调度配置无效：Cron 表达式或固定速率不合法"),
     JOB_SYNC_FAILED(2144, "XXL-Job 调度中心同步失败，请检查调度中心是否在线"),
-    JOB_ADMIN_UNREACHABLE(2145, "调度中心不可达，请检查 XXL-Job admin 配置");
+    JOB_ADMIN_UNREACHABLE(2145, "调度中心不可达，请检查 XXL-Job admin 配置"),
+
+    // ---------- 租户与套餐 ----------
+    TENANT_NOT_FOUND(2150, "租户不存在"),
+    TENANT_CODE_EXISTS(2151, "租户编码已存在"),
+    TENANT_HAS_USERS(2152, "租户下存在用户，不允许删除"),
+    TENANT_DISABLED(2153, "租户已被停用，请联系平台管理员"),
+    TENANT_EXPIRED(2154, "租户已过期，请联系平台管理员"),
+    TENANT_ACCOUNT_LIMIT(2155, "租户账号数已达上限"),
+    TENANT_PACKAGE_NOT_FOUND(2156, "租户套餐不存在"),
+    TENANT_PACKAGE_IN_USE(2157, "套餐已被租户使用，不允许删除"),
+    TENANT_PACKAGE_DISABLED(2158, "租户套餐已停用，不可绑定");
 
     private final int code;
     private final String msg;

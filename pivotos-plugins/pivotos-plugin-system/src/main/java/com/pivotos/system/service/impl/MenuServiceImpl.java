@@ -13,16 +13,21 @@ import com.pivotos.system.domain.dto.MenuQuery;
 import com.pivotos.system.domain.dto.MenuSaveRequest;
 import com.pivotos.system.domain.entity.SysMenu;
 import com.pivotos.system.domain.entity.SysRoleMenu;
+import com.pivotos.system.domain.entity.SysUser;
 import com.pivotos.system.domain.entity.SysUserRole;
 import com.pivotos.system.domain.vo.MenuVO;
 import com.pivotos.system.domain.vo.RouterVO;
 import com.pivotos.system.domain.vo.WorkbenchItemVO;
 import com.pivotos.system.mapper.SysMenuMapper;
 import com.pivotos.system.mapper.SysRoleMenuMapper;
+import com.pivotos.system.mapper.SysUserMapper;
 import com.pivotos.system.mapper.SysUserRoleMapper;
 import com.pivotos.system.service.MenuService;
 import com.pivotos.system.service.RoleService;
+import com.pivotos.system.service.TenantService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -32,6 +37,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -48,6 +54,13 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
     private final SysRoleMenuMapper roleMenuMapper;
     private final SysUserRoleMapper userRoleMapper;
     private final RoleService roleService;
+    private final SysUserMapper userMapper;
+    /** S106 增量②：套餐菜单过滤（@Lazy 与登录/菜单装配序解耦） */
+    private final @Lazy TenantService tenantService;
+
+    /** S106 增量②：多租户总开关（读 pivotos.tenant.enabled，与 starter-tenant 同键；false 时零行为差异） */
+    @Value("${pivotos.tenant.enabled:false}")
+    private boolean tenantEnabled;
 
     @Override
     public List<MenuVO> treeMenus(MenuQuery query) {
@@ -103,7 +116,7 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
         if (roleService.isSuperAdmin(userId)) {
             return List.of(SystemConstants.SUPER_ADMIN_PERM);
         }
-        List<Long> menuIds = listMenuIdsByUserId(userId);
+        List<Long> menuIds = filterByTenantPackage(userId, listMenuIdsByUserId(userId));
         if (menuIds.isEmpty()) {
             return List.of();
         }
@@ -120,13 +133,33 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
         if (roleService.isSuperAdmin(userId)) {
             menus = list(routeWrapper(null));
         } else {
-            List<Long> menuIds = listMenuIdsByUserId(userId);
+            List<Long> menuIds = filterByTenantPackage(userId, listMenuIdsByUserId(userId));
             if (menuIds.isEmpty()) {
                 return List.of();
             }
             menus = list(routeWrapper(menuIds));
         }
         return buildRouterTree(menus);
+    }
+
+    /**
+     * S106 增量②：套餐菜单过滤——租户用户（tenant_id 非空）的角色菜单并集 ∩ 套餐菜单集合。
+     * 短路口径：tenant.enabled=false / 平台用户（无绑定）/ 未配套餐 / 套餐未设菜单范围 → 不过滤；
+     * 超管在调用方已先行短路。套餐只控「看不看得见」（14 号清单决策项），不动角色权限体系。
+     */
+    private List<Long> filterByTenantPackage(Long userId, List<Long> menuIds) {
+        if (!tenantEnabled || menuIds.isEmpty()) {
+            return menuIds;
+        }
+        SysUser user = userMapper.selectById(userId);
+        if (user == null || user.getTenantId() == null) {
+            return menuIds;
+        }
+        Set<Long> packageMenus = tenantService.listPackageMenuIds(user.getTenantId());
+        if (packageMenus == null) {
+            return menuIds;
+        }
+        return menuIds.stream().filter(packageMenus::contains).toList();
     }
 
     @Override
