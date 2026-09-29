@@ -186,7 +186,11 @@ public class FlowInstanceService {
         }
         String status = instance.getFlowStatus();
         if (!"0".equals(status) && !"1".equals(status)) {
-            throw new ServiceException("流程已办结，无需催办");
+            // 退回态（FlowStatus.REJECT=9）流程并未办结，是回到提交人待重提：
+            // 统一说「已办结」会误导发起人以为这事已经结束（S116 搭车项②）
+            throw new ServiceException("9".equals(status)
+                    ? "流程已退回，请处理后重新提交，无需催办"
+                    : "流程已办结，无需催办");
         }
         RBucket<String> bucket = redissonClient.getBucket("workflow:urge:" + instanceId);
         if (!bucket.setIfAbsent(String.valueOf(userId), Duration.ofMinutes(10))) {

@@ -98,6 +98,16 @@ pivotos:
         gate:
           build-enabled: true      # 落盘后跑 mvn compile / pnpm typecheck，不过即回滚
           timeout-seconds: 600
+    # A5-1 工具多步编排（S116）：与 locate/modify 同为「能力显式开启」口径，dev 显式开启
+    # 注意缩进：orchestrator 与 coding 同级（同属 pivotos.ai），缩进错了会静默绑不上
+    orchestrator:
+      enabled: true
+      max-steps: 10              # 单条计划步骤上限（防 LLM 产出失控长链）
+      max-intent-length: 500
+      model: qwen-plus           # 留空则取供应商默认模型
+      # 排除写工程源码的工具：改源码属 A4 评审面职责，编排面不给旁路
+      excluded-tools:
+        - writeCodeFile
   # 微信小程序（测试号）
   wechat:
     miniapp:

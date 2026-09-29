@@ -36,6 +36,17 @@ public enum AiErrorCode implements ErrorCode {
     AI_TOOL_NOT_FOUND(5060, "AI 工具不存在"),
     AI_TOOL_STATUS_INVALID(5061, "工具状态值非法（0正常 1停用）"),
 
+    // ---------- A5-1 工具多步编排（S116 启用，承接 Agent/MCP 段） ----------
+    ORCHESTRATOR_DISABLED(5062, "AI 工具编排未启用"),
+    ORCHESTRATOR_PLAN_EMPTY(5063, "未能规划出可执行的工具调用链"),
+    ORCHESTRATOR_TOOL_UNKNOWN(5064, "编排计划包含未注册或已停用的工具"),
+    ORCHESTRATOR_ARGS_INVALID(5065, "编排计划参数不合法"),
+    ORCHESTRATOR_REF_INVALID(5066, "编排计划引用了不合法的前序步骤结果"),
+    ORCHESTRATOR_WRITE_AUTO_CONFIRM(5067, "编排计划不允许代为确认写操作"),
+    ORCHESTRATOR_STEP_LIMIT(5068, "编排计划步骤数超过上限"),
+    ORCHESTRATOR_PLAN_NOT_FOUND(5069, "编排计划不存在"),
+    ORCHESTRATOR_STEP_FAILED(5070, "编排执行中断于此步骤"),
+
     // ---------- AI 审批助手（S101） ----------
     APPROVAL_TASK_NOT_FOUND(5081, "待办任务不存在或已办结"),
     ADVICE_GEN_FAILED(5082, "AI 审批建议生成失败，请稍后重试"),
