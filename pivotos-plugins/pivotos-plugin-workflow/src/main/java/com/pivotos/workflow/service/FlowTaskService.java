@@ -44,6 +44,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class FlowTaskService {
 
+    /** 退回态状态码（warm-flow FlowStatus.REJECT：9=已退回），W1 重新提交的前置校验口径 */
+    private static final String REJECT_STATUS = "9";
+
     private final TaskService taskService;
     private final HisTaskService hisTaskService;
     private final InsService insService;
@@ -119,12 +122,49 @@ public class FlowTaskService {
     }
 
     /**
+     * 重新提交（W1 / S113）：发起人把被退回的任务重新提交，走引擎 pass 重走流程。
+     * <p>
+     * 引擎事实（S113 开工简报真库实证）：驳回后 {@code flow_task} 记录保留且
+     * {@code flow_status=9}（node_code 回到发起节点）、{@code flow_user} 归属仍为发起人；
+     * warm-flow 1.8.7 无 restart 原语（{@code RE_START} 枚举为死代码），
+     * 但对退回态任务调用 {@code taskService.pass} **原生接受**——实例 {@code 9 → 1}、
+     * 推进下一节点、实例 ID 不变、审批历史连续（驳回留痕 + 重新提交留痕同链）。
+     * 故本动作不动引擎、不重置状态，只做前置校验后复用 pass。
+     * <p>
+     * 守卫：① 任务存在；② 任务必须处于退回态（9）—— 避免「通过」语义被滥用；
+     * ③ 归属校验（同 S82 L3 口径）—— 仅该任务的办理人（即发起人）可重新提交。
+     */
+    public void resubmit(TaskActionCmd cmd) {
+        if (cmd.getTaskId() == null) {
+            throw new ServiceException("任务 ID 不能为空");
+        }
+        Task task = taskService.getById(cmd.getTaskId());
+        if (task == null) {
+            throw new ServiceException("任务不存在或已办结");
+        }
+        if (!REJECT_STATUS.equals(String.valueOf(task.getFlowStatus()))) {
+            throw new ServiceException("仅已退回的任务可重新提交");
+        }
+        requireApprover(cmd.getTaskId());
+        Instance result;
+        try {
+            result = taskService.pass(cmd.getTaskId(), cmd.getMessage(), cmd.getVariable());
+        } catch (org.dromara.warm.flow.core.exception.FlowException e) {
+            throw new ServiceException("重新提交失败：" + e.getMessage());
+        }
+        if (result != null) {
+            notifyService.notifyOnPass(result, cmd.getMessage());
+        }
+    }
+
+    /**
      * 转办（将任务转交给目标用户）
      * <p>
      * 引擎契约（S93 修正）：transfer 断言 addHandlers 而非 nextHandler，
      * 且引擎不校办理人归属，由 requireApprover 在服务层兜底（同 S82 L3 口径）。
      */
     public void transfer(TaskActionCmd cmd) {
+        requireNotRejected(cmd.getTaskId());
         if (!StringUtils.hasText(cmd.getTargetUserId())) {
             throw new ServiceException("转办目标用户不能为空");
         }
@@ -152,6 +192,7 @@ public class FlowTaskService {
      * 归属校验同转办。委派与转办的语义差异由引擎 cooperateType 留痕区分。
      */
     public void depute(TaskActionCmd cmd) {
+        requireNotRejected(cmd.getTaskId());
         if (!StringUtils.hasText(cmd.getTargetUserId())) {
             throw new ServiceException("委派目标用户不能为空");
         }
@@ -192,6 +233,7 @@ public class FlowTaskService {
         if (userIds.isEmpty()) {
             throw new ServiceException("加签目标用户不能为空");
         }
+        requireNotRejected(cmd.getTaskId());
         requireApprover(cmd.getTaskId());
         FlowParams params = FlowParams.build()
                 .handler(currentHandler())
@@ -230,6 +272,7 @@ public class FlowTaskService {
         if (userIds.isEmpty()) {
             throw new ServiceException("减签目标用户不能为空");
         }
+        requireNotRejected(cmd.getTaskId());
         requireApprover(cmd.getTaskId());
         FlowParams params = FlowParams.build()
                 .handler(currentHandler())
@@ -307,6 +350,31 @@ public class FlowTaskService {
                 .anyMatch(u -> String.valueOf(userId).equals(u.getProcessedBy()));
         if (!isApprover) {
             throw new ServiceException("仅当前任务的审批人可执行此操作");
+        }
+    }
+
+    /**
+     * 退回态守卫（W1 / S114 波及面回归）：已退回（{@code flow_status=9}）的任务不接受审批协同类动作，
+     * 唯一合法动作是「重新提交」。
+     * <p>
+     * 背景：S113 在双端把退回态的加签/减签/转办/委派入口隐藏了，后端却未设闸。S114 波及面专项实证出
+     * 四条真实通路（真库 API 级，非仅前端可达）：
+     * <ul>
+     *   <li>加签 / 转办 / 委派：可让第三人取得退回任务的办理权，进而代替发起人重新提交（实测受让人
+     *       {@code pass} 后实例 {@code 9 → 1} 直接推进下一节点，历史只留「转办」无「重新提交」语义）；</li>
+     *   <li>减签：引擎人数护栏只校「办理人不足或仅剩一人」，加签凑够两人后减掉发起人即可放行，
+     *       实测发起人待办归零、退回单被他人接管——W1 修掉的「退回即死单」会以另一种形态复现。</li>
+     * </ul>
+     * 退回态语义上只有「发起人重新提交」一条合法动作，故在此统一设闸，与双端隐藏入口的口径对齐。
+     * 与 {@link #resubmit} 的守卫互为镜像：那边「必须 9 才放行」，这边「是 9 就不放行」。
+     */
+    private void requireNotRejected(Long taskId) {
+        if (taskId == null) {
+            throw new ServiceException("任务 ID 不能为空");
+        }
+        Task task = taskService.getById(taskId);
+        if (task != null && REJECT_STATUS.equals(String.valueOf(task.getFlowStatus()))) {
+            throw new ServiceException("已退回的任务仅可重新提交，不支持该操作");
         }
     }
 

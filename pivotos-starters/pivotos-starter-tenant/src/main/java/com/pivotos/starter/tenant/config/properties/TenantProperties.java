@@ -19,13 +19,25 @@ import java.util.concurrent.ConcurrentHashMap;
 @ConfigurationProperties(prefix = "pivotos.tenant")
 public class TenantProperties {
 
-    /** 内置忽略表：sys_* 平台共享表（S14 设计评审 D1 决议）+ Flyway 历史表 + S106 租户登记表（平台侧管理表，本身不属任何租户） */
+    /**
+     * 内置忽略表：sys_* 平台共享表（S14 设计评审 D1 决议）+ Flyway 历史表 + S106 租户登记表（平台侧管理表，本身不属任何租户）
+     * <p>
+     * W2（S113）补齐：S14 之后新建但未登记的 sys_ 平台表（均无 tenant_id 列，租户启用时行级过滤
+     * 改写会追加 {@code tenant_id = ?} 直接报错 → 统一 1500，属产品级 bug）。逐表核对结论见
+     * 《S113-开工简报》§4：{@code sys_job}（V1.2.38 起）/ {@code sys_coding_session}（S111）
+     * / {@code sys_gen_table} + {@code sys_gen_table_column}（代码生成）四张补入。
+     * <p>
+     * 反例（**刻意不补**）：{@code sys_file} 自 V1.1.9 建表起即为租户隔离表（注释明写
+     * 「不在租户内置忽略表清单」、含 {@code tenant_id} 行级隔离列与 {@code idx_tenant_create} 索引，
+     * FileServiceImpl 显式写 tenantId）—— 补入会静默关掉文件表的租户隔离，故不在本集合内。
+     */
     public static final Set<String> BUILTIN_IGNORE_TABLES = Set.of(
             "sys_dept", "sys_post", "sys_user", "sys_role", "sys_menu",
             "sys_user_role", "sys_user_post", "sys_role_menu",
             "sys_dict_type", "sys_dict_data", "sys_config",
             "sys_social_user",
             "sys_login_log", "sys_oper_log", "sys_notice", "sys_job_log",
+            "sys_job", "sys_coding_session", "sys_gen_table", "sys_gen_table_column",
             "sys_tenant", "sys_tenant_package",
             "flyway_schema_history");
 

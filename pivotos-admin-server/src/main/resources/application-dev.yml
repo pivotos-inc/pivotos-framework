@@ -73,6 +73,31 @@ pivotos:
     port: 9999
     group-id: 1   # XXL-Job admin 中 pivotos-executor 执行器组 ID
     access-token: qaz123
+  # A4-1 代码索引与定位（S110）：默认关闭（要扫仓库源码），dev 显式开启
+  ai:
+    coding:
+      locate:
+        enabled: true
+        top-n: 5              # LLM 粗筛候选数
+        keyword-top-k: 5      # 确定性关键词召回条数（与粗筛选并集，保召回下限）
+        max-candidates: 8     # 进入并行精定位的候选上限
+        repos:
+          - name: fw
+            root: /Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-framework
+            includes:
+              - pivotos-plugins/**/src/main/java/**/*.java
+          - name: ui
+            root: /Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-ui
+            includes:
+              - apps/admin/src/**/*.ts
+              - apps/admin/src/**/*.vue
+      # S111 A4-2 修改型：会写工程文件，dev 显式开启；落盘路径走与生成型同一道白名单
+      # 注意缩进：modify 与 locate 同级（同属 pivotos.ai.coding），缩进错了会静默绑不上
+      modify:
+        enabled: true
+        gate:
+          build-enabled: true      # 落盘后跑 mvn compile / pnpm typecheck，不过即回滚
+          timeout-seconds: 600
   # 微信小程序（测试号）
   wechat:
     miniapp:

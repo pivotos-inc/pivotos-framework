@@ -54,6 +54,8 @@ public class CodingServiceImpl implements CodingService {
     private final CrudApplyService crudApplyService;
     private final SubIntentValidator subIntentValidator;
     private final TreeIntentValidator treeIntentValidator;
+    /** A4-2 修改型落盘（S111） */
+    private final com.pivotos.ai.coding.modify.ModifyApplyService modifyApplyService;
 
     /** 骨架任务类型 */
     private static final int TASK_TYPE_CRUD = 1;
@@ -62,6 +64,17 @@ public class CodingServiceImpl implements CodingService {
     private static final int TASK_TYPE_SUB = 3;
     /** 树表任务类型（S54 / tree intent） */
     private static final int TASK_TYPE_TREE = 4;
+
+    /**
+     * 修改型任务类型（S111 / A4-2）。
+     * 注：15 号文档口径写的是 taskType=3，但 3 在本表已是主子表（S52）、4 是树表（S54），
+     * 故此处续 5，避免语义撞车。
+     */
+    private static final int TASK_TYPE_MODIFY = 5;
+
+    /** 列表视图排除的大字段列（VO 里对应字段为 null，详情页才带） */
+    private static final java.util.Set<String> LIST_VIEW_EXCLUDED_COLUMNS = java.util.Set.of(
+            "generated_files_json", "diff_text", "locate_json", "edit_json", "gate_json");
 
     /** 保留插件名（与既有模块/组件冲突） */
     private static final java.util.Set<String> RESERVED_PLUGIN_NAMES = java.util.Set.of(
@@ -79,7 +92,8 @@ public class CodingServiceImpl implements CodingService {
                              AssemblyPatcher assemblyPatcher,
                              CrudApplyService crudApplyService,
                              SubIntentValidator subIntentValidator,
-                             TreeIntentValidator treeIntentValidator) {
+                             TreeIntentValidator treeIntentValidator,
+                             com.pivotos.ai.coding.modify.ModifyApplyService modifyApplyService) {
         this.intentParseService = intentParseService;
         this.generatorFacade = generatorFacade;
         this.sessionMapper = sessionMapper;
@@ -90,6 +104,7 @@ public class CodingServiceImpl implements CodingService {
         this.crudApplyService = crudApplyService;
         this.subIntentValidator = subIntentValidator;
         this.treeIntentValidator = treeIntentValidator;
+        this.modifyApplyService = modifyApplyService;
     }
 
     @Override
@@ -158,6 +173,20 @@ public class CodingServiceImpl implements CodingService {
     @Transactional
     public void applyToProject(Long userId, Long sessionId) {
         CodingSession session = requireOwned(userId, sessionId);
+        // S111 补齐的状态守卫（spike I4 的真实诉求）：只有待评审（1）可应用，
+        // 已应用/失败的会话重复应用一律 7023，避免重复落盘与脏写。
+        if (!Integer.valueOf(1).equals(session.getStatus())) {
+            log.warn("[AI Coding] Apply rejected by status guard: session={}, status={}",
+                    sessionId, session.getStatus());
+            throw new ServiceException(CODING_SESSION_STATUS_INVALID);
+        }
+        if (Integer.valueOf(TASK_TYPE_MODIFY).equals(session.getTaskType())) {
+            // A4-2：落盘 + 编译/typecheck 门禁，门禁不过由 ModifyApplyService 回滚并抛 7022
+            modifyApplyService.apply(session);
+            session.setStatus(2); // applied
+            sessionMapper.updateById(session);
+            return;
+        }
         if (Integer.valueOf(TASK_TYPE_PLUGIN).equals(session.getTaskType())) {
             applyPluginSkeleton(session);
             return;
@@ -499,6 +528,17 @@ public class CodingServiceImpl implements CodingService {
         }
     }
 
+    /** 修改型快照 JSON → Map；空白一律 null（列表视图不含大字段，VO 字段应为 null 而非空 Map） */
+    private Map<String, Object> parseMap(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            log.warn("[AI Coding] Failed to parse modify snapshot JSON", e);
+            return null;
+        }
+    }
+
     private static String asString(Object o) {
         return o == null ? null : String.valueOf(o);
     }
@@ -508,8 +548,8 @@ public class CodingServiceImpl implements CodingService {
         LambdaQueryWrapper<CodingSession> wrapper = new LambdaQueryWrapper<CodingSession>()
                 // 行级隔离：仅本人创建的会话（create_by = 当前登录用户）
                 .eq(CodingSession::getCreateBy, userId)
-                // 列表视图不取大字段 generatedFilesJson
-                .select(CodingSession.class, f -> !"generated_files_json".equals(f.getColumn()))
+                // 列表视图不取大字段（生成产物 / diff / 定位 / edit / 门禁快照）
+                .select(CodingSession.class, f -> !LIST_VIEW_EXCLUDED_COLUMNS.contains(f.getColumn()))
                 .orderByDesc(CodingSession::getCreateTime);
         Page<CodingSession> page = sessionMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
         return new PageResult<>(
@@ -567,6 +607,10 @@ public class CodingServiceImpl implements CodingService {
                 .status(session.getStatus())
                 .taskType(session.getTaskType())
                 .extra(parseExtra(session.getExtraJson()))
+                .diff(session.getDiffText())
+                .locate(parseMap(session.getLocateJson()))
+                .edit(parseMap(session.getEditJson()))
+                .gate(parseMap(session.getGateJson()))
                 .generatedFiles(files)
                 .createBy(session.getCreateBy())
                 .createTime(session.getCreateTime())

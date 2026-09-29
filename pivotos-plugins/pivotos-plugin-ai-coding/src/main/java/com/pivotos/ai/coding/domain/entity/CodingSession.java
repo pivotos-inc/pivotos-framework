@@ -42,4 +42,16 @@ public class CodingSession extends BaseDO {
 
     /** Task-type specific params JSON (e.g. plugin skeleton params) */
     private String extraJson;
+
+    /** A4-1 定位结果快照 JSON（chosen / 候选 / 仲裁分），Flyway V1.2.47 */
+    private String locateJson;
+
+    /** 结构化 edit 指令 JSON（search/replace 块），Flyway V1.2.47 */
+    private String editJson;
+
+    /** 确定性渲染的 unified diff，Flyway V1.2.47 */
+    private String diffText;
+
+    /** 自动门禁结果 JSON（apply-check / 编译 / typecheck），Flyway V1.2.47 */
+    private String gateJson;
 }

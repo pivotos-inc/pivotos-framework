@@ -12,6 +12,10 @@ import org.dromara.warm.flow.orm.entity.FlowTask;
  * warm-flow 1.8.7 的 taskService.page 是纯实体条件分页，不做 PermissionHandler 权限过滤，
  * 任何登录用户会看到全部待办；故在服务层以 flow_user 归属（审批/转办/委派三类办理人）
  * 子查询过滤，分页与计数同口径。任务办结后引擎删除 flow_user 记录，口径自洽。
+ * <p>
+ * W1（S113）：状态口径由 {@code flow_status = '1'} 扩为 {@code IN ('1','9')}——
+ * 驳回后任务与实例同置 9（已退回），任务记录保留且 {@code flow_user} 归属仍为发起人，
+ * 故「退回任务进发起人待办」只需放宽状态条件，归属过滤不动（S113 开工简报真库实证）。
  */
 @Mapper
 public interface WorkflowPendingMapper {
@@ -22,7 +26,7 @@ public interface WorkflowPendingMapper {
 
     @Select("<script>"
             + "SELECT t.* FROM flow_task t "
-            + "WHERE t.del_flag = '0' AND t.flow_status = '1' AND " + OWNER_FILTER
+            + "WHERE t.del_flag = '0' AND t.flow_status IN ('1','9') AND " + OWNER_FILTER
             + "<if test='flowName != null and flowName != \"\"'> AND t.flow_name LIKE CONCAT('%', #{flowName}, '%') </if>"
             + "ORDER BY t.create_time DESC"
             + "</script>")
@@ -32,7 +36,7 @@ public interface WorkflowPendingMapper {
 
     @Select("<script>"
             + "SELECT COUNT(*) FROM flow_task t "
-            + "WHERE t.del_flag = '0' AND t.flow_status = '1' AND " + OWNER_FILTER
+            + "WHERE t.del_flag = '0' AND t.flow_status IN ('1','9') AND " + OWNER_FILTER
             + "<if test='flowName != null and flowName != \"\"'> AND t.flow_name LIKE CONCAT('%', #{flowName}, '%') </if>"
             + "</script>")
     long countPending(@Param("processedBy") String processedBy,
