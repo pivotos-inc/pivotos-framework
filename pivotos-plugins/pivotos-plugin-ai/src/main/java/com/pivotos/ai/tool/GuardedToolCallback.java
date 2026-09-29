@@ -71,7 +71,7 @@ public class GuardedToolCallback implements ToolCallback {
         AiToolGuardService.ToolSnapshot snapshot = guardService.snapshot(toolName);
         if (snapshot == null) {
             recorder.record(toolName, toolInput, ToolInvokeStatus.FORBIDDEN, "工具未注册", elapsed(start));
-            return "工具未注册，已被拒绝调用：" + toolName;
+            return ToolGuardSignal.UNREGISTERED + toolName;
         }
         // 闸 2：停用 + 角色白名单
         LoginUser loginUser = LoginContext.get();
@@ -83,7 +83,7 @@ public class GuardedToolCallback implements ToolCallback {
         }
         // 闸 3：写操作二次确认预检
         if (isConfirmRequired(snapshot) && !isConfirmed(toolInput)) {
-            String preview = "【预检】工具「" + toolName + "」为写操作，尚未确认执行。"
+            String preview = ToolGuardSignal.PREVIEW + "工具「" + toolName + "」为写操作，尚未确认执行。"
                     + "请向用户复述本操作影响，获得明确同意后以 confirm=true 重新调用。";
             recorder.record(toolName, toolInput, ToolInvokeStatus.NEED_CONFIRM, null, elapsed(start));
             return preview;
@@ -96,7 +96,7 @@ public class GuardedToolCallback implements ToolCallback {
         } catch (Exception e) {
             log.warn("[PivotOS] AI 工具执行失败：tool={} err={}", toolName, e.getMessage());
             recorder.record(toolName, toolInput, ToolInvokeStatus.FAIL, e.getMessage(), elapsed(start));
-            return "工具执行失败：" + e.getMessage();
+            return ToolGuardSignal.EXEC_FAILED + e.getMessage();
         }
     }
 
