@@ -1,150 +1,193 @@
 #!/usr/bin/env python3
+"""阶段8 产物落盘、撤销、路径穿越防护与状态机校验 E2E（S115 fixture 复壮版）。
+
+流程（全部在自建任务上完成，跑完自清）：
+    1. 自建任务 → 解析 → AI 分析 → AI 计划（PLANNED）
+    2. 执行步骤1 → 评审 PASS → COMPLETED（任务进入 EXECUTING）
+    3. 执行步骤2 → 评审 PASS → COMPLETED
+    4. 批量落盘步骤2产物 → 验证文件真实存在且 applied=true
+    5. 撤销单个产物 → 验证文件删除、applied=false
+    6. 重新落盘单个产物 → 验证文件恢复
+    7. 路径穿越防护：直连 DB 插入 relativePath 含 ../ 的产物，apply 应被拒绝
+    8. 对照组：另建一个 CREATED(0) 态任务，complete / rollback 均应被拒（状态白名单校验）
+
+改动背景（S114 §5.1 已定性）：
+    ① 原脚本硬编码 ``TASK_ID = "2089577593306185730"``，dev 库零命中 → data=null → TypeError。
+    ② 原「他任务」对照依赖分页里恰好存在一条 status ∉ (7,8) 的任务，dev 库当时只剩 1 行
+       id=2103521132021088258/status=0，**命中与否全看运气**，且随迁移任务表清空必然失效。
+    本版改为**自建对照组**（一个 CREATED 态任务），跑完一并自清，不再依赖存量数据。
+
+同时修正：原脚本 DB 连接指向 ``database='pivotos'``（Windows 时代遗留，本机 dev 库是 pivotos_dev），
+落盘根目录 TARGET_ROOT 现由 migration_fixture.WORKSPACE 统一推导（同 application.yml 口径）。
 """
-阶段8 产物落盘、回滚与任务完成 E2E 测试
-前置：自测任务 EXECUTING(7)，步骤1 COMPLETED(6)，步骤2 SELF_TEST_PASSED(2)
-流程：
-  1. 评审通过步骤2 → COMPLETED(6)
-  2. 批量落盘步骤2产物 → 验证文件真实存在且 applied=true
-  3. 撤销单个产物 → 验证文件删除、applied=false
-  4. 重新落盘单个产物 → 验证文件恢复
-  5. 路径穿越防护：直连 DB 插入 relativePath 含 ../ 的产物，apply 应被拒绝
-  6. complete/rollback 非法状态调用被拒
-"""
-import requests, json, time, sys, os
+import os
+import sys
 
-BASE = "http://localhost:8080"
-TASK_ID = "2089577593306185730"
-WORKSPACE = "/Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-framework/pivotos-admin-server/data/migration"
-TARGET_ROOT = os.path.join(WORKSPACE, TASK_ID, "target")
+import requests
 
-DB = dict(host='175.24.176.176', port=3306, user='root',
-          password=os.environ.get('PIVOTOS_TEST_MYSQL_PASSWORD', ''), database='pivotos', charset='utf8mb4')
+from migration_fixture import (
+    BASE, STATUS, STEP_STATUS, FixtureError, FixtureUnavailable, WORKSPACE,
+    artifact_list, bootstrap, check, cleanup, connect_db, create_task, detail,
+    ensure_ai_key, execute_step, log, login, plan, release_ai_key, review_step,
+    run_name, step_list,
+)
 
-def log(tag, msg):
-    print(f"[{tag}] {msg}", flush=True)
 
-def check(r, step, expect_fail=False):
-    if r.status_code != 200:
-        log("FAIL", f"{step} HTTP {r.status_code}: {r.text[:300]}")
+def apply_artifact(hdr, artifact_id, expect_fail=False):
+    r = requests.post(f"{BASE}/migration/artifact/apply",
+                      params={"artifactId": artifact_id}, headers=hdr, timeout=60)
+    return check(r, f"产物落盘 art={artifact_id}", expect_fail=expect_fail)
+
+
+def main():
+    hdr = login()
+    key_id, own = ensure_ai_key(hdr)
+    if key_id is None:
+        log("SKIP", "dev 环境无可用 LLM 通道且取不到静态 Key —— plan/execute 阶段不可得，按口径改判 skip")
+        return 0
+
+    task_id = None
+    ctrl_id = None
+    try:
+        target_root = os.path.join(WORKSPACE, "{task_id}", "target")
+
+        # ── Step 1: 自建主任务到 PLANNED(6) ─────────────────────
+        log("STEP1", "自建迁移任务并推进到 PLANNED(6) ...")
+        task_id, task = bootstrap(hdr, run_name("S115-apply"), upto="plan")
+        steps = step_list(hdr, task_id)
+        if len(steps) < 2:
+            log("STEP1", f"计划步骤数={len(steps)} < 2，重跑一次 plan ...")
+            plan(hdr, task_id)
+            steps = step_list(hdr, task_id)
+        if len(steps) < 2:
+            raise FixtureError(f"步骤数不足：{len(steps)}")
+        step1, step2 = steps[0], steps[1]
+        log("STEP1", f"taskId={task_id} status={STATUS.get(task['status'])} steps={len(steps)}  OK")
+
+        # ── Step 2: 执行 + 评审通过步骤1（任务进 EXECUTING）────
+        log("STEP2", f"执行并评审通过步骤1 (id={step1['id']}) ...")
+        execute_step(hdr, task_id, step1["id"])
+        review_step(hdr, step1["id"], "PASS", "S115 E2E 自动评审")
+        task = detail(hdr, task_id)
+        if task["status"] not in (7, 8):
+            raise FixtureError(f"预期任务 EXECUTING(7)/EXECUTED(8)，实际 {task['status']}")
+        log("STEP2", f"任务状态={STATUS.get(task['status'])} completedSteps={task.get('completedSteps')}  OK")
+
+        # ── Step 3: 执行 + 评审通过步骤2 ────────────────────────
+        log("STEP3", f"执行并评审通过步骤2 (id={step2['id']}) ...")
+        s2 = execute_step(hdr, task_id, step2["id"])
+        if s2["status"] != 2:
+            raise FixtureError(f"步骤2 状态 {s2['status']} 无法评审（期望自测通过 2）")
+        review_step(hdr, step2["id"], "PASS", "S115 E2E 自动评审")
+        s2 = next(s for s in step_list(hdr, task_id) if s["id"] == step2["id"])
+        if s2["status"] != 6:
+            raise FixtureError(f"步骤2 评审后应为已完成(6)，实际={s2['status']}")
+        log("STEP3", f"步骤2 状态={STEP_STATUS.get(s2['status'])}  OK")
+
+        troot = target_root.format(task_id=task_id)
+
+        # ── Step 4: 批量落盘步骤2产物 ───────────────────────────
+        log("STEP4", "批量落盘步骤2产物 ...")
+        r = requests.post(f"{BASE}/migration/artifact/apply-step",
+                          params={"stepId": step2["id"]}, headers=hdr, timeout=120)
+        count = int(check(r, "批量落盘") or 0)
+        if count <= 0:
+            raise FixtureError("落盘产物数应 > 0")
+        artifacts = artifact_list(hdr, step2["id"])
+        if len(artifacts) != count:
+            raise FixtureError(f"产物数不一致: {len(artifacts)} vs {count}")
+        for a in artifacts:
+            if not a["applied"]:
+                raise FixtureError(f"产物 {a['relativePath']} applied 应为 true")
+            fpath = os.path.join(troot, a["relativePath"])
+            if not os.path.isfile(fpath):
+                raise FixtureError(f"落盘文件不存在: {fpath}")
+            if os.path.getsize(fpath) <= 0:
+                raise FixtureError(f"落盘文件为空: {fpath}")
+        log("STEP4", f"全部 {count} 个文件真实存在且 applied=true ✓")
+
+        # ── Step 5: 撤销单个产物 ────────────────────────────────
+        first = artifacts[0]
+        fpath = os.path.join(troot, first["relativePath"])
+        log("STEP5", f"撤销落盘单个产物 {first['relativePath']} ...")
+        r = requests.post(f"{BASE}/migration/artifact/unapply",
+                          params={"artifactId": first["id"]}, headers=hdr, timeout=60)
+        check(r, "撤销落盘")
+        if os.path.exists(fpath):
+            raise FixtureError(f"撤销后文件仍存在: {fpath}")
+        r = requests.get(f"{BASE}/migration/artifact/{first['id']}", headers=hdr, timeout=10)
+        if check(r, "产物详情")["applied"] is not False:
+            raise FixtureError("撤销后 applied 应为 false")
+        log("STEP5", "撤销成功，文件已删除，applied=false ✓")
+
+        # ── Step 6: 重新落盘单个产物 ────────────────────────────
+        log("STEP6", "重新落盘单个产物 ...")
+        apply_artifact(hdr, first["id"])
+        if not os.path.isfile(fpath):
+            raise FixtureError(f"重新落盘后文件不存在: {fpath}")
+        log("STEP6", "重新落盘成功，文件恢复 ✓")
+
+        # ── Step 7: 路径穿越防护 ────────────────────────────────
+        log("STEP7", "路径穿越防护（直连 DB 注入 ../ 产物）...")
+        evil_path = "../../../../tmp/migration_evil_test.txt"
+        conn = connect_db()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO migration_artifact (task_id, step_id, artifact_type, relative_path, "
+                    "generated_content, content_hash, applied, create_time) "
+                    "VALUES (%s, %s, 'OTHER', %s, 'evil', 'x', 0, NOW())",
+                    (task_id, step2["id"], evil_path))
+                evil_id = cur.lastrowid
+            conn.commit()
+        finally:
+            conn.close()
+        apply_artifact(hdr, evil_id, expect_fail=True)
+        if os.path.exists("/tmp/migration_evil_test.txt"):
+            raise FixtureError("路径穿越文件被写出了！")
+        conn = connect_db()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM migration_artifact WHERE id = %s", (evil_id,))
+            conn.commit()
+        finally:
+            conn.close()
+        log("STEP7", "路径穿越被拦截，恶意记录已清理 ✓")
+
+        # ── Step 8: 对照组（自建 CREATED 态任务）状态白名单 ─────
+        log("STEP8", "对照组：自建 CREATED(0) 态任务，校验 complete/rollback 非法状态拦截 ...")
+        ctrl_id = create_task(hdr, run_name("S115-ctrl"),
+                              description="S115 对照组：CREATED 态，用于 complete/rollback 非法状态校验")
+        ctrl = detail(hdr, ctrl_id)
+        if ctrl["status"] != 0:
+            raise FixtureError(f"对照组任务应为 CREATED(0)，实际={ctrl['status']}")
+        for action in ("complete", "rollback"):
+            r = requests.post(f"{BASE}/migration/task/{action}",
+                              params={"taskId": ctrl_id}, headers=hdr, timeout=30)
+            check(r, f"{action} 非法状态(CREATED)", expect_fail=True)
+        log("STEP8", "状态白名单校验通过 ✓")
+
+        print()
+        print("=" * 60)
+        print("  阶段8 产物落盘/撤销/路径穿越/状态机 E2E：全部通过 ✓")
+        print(f"  主任务（自建）  : {task_id}，落盘产物 {count} 个")
+        print(f"  对照组（自建）  : {ctrl_id}（CREATED 态已拒绝 complete/rollback）")
+        print("=" * 60)
+        return 0
+    finally:
+        if ctrl_id:
+            cleanup(ctrl_id)
+        if task_id:
+            cleanup(task_id)
+        release_ai_key(hdr, key_id, own)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except FixtureUnavailable as e:
+        log("SKIP", str(e))
+        sys.exit(0)
+    except FixtureError as e:
+        log("FAIL", str(e))
         sys.exit(1)
-    body = r.json()
-    ok = body.get("success") and body.get("code") == 0
-    if expect_fail:
-        if ok:
-            log("FAIL", f"{step} 应当被拒绝但成功了: {json.dumps(body, ensure_ascii=False)[:200]}")
-            sys.exit(1)
-        log("OK", f"{step} 按预期被拒绝: {body.get('msg','')[:80]}")
-        return None
-    if not ok:
-        log("FAIL", f"{step} 业务失败: {json.dumps(body, ensure_ascii=False)[:300]}")
-        sys.exit(1)
-    return body.get("data")
-
-# ── Step 1: 登录 ─────────────────────────────────────────────
-r = requests.post(f"{BASE}/system/auth/login",
-                  json={"username": "admin", "password": "admin123"}, timeout=10)
-token = check(r, "登录")["token"]
-HDR = {"Authorization": token}
-log("STEP1", "登录成功")
-
-# ── Step 2: 确认任务状态 & 步骤2状态 ─────────────────────────
-r = requests.get(f"{BASE}/migration/task/{TASK_ID}", headers=HDR, timeout=10)
-task = check(r, "任务详情")
-log("STEP2", f"任务状态={task['status']}, completedSteps={task.get('completedSteps')}/{task.get('totalSteps')}")
-assert task["status"] == 7, f"预期 EXECUTING(7)，实际 {task['status']}"
-
-r = requests.get(f"{BASE}/migration/step/list", params={"taskId": TASK_ID}, headers=HDR, timeout=10)
-steps = check(r, "步骤列表")
-step2 = steps[1]
-log("STEP2", f"步骤2: id={step2['id']}, name={step2['name']}, status={step2['status']}")
-
-# ── Step 3: 评审通过步骤2（幂等） ────────────────────────────
-if step2["status"] == 2:
-    r = requests.post(f"{BASE}/migration/step/review",
-                      params={"stepId": step2["id"], "action": "PASS", "comment": "E2E 自动评审"},
-                      headers=HDR, timeout=30)
-    check(r, "评审步骤2")
-    log("STEP3", "步骤2 评审通过")
-elif step2["status"] == 6:
-    log("STEP3", "步骤2 已完成，跳过评审")
-else:
-    log("FAIL", f"步骤2 状态 {step2['status']} 无法评审，请先执行步骤2")
-    sys.exit(1)
-
-# ── Step 4: 批量落盘步骤2产物 ────────────────────────────────
-r = requests.post(f"{BASE}/migration/artifact/apply-step",
-                  params={"stepId": step2["id"]}, headers=HDR, timeout=60)
-count = check(r, "批量落盘")
-count = int(count)
-log("STEP4", f"批量落盘成功，产物数={count}")
-assert count and count > 0, "落盘产物数应 > 0"
-
-r = requests.get(f"{BASE}/migration/artifact/list", params={"stepId": step2["id"]}, headers=HDR, timeout=10)
-artifacts = check(r, "产物列表")
-assert len(artifacts) == count, f"产物数不一致: {len(artifacts)} vs {count}"
-
-# 验证文件真实存在且 applied=true
-for a in artifacts:
-    assert a["applied"], f"产物 {a['relativePath']} applied 应为 true"
-    fpath = os.path.join(TARGET_ROOT, a["relativePath"])
-    assert os.path.isfile(fpath), f"落盘文件不存在: {fpath}"
-    assert os.path.getsize(fpath) > 0, f"落盘文件为空: {fpath}"
-log("STEP4", f"全部 {count} 个文件真实存在且 applied=true ✓")
-
-# ── Step 5: 撤销单个产物 ─────────────────────────────────────
-first = artifacts[0]
-fpath = os.path.join(TARGET_ROOT, first["relativePath"])
-r = requests.post(f"{BASE}/migration/artifact/unapply",
-                  params={"artifactId": first["id"]}, headers=HDR, timeout=30)
-check(r, "撤销落盘")
-assert not os.path.exists(fpath), f"撤销后文件仍存在: {fpath}"
-r = requests.get(f"{BASE}/migration/artifact/{first['id']}", headers=HDR, timeout=10)
-detail = check(r, "产物详情")
-assert detail["applied"] is False, "撤销后 applied 应为 false"
-log("STEP5", f"撤销成功，文件已删除，applied=false ✓ ({first['relativePath']})")
-
-# ── Step 6: 重新落盘单个产物 ─────────────────────────────────
-r = requests.post(f"{BASE}/migration/artifact/apply",
-                  params={"artifactId": first["id"]}, headers=HDR, timeout=30)
-check(r, "重新落盘")
-assert os.path.isfile(fpath), f"重新落盘后文件不存在: {fpath}"
-log("STEP6", "重新落盘成功，文件恢复 ✓")
-
-# ── Step 7: 路径穿越防护 ─────────────────────────────────────
-import pymysql
-conn = pymysql.connect(**DB)
-cur = conn.cursor()
-evil_id = int(time.time() * 1000)
-cur.execute(
-    "INSERT INTO migration_artifact (id, task_id, step_id, artifact_type, relative_path, "
-    "generated_content, content_hash, applied, create_time) "
-    "VALUES (%s, %s, %s, 'OTHER', %s, 'evil', 'x', 0, NOW())",
-    (evil_id, TASK_ID, step2["id"], "../../../../tmp/migration_evil_test.txt"))
-conn.commit()
-
-r = requests.post(f"{BASE}/migration/artifact/apply",
-                  params={"artifactId": evil_id}, headers=HDR, timeout=30)
-check(r, "路径穿越 apply", expect_fail=True)
-assert not os.path.exists("/tmp/migration_evil_test.txt"), "路径穿越文件被写出了！"
-
-cur.execute("DELETE FROM migration_artifact WHERE id = %s", (evil_id,))
-conn.commit()
-conn.close()
-log("STEP7", "路径穿越被拦截，恶意记录已清理 ✓")
-
-# ── Step 8: complete/rollback 非法状态校验 ───────────────────
-r = requests.get(f"{BASE}/migration/task/page", params={"pageNum": 1, "pageSize": 50}, headers=HDR, timeout=10)
-page = check(r, "任务分页")
-other = next((t for t in page["list"] if t["id"] != TASK_ID and t["status"] not in (7, 8)), None)
-if other:
-    r = requests.post(f"{BASE}/migration/task/complete", params={"taskId": other["id"]}, headers=HDR, timeout=10)
-    check(r, f"complete 非法状态({other['status']})", expect_fail=True)
-    r = requests.post(f"{BASE}/migration/task/rollback", params={"taskId": other["id"]}, headers=HDR, timeout=10)
-    check(r, f"rollback 非法状态({other['status']})", expect_fail=True)
-else:
-    # 无其他任务：对 EXECUTING 任务调用 complete（非 EXECUTED 应被拒）
-    r = requests.post(f"{BASE}/migration/task/complete", params={"taskId": TASK_ID}, headers=HDR, timeout=10)
-    check(r, "complete 非法状态(EXECUTING)", expect_fail=True)
-log("STEP8", "状态白名单校验通过 ✓")
-
-log("DONE", "═══ 阶段8 E2E 全部通过 ═══")

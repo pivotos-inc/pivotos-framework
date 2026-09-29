@@ -1,153 +1,85 @@
 #!/usr/bin/env python3
+"""PivotOS 系统迁移功能全链路 E2E 自测脚本（S115 fixture 复壮版）。
+
+链路：自建任务 → 上传合成源码包 → 解析 → AI 架构分析 → AI 迁移计划 → 断言 → 自清。
+
+改动背景（S114 §5.1 已定性）：
+    原脚本硬编码 ``TASK_ID = "2089577593306185730"``（注释「自测任务，已上传 7132 文件」），
+    该行在 dev 库已零命中 → 任务详情 data=null → KeyError('data')。fixture 漂移 ≠ 代码回归。
+复壮方案（① 脚本自建任务）：fixture 由 migration_fixture.SOURCE_FILES 即时合成，
+    不依赖库内遗留行，跑完自清（DB 七表 + 工作目录）。LLM 通道不可得时改判 skip（exit=0）。
 """
-PivotOS 系统迁移功能 E2E 自测脚本
-使用「自测任务」(7132 个已索引文件，状态=已上传) 跑 解析 → AI分析 全链路
-"""
-import requests, json, time, sys
+import sys
 
-BASE = "http://localhost:8080"
-TASK_ID = "2089577593306185730"  # 自测任务，已上传 7132 文件
+from migration_fixture import (
+    STATUS, FixtureError, FixtureUnavailable, analyze, bootstrap, cleanup, detail,
+    ensure_ai_key, log, login, plan, release_ai_key, run_name, step_list,
+)
 
-# ── 工具函数 ──────────────────────────────────────────────
-def log(tag, msg):
-    print(f"[{tag}] {msg}", flush=True)
 
-def check(r, step):
-    if r.status_code != 200:
-        log("FAIL", f"{step} HTTP {r.status_code}: {r.text[:300]}")
+def main():
+    hdr = login()
+    key_id, own = ensure_ai_key(hdr)
+    if key_id is None:
+        log("SKIP", "dev 环境无可用 LLM 通道且取不到静态 Key —— analyze/plan 阶段不可得，按口径改判 skip")
+        return 0
+
+    task_id = None
+    try:
+        # ── Step 1: 自建任务并解析到 ANALYZED(4) ─────────────────
+        log("STEP1", "自建迁移任务 → 上传合成源码包 → 解析 ...")
+        task_id, task = bootstrap(hdr, run_name("S115-e2e"), upto="parse")
+        log("STEP1", f"taskId={task_id} name={task['name']} status={STATUS.get(task['status'])}  OK")
+
+        # ── Step 2: AI 架构分析 ─────────────────────────────────
+        log("STEP2", "触发 AI 架构分析 POST /migration/task/analyze ...")
+        analyze(hdr, task_id)
+        task = detail(hdr, task_id)
+        report = task.get("analysisReport") or ""
+        if len(report) < 50:
+            raise FixtureError(f"analysisReport 为空或过短（{len(report)} 字符）：'{report[:100]}'")
+        log("STEP2", f"analysisReport 长度={len(report)}  前80字符：{report[:80]}  OK")
+
+        # ── Step 3: AI 迁移计划生成 → 轮询 PLANNED(6) ───────────
+        log("STEP3", "触发 AI 迁移计划生成 POST /migration/task/plan ...")
+        task = plan(hdr, task_id)
+
+        # ── Step 4: 验证 migration_step 记录 ────────────────────
+        steps = step_list(hdr, task_id)
+        if not steps:
+            raise FixtureError("migration_step 记录数为 0，计划生成异常")
+        log("STEP4", f"migration_step 记录数={len(steps)}  OK")
+        for step in steps[:3]:
+            log("STEP4", f"  stepNo={step.get('stepNo')} type={step.get('stepType')} name={step.get('name')}")
+
+        # ── Step 5: 验证 migrationPlan 写入 ─────────────────────
+        plan_text = task.get("migrationPlan") or ""
+        if len(plan_text) < 10:
+            raise FixtureError(f"migrationPlan 为空或过短：'{plan_text[:100]}'")
+        log("STEP5", f"migrationPlan 长度={len(plan_text)}  总步骤数={task.get('totalSteps', 0)}  OK")
+
+        print()
+        print("=" * 60)
+        print("  迁移全链路 E2E 测试结果：全部通过 √")
+        print(f"  任务ID（自建） : {task_id}")
+        print(f"  最终状态       : {STATUS.get(task['status'], task['status'])}")
+        print(f"  分析报告长     : {len(report)} 字符")
+        print(f"  迁移计划长     : {len(plan_text)} 字符")
+        print(f"  迁移步骤数     : {task.get('totalSteps', 0)}")
+        print("=" * 60)
+        return 0
+    finally:
+        if task_id:
+            cleanup(task_id)
+        release_ai_key(hdr, key_id, own)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except FixtureUnavailable as e:
+        log("SKIP", str(e))
+        sys.exit(0)
+    except FixtureError as e:
+        log("FAIL", str(e))
         sys.exit(1)
-    body = r.json()
-    if not body.get("success") or body.get("code") != 0:
-        log("FAIL", f"{step} 业务失败: {json.dumps(body, ensure_ascii=False)[:300]}")
-        sys.exit(1)
-    return body["data"]
-
-# ── Step 1: 登录 ──────────────────────────────────────────
-log("STEP1", "登录获取 token ...")
-r = requests.post(f"{BASE}/system/auth/login",
-                  json={"username": "admin", "password": "admin123"},
-                  timeout=10)
-token = check(r, "登录")["token"]
-log("STEP1", f"token={token[:16]}...  OK")
-HDR = {"Authorization": token}
-
-# ── Step 2: 查询任务当前状态 ──────────────────────────────
-log("STEP2", f"查询任务 {TASK_ID} 当前状态 ...")
-r = requests.get(f"{BASE}/migration/task/{TASK_ID}", headers=HDR, timeout=10)
-task = check(r, "查询任务")
-STATUS = {0:'已创建',1:'上传中',2:'已上传',3:'解析中',4:'已分析',5:'计划中',6:'已计划',7:'执行中',8:'已执行',9:'已完成',10:'失败',11:'回滚中',12:'已回滚'}
-log("STEP2", f"name={task['name']}  status={STATUS.get(task['status'], task['status'])}  OK")
-
-# ── Step 3: 触发解析 ──────────────────────────────────────
-log("STEP3", "触发解析 POST /migration/task/parse ...")
-try:
-    r = requests.post(f"{BASE}/migration/task/parse",
-                      params={"taskId": TASK_ID},
-                      headers=HDR,
-                      timeout=600)  # 7132 个文件需要更长时间
-    data = check(r, "触发解析")
-    log("STEP3", f"解析返回: {json.dumps(data, ensure_ascii=False)[:200]}  OK")
-except Exception as e:
-    # 同步接口超时属正常（后端仍在处理），继续轮询状态
-    log("STEP3", f"接口超时（后端仍处理中）: {str(e)[:100]}, 继续轮询...")
-
-# ── Step 4: 轮询至 PARSED(4) ─────────────────────────────
-log("STEP4", "轮询任务状态，等待解析完成 ...")
-for i in range(120):  # 最多轮询 120 次，每次 10s，共 20 分钟
-    time.sleep(10)
-    r = requests.get(f"{BASE}/migration/task/{TASK_ID}", headers=HDR, timeout=10)
-    task = check(r, "轮询任务")
-    s = task["status"]
-    log("STEP4", f"  [{i+1}] status={STATUS.get(s, s)}")
-    if s == 4:
-        log("STEP4", "解析完成 (PARSED=4)  OK")
-        break
-    if s == 10:
-        log("FAIL", "任务进入失败状态")
-        sys.exit(1)
-else:
-    log("FAIL", "解析超时（90s 未完成）")
-    sys.exit(1)
-
-# ── Step 5: 触发 AI 架构分析 ─────────────────────────────
-log("STEP5", "触发 AI 架构分析 POST /migration/task/analyze ...")
-r = requests.post(f"{BASE}/migration/task/analyze",
-                  params={"taskId": TASK_ID},
-                  headers=HDR,
-                  timeout=300)
-data = check(r, "AI分析")
-log("STEP5", f"分析返回: {str(data)[:300]}  OK")
-
-# ── Step 6: 验证 analysisReport 写入 ─────────────────────
-log("STEP6", "验证 analysisReport 字段 ...")
-r = requests.get(f"{BASE}/migration/task/{TASK_ID}", headers=HDR, timeout=10)
-task = check(r, "验证任务")
-report = task.get("analysisReport") or ""
-if not report or len(report) < 50:
-    log("FAIL", f"analysisReport 为空或过短：'{report[:100]}'")
-    sys.exit(1)
-log("STEP6", f"analysisReport 长度={len(report)}  前100字符：{report[:100]}  OK")
-
-# ── Step 7: 触发 AI 迁移计划生成 ──────────────────────────
-log("STEP7", "触发 AI 计划生成 POST /migration/task/plan ...")
-try:
-    r = requests.post(f"{BASE}/migration/task/plan",
-                      params={"taskId": TASK_ID},
-                      headers=HDR,
-                      timeout=300)
-    data = check(r, "AI计划生成")
-    log("STEP7", f"计划生成返回: {str(data)[:300]}  OK")
-except Exception as e:
-    log("STEP7", f"接口超时（后端仍处理中）: {str(e)[:100]}, 继续轮询...")
-
-# ── Step 8: 轮询至 PLANNED(6) ────────────────────────────
-log("STEP8", "轮询任务状态，等待计划生成完成 ...")
-for i in range(60):  # 最多 10 分钟
-    time.sleep(10)
-    r = requests.get(f"{BASE}/migration/task/{TASK_ID}", headers=HDR, timeout=10)
-    task = check(r, "轮询任务")
-    s = task["status"]
-    log("STEP8", f"  [{i+1}] status={STATUS.get(s, s)}")
-    if s == 6:
-        log("STEP8", "计划生成完成 (PLANNED=6)  OK")
-        break
-    if s == 10:
-        log("FAIL", "任务进入失败状态")
-        sys.exit(1)
-else:
-    log("FAIL", "计划生成超时（10 分钟未完成）")
-    sys.exit(1)
-
-# ── Step 9: 验证 migration_step 记录 ──────────────────────
-log("STEP9", "验证 migration_step 记录数 ...")
-r = requests.get(f"{BASE}/migration/step/list",
-                 params={"taskId": TASK_ID},
-                 headers=HDR, timeout=10)
-steps = check(r, "查询步骤列表")
-if not steps or len(steps) == 0:
-    log("FAIL", "migration_step 记录数为 0，计划生成异常")
-    sys.exit(1)
-log("STEP9", f"migration_step 记录数={len(steps)}  OK")
-for step in steps[:5]:
-    log("STEP9", f"  stepNo={step.get('stepNo')} type={step.get('stepType')} name={step.get('name')}")
-
-# ── Step 10: 验证 migration_plan 写入 ────────────────────
-log("STEP10", "验证 migrationPlan 字段 ...")
-r = requests.get(f"{BASE}/migration/task/{TASK_ID}", headers=HDR, timeout=10)
-task = check(r, "验证计划任务")
-plan = task.get("migrationPlan") or ""
-if not plan or len(plan) < 10:
-    log("FAIL", f"migrationPlan 为空或过短：'{plan[:100]}'")
-    sys.exit(1)
-log("STEP10", f"migrationPlan 长度={len(plan)}  总步骤数={task.get('totalSteps', 0)}  OK")
-
-# ── 汇总 ──────────────────────────────────────────────────
-print()
-print("=" * 60)
-print("  E2E 测试结果：全部通过 √")
-print(f"  任务ID       : {TASK_ID}")
-print(f"  最终状态     : {STATUS.get(task['status'], task['status'])}")
-print(f"  分析报告长   : {len(report)} 字符")
-print(f"  迁移计划长   : {len(plan)} 字符")
-print(f"  迁移步骤数   : {task.get('totalSteps', 0)}")
-print("=" * 60)
