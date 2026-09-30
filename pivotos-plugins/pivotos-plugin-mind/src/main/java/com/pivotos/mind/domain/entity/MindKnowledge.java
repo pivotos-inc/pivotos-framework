@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 /**
- * 枢磐·智域知识库条目
+ * PivotOS·智域知识库条目
  */
 @Data
 @EqualsAndHashCode(callSuper = true)

@@ -3,7 +3,7 @@ package com.pivotos.system.domain.dto;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
-/** 枢磐·智域小程序登录请求体 */
+/** PivotOS·智域小程序登录请求体 */
 @Data
 public class MindLoginBody {
 

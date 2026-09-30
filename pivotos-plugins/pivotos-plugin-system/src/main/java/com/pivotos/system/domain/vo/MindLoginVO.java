@@ -3,7 +3,7 @@ package com.pivotos.system.domain.vo;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
-/** 枢磐·智域登录响应 */
+/** PivotOS·智域登录响应 */
 @Data
 @AllArgsConstructor
 public class MindLoginVO {

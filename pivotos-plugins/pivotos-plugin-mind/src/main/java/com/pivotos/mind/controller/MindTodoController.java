@@ -31,7 +31,7 @@ import java.util.List;
 /**
  * 智域待办接口
  */
-@Tag(name = "智域待办", description = "枢磐·智域智能待办")
+@Tag(name = "智域待办", description = "PivotOS·智域智能待办")
 @RestController
 @RequestMapping("/mind/todo")
 @RequiredArgsConstructor

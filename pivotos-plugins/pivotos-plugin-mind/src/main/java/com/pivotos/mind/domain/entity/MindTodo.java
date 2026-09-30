@@ -8,7 +8,7 @@ import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
- * 枢磐·智域待办事项
+ * PivotOS·智域待办事项
  */
 @Data
 @EqualsAndHashCode(callSuper = true)

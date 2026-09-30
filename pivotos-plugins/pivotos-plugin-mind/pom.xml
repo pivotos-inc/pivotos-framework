@@ -12,7 +12,7 @@
     <artifactId>pivotos-plugin-mind</artifactId>
 
     <name>pivotos-plugin-mind</name>
-    <description>枢磐·智域（PivotMind）个人端插件：知识库 + 智能待办</description>
+    <description>PivotOS·智域（PivotMind）个人端插件：知识库 + 智能待办</description>
 
     <dependencies>
         <!-- 本插件契约 -->
