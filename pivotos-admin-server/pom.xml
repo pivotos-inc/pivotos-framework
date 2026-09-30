@@ -52,6 +52,13 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-excel</artifactId>
         </dependency>
+        <!-- search Starter（S121）：只引主 Starter（含 simple 内存兜底），
+             刻意不引 easy-es / es-java 两个实现模块——不带来任何第三方搜索引擎依赖，
+             无 ES 环境零配置即可起服；需要接 ES 时按需引入对应实现模块并配 pivotos.search.type -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search</artifactId>
+        </dependency>
 
         <!-- ===== 业务 Plugin（system-api/message-api 由 plugin 传递带入） ===== -->
         <dependency>

@@ -104,6 +104,13 @@ pivotos:
     #   enabled: true
     #   tessdata-path: /opt/homebrew/share/tessdata
     #   languages: chi_sim+eng
+  search:
+    # ST-SEARCH（S121）：搜索抽象层。type=simple 为进程内内存兜底（零中间件，重启即失），
+    # 生产接入 ES 时引入 pivotos-starter-search-easy-es（ES 7.17）或 -es-java（ES 8.x/9.x）
+    # 并把 type 改为 easy-es / es-java；未命中已注册实现时自动回落 simple 并打 WARN（配错也能起服）
+    type: ${PIVOTOS_SEARCH_TYPE:simple}
+    # 多环境共用一套 ES 时用它做索引名前缀隔离，留空表示不加前缀
+    index-prefix: ${PIVOTOS_SEARCH_INDEX_PREFIX:}
   workflow:
     # D1（v2.14.0）：旧内置设计器（warm-flow 自带 jar，/warm-flow-ui/）入口退役。
     # false / 缺省 —— 守卫拦截旧入口（HTTP 410 + code=4100），单入口为 bpmn-js 新版设计器；

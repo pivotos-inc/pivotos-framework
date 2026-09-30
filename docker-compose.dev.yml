@@ -69,7 +69,33 @@ services:
     ports:
       - "8081:8080"
 
+  # ST-SEARCH（S121）：搜索 Starter 的可选中间件。
+  # 声明式登记但默认不拉起（ES 单节点常驻占用 1G+ 内存，会拖慢日常开发环境），按需启动：
+  #   docker compose -f docker-compose.dev.yml --env-file .env.dev --profile search up -d
+  # 镜像取 8.19.x 与 pivotos-starter-search-es-java（es-java 8.19.18 客户端）对齐；
+  # easy-es 实现内嵌 es-java 7.17.28（面向 ES 7.17），要实测该实现请把镜像换成 7.17.28。
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: pivotos-es
+    restart: unless-stopped
+    profiles: [ "search" ]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      TZ: Asia/Shanghai
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
 volumes:
   mysql-data:
   redis-data:
   minio-data:
+  es-data:
