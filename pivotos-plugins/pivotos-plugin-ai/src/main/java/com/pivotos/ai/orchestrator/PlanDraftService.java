@@ -97,11 +97,16 @@ public class PlanDraftService {
         sb.append("1. 参数必须与工具签名一致，未知参数名不要写。\n");
         sb.append("2. 需要把上一步结果传给下一步时，使用引用占位符 ${stepN.路径}，N 必须是已存在的前序步骤序号，");
         sb.append("路径按工具返回结构书写，例如 ${step1.list[0].instanceId}、${step1.list[0].title}。");
-        sb.append("标量工具直接使用 ${step1}。引用可以与其他文字拼接在同一个字符串参数里。\n");
+        sb.append("标量工具直接使用 ${step1}。引用可以与其他文字拼接在同一个字符串参数里。");
+        sb.append("占位符必须写在双引号内（\"${step1.list[0].instanceId}\"）；");
+        sb.append("写成裸值 ${step1.list[0].instanceId} 会让 JSON 非法、整条 plan 作废。\n");
         sb.append("3. 写操作工具的 confirm 参数必须为 false，由平台在用户确认后接管，你不得代为确认。\n");
         sb.append("4. 只读工具把 confirm 写 false 即可。\n");
         sb.append("5. 现有工具无法完成意图时：steps 传空数组，并在 unmapped 说明缺什么；不要编造工具，不要用无关工具拼凑。\n");
         sb.append("6. 最多 ").append(properties.getMaxSteps()).append(" 步；只输出 JSON，不要输出 Markdown 代码块围栏，不要输出解释性文字。\n");
+        sb.append("7. args 的每个值都必须是合法 JSON 值；引用占位符一律写成带双引号的字符串。");
+        sb.append("正例：\"instanceId\": \"${step1.list[0].instanceId}\"；");
+        sb.append("反例（整条 plan 作废）：\"instanceId\": ${step1.list[0].instanceId}。\n");
         return sb.toString();
     }
 
@@ -153,6 +158,13 @@ public class PlanDraftService {
             }
             text = text.trim();
         }
+        String normalized = normalizeUnquotedPlaceholders(text);
+        if (!normalized.equals(text)) {
+            // 不打这一行，下一次「解析失败」又只能看到 5063 这句口号（S119 K1）
+            log.warn("[PivotOS] 编排计划原文含未加引号的引用占位符，已按 O-1 归一（长度 {} → {}）原文={}",
+                    text.length(), normalized.length(), text);
+        }
+        text = normalized;
         try {
             return JSON.parseObject(text);
         } catch (Exception ignored) {
@@ -193,5 +205,56 @@ public class PlanDraftService {
             }
         }
         return null;
+    }
+
+    /**
+     * 把「裸引用占位符」补成合法 JSON 字符串（S120 前置修复 O-1）。
+     *
+     * <p>实证背景（S119 K1）：模型会把跨步引用写成不带引号的裸值
+     * {@code "instanceId": ${step1.list[0].instanceId}}，整段不是合法 JSON，
+     * fastjson2 直接解析失败 → {@code 5063 规划器未产出可解析的调用链}；
+     * 「催办类」意图实测 24 次尝试 23 次失败。模型侧无法 100% 约束，
+     * 故在解析前做一次<b>确定性归一</b>：凡不在字符串字面量内的 {@code ${...}} 一律补双引号。
+     *
+     * <p>为什么不能全局 replace：{@code "我当前有 ${step1} 项待办"} 这类拼接里的引用
+     * 本来就合法（位于字符串内），再补引号会把它破坏。因此按「是否在字符串字面量内」判定，
+     * 而不是按文本出现位置判定。
+     */
+    static String normalizeUnquotedPlaceholders(String text) {
+        if (text == null || text.indexOf('$') < 0) {
+            return text;
+        }
+        StringBuilder out = new StringBuilder(text.length() + 16);
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (inString) {
+                out.append(c);
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            if (c == '"') {
+                inString = true;
+                out.append(c);
+                continue;
+            }
+            if (c == '$' && i + 1 < text.length() && text.charAt(i + 1) == '{') {
+                int end = text.indexOf('}', i + 2);
+                if (end > 0) {
+                    out.append('"').append(text, i, end + 1).append('"');
+                    i = end;
+                    continue;
+                }
+            }
+            out.append(c);
+        }
+        return out.toString();
     }
 }
