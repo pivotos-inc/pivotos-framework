@@ -64,6 +64,8 @@
         <!-- ==================== 搜索（Easy-ES 锁定 ES 7.17.28） ==================== -->
         <easy-es.version>3.0.2</easy-es.version>
         <elasticsearch.version>7.17.28</elasticsearch.version>
+        <!-- es-java 实现所用的官方客户端版本（面向 ES 8.x/9.x；与服务端 9.5.3 wire 兼容） -->
+        <elasticsearch-java.version>8.19.18</elasticsearch-java.version>
 
         <!-- ==================== AI（Spring AI 2.0：SB4.1/SF7/Jackson3 原生适配；
              SAA 1.1.2.0 仅支持 SB3.5，待其发布 SB4 版后再评估换装编排层） ==================== -->
@@ -301,10 +303,21 @@
                 <artifactId>easy-es-core</artifactId>
                 <version>${easy-es.version}</version>
             </dependency>
-            <!-- 注：co.elastic.clients:elasticsearch-java 刻意不在本 BOM 仲裁。
-                 Easy-ES 3.0.2 把同一 GA 锁在 7.17.28（面向 ES 7.17），而 es-java 实现需要 8.19.x
-                 （面向 ES 8.x/9.x）；若在此统一仲裁会覆盖 easy-es 内部的 7.17.28 导致其运行期不兼容。
-                 两个实现模块各自隔离，且绝不同时被同一应用引入。 -->
+            <!-- ⚠️ co.elastic.clients:elasticsearch-java 必须在本 BOM 显式仲裁为 es-java 实现所需的版本。
+                 背景（2026-09-30 真机实测暴露）：不在 BOM 仲裁时，spring-boot-dependencies（Boot 4.1）
+                 会把该坐标仲裁到 9.4.2——由于「模块内显式声明」只在模块自身构建时优先，一旦本模块作为
+                 传递依赖被 admin-server 引入，就会被下游的 dependencyManagement 覆盖成 9.4.2，
+                 结果是「编译/单测用 8.19.18、运行用 9.4.2」，而 9.4.2 的底层已换成 rest5-client，
+                 与 EsJavaClientFactory 使用的 org.elasticsearch.client.RestClient 不是同一套。
+                 故此处钉死 8.19.18（已实测可连 ES 9.5.3 服务端：服务端 minimum_wire_compatibility_version=8.19.0）。
+                 easy-es 模块不受影响：它在自身 pom 里把 elasticsearch-java 显式声明为直接依赖 7.17.28，
+                 「直接依赖显式版本」优先于 BOM 仲裁（已用 dependency:tree 复核）。
+                 两个实现模块绝不可同时被同一应用引入。 -->
+            <dependency>
+                <groupId>co.elastic.clients</groupId>
+                <artifactId>elasticsearch-java</artifactId>
+                <version>${elasticsearch-java.version}</version>
+            </dependency>
             <dependency>
                 <groupId>org.elasticsearch</groupId>
                 <artifactId>elasticsearch</artifactId>

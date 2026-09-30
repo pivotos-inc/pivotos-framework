@@ -132,6 +132,17 @@ pivotos:
         amount-variable-key: ""
         max-amount: 0
         message: "AI 预审自动通过（依据制度检索结论，审批人已授权自动预审）"
+  # 检索（S121/S122）：dev 环境真连 ES——175.24.176.176:9200。
+  # 2026-09-30 实测：服务端 ES 9.5.3 单节点、HTTP 明文 + Basic 认证（elastic/Elastic_RGRSPM）；
+  # 客户端 elasticsearch-java 8.19.18 与服务端 wire 兼容（服务端 minimum_wire_compatibility_version=8.19.0），
+  # dev 独享该集群故索引名不加前缀。
+  # 一键回退：PIVOTOS_SEARCH_TYPE=simple（回内存兜底）或 PIVOTOS_SEARCH_OPER_LOG_ENABLED=false（回数据库查询）。
+  search:
+    type: ${PIVOTOS_SEARCH_TYPE:es-java}
+    es-java:
+      uris: ${PIVOTOS_ES_JAVA_URIS:http://175.24.176.176:9200}
+      username: ${PIVOTOS_ES_JAVA_USERNAME:elastic}
+      password: ${PIVOTOS_ES_JAVA_PASSWORD:Elastic_RGRSPM}
   # 微信小程序（测试号）
   wechat:
     miniapp:
