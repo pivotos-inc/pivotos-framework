@@ -1,0 +1,394 @@
+#!/usr/bin/env python3
+"""
+PivotOS AI 工具命令行入口（S118 AI-2 @Tool 四入口·CLI）
+
+四入口：REST（POST /ai/tool/call） / MCP（GET /sse + tools-call） / SSE（POST /ai/tool/call/stream） / **CLI（本脚本）**
+
+设计约束：
+  1. **零第三方依赖**——只用 python3 标准库（urllib）。CI 镜像可能没装 requests，
+     而本机 E2E 用 requests；一个依赖 requests 的 CLI 会在干净环境直接不可用（VP2 一票否决点）。
+  2. **不做自动重试**（除第 3 条）——写工具非幂等（S117 实测：连发两次站内信消息数 +2），
+     超时/失败一律如实报错，由人二次确认后再发。
+  3. **唯一例外**：响应明确是「未登录 / token 失效」（HTTP 401 或 code=1002）时，
+     若手上有凭据则刷新 token 重试一次——此时工具根本没进到执行阶段，不可能重复副作用。
+  4. **不碰 Set-Cookie**：三端统一 Authorization 裸值头（与 sa-token is-read-cookie=false 同口径）。
+
+用法：
+  ./pivot-ai-tool login [--username U] [--password P]
+  ./pivot-ai-tool list [--page 1] [--size 20] [--json]
+  ./pivot-ai-tool call --tool queryMyPendingTaskCount [--args '{"confirm":true}'] [--json]
+  ./pivot-ai-tool call --tool sendInboxMessage --arg userId=1 --arg title=hi --confirm
+  ./pivot-ai-tool call --tool queryMyPendingTaskCount --stream      # 走 SSE 入口
+
+环境变量：PIVOTOS_BASE_URL / PIVOTOS_TOKEN / PIVOTOS_USERNAME / PIVOTOS_PASSWORD
+
+退出码：0 成功 | 1 业务失败（code != 0） | 2 参数错误 | 3 网络/HTTP 错误 | 4 缺凭据
+"""
+import argparse
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+DEFAULT_BASE_URL = "http://localhost:8080"
+DEFAULT_TOKEN_FILE = os.path.expanduser("~/.cache/pivotos/tool-cli-token")
+DEFAULT_TIMEOUT = 60
+EX_OK, EX_BIZ, EX_USAGE, EX_NET, EX_CRED = 0, 1, 2, 3, 4
+
+
+def log(tag, msg):
+    print(f"[{tag}] {msg}", flush=True)
+
+
+class HttpError(Exception):
+    """网络 / HTTP 层失败"""
+
+
+class BizError(Exception):
+    """网关返回了业务失败码"""
+
+    def __init__(self, code, msg):
+        super().__init__(f"code={code} msg={msg}")
+        self.code = code
+        self.msg = msg
+
+
+def request(method, url, headers=None, payload=None, timeout=DEFAULT_TIMEOUT, stream=False):
+    """标准库 HTTP 请求；返回值取决于 stream：False → dict，True → (status, resp 对象)"""
+    data = None
+    hdr = {"Accept": "application/json"}
+    if payload is not None:
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        hdr["Content-Type"] = "application/json;charset=utf-8"
+    if headers:
+        hdr.update(headers)
+    req = urllib.request.Request(url, data=data, headers=hdr, method=method)
+    try:
+        resp = urllib.request.urlopen(req, timeout=timeout)
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")[:500]
+        raise HttpError(f"HTTP {e.code} {e.reason} body={body}")
+    except urllib.error.URLError as e:
+        raise HttpError(f"网络不可达：{e.reason}（url={url}）")
+    if stream:
+        return resp.status, resp
+    raw = resp.read().decode("utf-8", errors="replace")
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise HttpError(f"响应不是 JSON：{raw[:200]}（{e}）")
+
+
+class Client:
+    def __init__(self, base_url, token_file, timeout, verbose=True):
+        self.base_url = base_url.rstrip("/")
+        self.token_file = token_file
+        self.timeout = timeout
+        self.verbose = verbose
+        self._token = os.environ.get("PIVOTOS_TOKEN")
+
+    # ---------- token ----------
+    def token(self, username=None, password=None, force_login=False):
+        if self._token and not force_login:
+            return self._token
+        if not force_login:
+            cached = self._read_cache()
+            if cached:
+                self._token = cached
+                return cached
+        username = username or os.environ.get("PIVOTOS_USERNAME")
+        password = password or os.environ.get("PIVOTOS_PASSWORD")
+        if not username or not password:
+            raise SystemExit(f"[{EX_CRED}] 未提供 token 且无凭据：用 login 子命令，或设 PIVOTOS_USERNAME/PIVOTOS_PASSWORD")
+        body = request("POST", f"{self.base_url}/system/auth/login",
+                       payload={"username": username, "password": password},
+                       timeout=self.timeout)
+        assert_ok(body, "登录")
+        self._token = body["data"]["token"]
+        self._write_cache(self._token)
+        if self.verbose:
+            log("LOGIN", f"已获取 token 并缓存到 {self.token_file}")
+        return self._token
+
+    def _read_cache(self):
+        try:
+            with open(self.token_file, "r", encoding="utf-8") as f:
+                value = f.read().strip()
+                return value or None
+        except FileNotFoundError:
+            return None
+
+    def _write_cache(self, token):
+        os.makedirs(os.path.dirname(self.token_file), exist_ok=True)
+        with open(self.token_file, "w", encoding="utf-8") as f:
+            f.write(token)
+        try:
+            os.chmod(self.token_file, 0o600)
+        except OSError:
+            pass
+
+    def _drop_cache(self):
+        try:
+            os.remove(self.token_file)
+        except FileNotFoundError:
+            pass
+
+    # ---------- 统一带登录态的调用 ----------
+    def call_api(self, method, path, params=None, payload=None, username=None, password=None):
+        """返回 data；遇明确「未登录」时刷新 token 重试一次（见模块 docstring 第 3 条）"""
+        refreshed = False
+        while True:
+            token = self.token(username, password, force_login=refreshed)
+            url = f"{self.base_url}{path}"
+            if params:
+                url = f"{url}?{urllib.parse.urlencode(params)}"
+            headers = {"Authorization": token}
+            try:
+                if payload is not None:
+                    body = request(method, url, headers=headers, payload=payload, timeout=self.timeout)
+                else:
+                    body = request(method, url, headers=headers, timeout=self.timeout)
+                assert_ok(body, path)
+                return body.get("data")
+            except BizError as e:
+                if e.code in (1002,) and not refreshed:
+                    refreshed = True
+                    self._drop_cache()
+                    self._token = None
+                    if self.verbose:
+                        log("AUTH", "token 已失效，刷新后重试一次")
+                    continue
+                raise
+            except HttpError as e:
+                if "HTTP 401" in str(e) and not refreshed:
+                    refreshed = True
+                    self._drop_cache()
+                    self._token = None
+                    if self.verbose:
+                        log("AUTH", "HTTP 401，刷新 token 后重试一次")
+                    continue
+                raise
+
+
+def json_out(args):
+    """--json 放子命令前或后都好使（子命令级开关优先级更高）"""
+    return bool(getattr(args, "sub_json", False) or getattr(args, "json", False))
+
+
+def username_of(args):
+    return getattr(args, "sub_username", None) or getattr(args, "username", None)
+
+
+def password_of(args):
+    return getattr(args, "sub_password", None) or getattr(args, "password", None)
+
+
+def assert_ok(body, label):
+    if body is None:
+        raise BizError(-1, f"{label}：空响应")
+    code = body.get("code")
+    if code != 0:
+        raise BizError(code, body.get("msg") or body.get("message") or "unknown")
+
+
+# ---------- SSE（流模式）----------
+def stream_call(base_url, path, token, payload, timeout=DEFAULT_TIMEOUT):
+    """消费 SSE 入口：逐行解析 event:/data: 帧，产出 (event, data) 序列"""
+    url = f"{base_url}{path}"
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST", headers={
+        "Authorization": token,
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json;charset=utf-8",
+        "Cache-Control": "no-cache",
+    })
+    event, buf = None, []
+    try:
+        resp = urllib.request.urlopen(req, timeout=timeout)
+    except urllib.error.HTTPError as e:
+        raise HttpError(f"HTTP {e.code} {e.reason}")
+    except urllib.error.URLError as e:
+        raise HttpError(f"网络不可达：{e.reason}（url={url}）")
+    with resp:
+        started = time.time()
+        for raw in resp:
+            line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+            if line == "":
+                if event is not None or buf:
+                    yield event, "\n".join(buf)
+                event, buf = None, []
+                continue
+            if line.startswith("event:"):
+                event = line[6:].strip()
+            elif line.startswith("data:"):
+                buf.append(line[5:].strip())
+            # 其余（:comment / retry:）忽略
+            if time.time() - started > timeout:
+                break
+        if event is not None or buf:
+            yield event, "\n".join(buf)
+
+
+# ---------- 子命令 ----------
+def cmd_login(args, client):
+    # login 子命令自己也接受 --username/--password（放在子命令后面更好用）；
+    # 未给出时回落到全局同名参数（已取环境变量兜底）
+    username = username_of(args)
+    password = password_of(args)
+    if not username or not password:
+        raise SystemExit(f"[{EX_USAGE}] login 需要 --username / --password（或设 PIVOTOS_USERNAME / PIVOTOS_PASSWORD）")
+    body = request("POST", f"{client.base_url}/system/auth/login",
+                   payload={"username": username, "password": password},
+                   timeout=client.timeout)
+    assert_ok(body, "登录")
+    token = body["data"]["token"]
+    client._write_cache(token)
+    data = {"token": token}
+    if json_out(args):
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        log("LOGIN", f"token={token[:16]}…（已缓存 {client.token_file}）")
+    return EX_OK
+
+
+def cmd_list(args, client):
+    data = client.call_api("GET", "/ai/tool/page",
+                           params={"pageNum": args.page, "pageSize": args.size},
+                           username=username_of(args), password=password_of(args))
+    rows = (data or {}).get("list", [])
+    if json_out(args):
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        return EX_OK
+    total = (data or {}).get("total", len(rows))
+    log("LIST", f"共 {total} 个工具，本页 {len(rows)} 个")
+    for tool in rows:
+        status = "正常" if str(tool.get("status")) == "0" else "停用"
+        flags = []
+        if str(tool.get("toolType")) == "write":
+            flags.append("写")
+        if str(tool.get("confirmRequired")) == "1":
+            flags.append("需确认")
+        print(f"  {tool.get('toolName'):<32} type={tool.get('toolType'):<5} {status}"
+              f"{('  [' + '/'.join(flags) + ']') if flags else ''}")
+        if tool.get("description"):
+            print(f"      {str(tool.get('description'))[:100]}")
+    return EX_OK
+
+
+def build_args(args):
+    if args.args:
+        try:
+            return json.loads(args.args)
+        except json.JSONDecodeError as e:
+            raise SystemExit(f"[{EX_USAGE}] --args 不是合法 JSON：{e}")
+    parsed = {}
+    for item in args.arg or []:
+        key, sep, value = item.partition("=")
+        if not sep:
+            raise SystemExit(f"[{EX_USAGE}] --arg 需 k=v 形式：{item}")
+        parsed[key] = _coerce(value)
+    return parsed
+
+
+def _coerce(value):
+    lowered = value.lower()
+    if lowered in ("true", "false"):
+        return lowered == "true"
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+
+def cmd_call(args, client):
+    payload = {"toolName": args.tool, "args": build_args(args)}
+    if args.confirm:
+        payload["args"]["confirm"] = True
+    if args.stream:
+        return cmd_call_stream(args, client, payload)
+    data = client.call_api("POST", "/ai/tool/call", payload=payload,
+                           username=username_of(args), password=password_of(args))
+    if json_out(args):
+        print(json.dumps({"toolName": args.tool, "result": data}, ensure_ascii=False, indent=2))
+    else:
+        log("CALL", f"{args.tool} → {data}")
+    return EX_OK
+
+
+def cmd_call_stream(args, client, payload):
+    token = client.token(username_of(args), password_of(args))
+    frames = []
+    for index, (event, data) in enumerate(stream_call(client.base_url, "/ai/tool/call/stream",
+                                                      token, payload, client.timeout)):
+        frames.append({"event": event, "data": data})
+        print(f"  {index + 1:>2}. event={event} data={data[:200]}")
+    events = [f["event"] for f in frames]
+    if not events or events[-1] != "done":
+        log("WARN", f"未收到 done 收尾帧（events={events}）")
+        return EX_BIZ
+    if json_out(args):
+        print(json.dumps(frames, ensure_ascii=False, indent=2))
+    if "error" in events:
+        log("CALL", f"{args.tool} → SSE 返回 error 帧（见上）")
+        return EX_BIZ
+    log("CALL", f"{args.tool} → SSE 完成，帧序 {' → '.join(events)}")
+    return EX_OK
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(prog="pivot-ai-tool", description="PivotOS AI 工具命令行入口（CLI）")
+    parser.add_argument("--base-url", default=os.environ.get("PIVOTOS_BASE_URL", DEFAULT_BASE_URL))
+    parser.add_argument("--token", default=os.environ.get("PIVOTOS_TOKEN"))
+    parser.add_argument("--token-file", default=DEFAULT_TOKEN_FILE)
+    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
+    parser.add_argument("--json", action="store_true", help="机器可读输出")
+    parser.add_argument("--username", default=os.environ.get("PIVOTOS_USERNAME"))
+    parser.add_argument("--password", default=os.environ.get("PIVOTOS_PASSWORD"))
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    # 子命令级通用开关（写在子命令之后更顺手）：default=SUPPRESS → 未给出时不覆盖全局同名参数
+    sub_common = argparse.ArgumentParser(add_help=False)
+    sub_common.add_argument("--json", dest="sub_json", action="store_true", default=argparse.SUPPRESS,
+                            help="机器可读输出（与顶层 --json 等价）")
+    sub_common.add_argument("--username", dest="sub_username", default=argparse.SUPPRESS)
+    sub_common.add_argument("--password", dest="sub_password", default=argparse.SUPPRESS)
+
+    p_login = sub.add_parser("login", parents=[sub_common], help="登录并缓存 token")
+    p_login.set_defaults(func=cmd_login)
+
+    p_list = sub.add_parser("list", parents=[sub_common], help="列出 AI 工具（/ai/tool/page）")
+    p_list.add_argument("--page", type=int, default=1)
+    p_list.add_argument("--size", type=int, default=20)
+    p_list.set_defaults(func=cmd_list)
+
+    p_call = sub.add_parser("call", parents=[sub_common], help="调用工具（默认 REST，可 --stream 走 SSE）")
+    p_call.add_argument("--tool", required=True)
+    p_call.add_argument("--args", help="整段 JSON 入参")
+    p_call.add_argument("--arg", action="append", help="k=v 形式入参，可重复")
+    p_call.add_argument("--confirm", action="store_true", help="写工具的二次确认标记")
+    p_call.add_argument("--stream", action="store_true", help="走 SSE 入口 /ai/tool/call/stream")
+    p_call.set_defaults(func=cmd_call)
+    return parser
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    client = Client(args.base_url, args.token_file, args.timeout)
+    if args.token:
+        client._token = args.token
+    try:
+        return args.func(args, client)
+    except BizError as e:
+        log("FAIL", f"业务失败 {e}")
+        return EX_BIZ
+    except HttpError as e:
+        log("FAIL", f"网络/HTTP 失败：{e}")
+        return EX_NET
+
+
+if __name__ == "__main__":
+    sys.exit(main())

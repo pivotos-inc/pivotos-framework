@@ -1,8 +1,10 @@
 package com.pivotos.migration.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.common.core.result.R;
+import com.pivotos.migration.api.enums.MigrationErrorCode;
 import com.pivotos.migration.domain.entity.MigrationTask;
 import com.pivotos.migration.domain.enums.MigrationFileType;
 import com.pivotos.migration.service.MigrationArtifactService;
@@ -46,10 +48,22 @@ public class MigrationTaskController {
         return R.ok(task.getId());
     }
 
-    @Operation(summary = "获取迁移任务详情")
+    /**
+     * 获取迁移任务详情。
+     *
+     * <p>内容为空与记录不存在必须可区分（搭档修复：原实现恒 {@code R.ok(null)}，
+     * 调用方只能拿到 {@code code=0 成功}，无法区分「ID 不存在」与「存在但字段为空」，
+     * E2E/排障表现为 downstream KeyError）。同域写端点早已抛 {@code TASK_NOT_FOUND 8000}，
+     * 此处对齐同一码，不新增错误码、不加 Flyway、不改前端。
+     */
+    @Operation(summary = "获取迁移任务详情（记录不存在返回 8000，字段为空仍返回 code=0）")
     @GetMapping("/{id}")
     public R<MigrationTask> detail(@PathVariable Long id) {
-        return R.ok(migrationTaskService.getById(id));
+        MigrationTask task = migrationTaskService.getById(id);
+        if (task == null) {
+            throw new ServiceException(MigrationErrorCode.TASK_NOT_FOUND);
+        }
+        return R.ok(task);
     }
 
     @Operation(summary = "迁移任务分页列表")

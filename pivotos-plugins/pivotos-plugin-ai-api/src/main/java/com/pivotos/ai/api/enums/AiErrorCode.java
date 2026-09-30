@@ -54,6 +54,11 @@ public enum AiErrorCode implements ErrorCode {
     ORCHESTRATOR_CIRCUIT_BROKEN(5071, "连续步骤失败已达熔断阈值，编排已中止（后续步骤未执行）"),
     ORCHESTRATOR_RETRY_EXHAUSTED(5072, "该步骤重试后仍失败"),
 
+    // ---------- S118 AI-2 四入口（SSE 入口启用：5073 起） ----------
+    // SSE 入口内的异常必须落成 error 帧而非抛出（否则会被全局兜底改写成 HTTP 5xx，
+    // 客户端拿不到结构化原因），非业务异常统一收敛到本码。
+    AI_TOOL_STREAM_FAILED(5073, "AI 工具流式调用失败"),
+
     // ---------- AI 审批助手（S101） ----------
     APPROVAL_TASK_NOT_FOUND(5081, "待办任务不存在或已办结"),
     ADVICE_GEN_FAILED(5082, "AI 审批建议生成失败，请稍后重试"),

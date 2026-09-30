@@ -321,6 +321,78 @@ class P0ArchitectureTest {
                 .isEmpty();
     }
 
+    // ========== A10：SQL 红线「禁 last()」（L6 CI 扫描，S118 清偿） ==========
+    // 背景：《记忆 §5 SQL 十条》明写「禁 last()」，但代码里一直有 8 处历史写法无人兜底，
+    // CI 也没有任何扫描——红线只写在文档里等于没有。
+    // 口径（比「一刀切失败」诚实）：存量 8 处登记在 ALLOWED_LAST_USAGES 并注明正当性，
+    // 规则卡两件事：① 任何**新增**文件出现 last( 立即失败；② 已登记文件的出现次数必须
+    // 与登记值一致（次数不符 = 有人新增或有人忘了同步，同样失败）——
+    // 白名单由此不会烂尾：清理掉一处就必须同步删登记，否则规则红。
+    private static final java.util.Map<String, Integer> ALLOWED_LAST_USAGES = java.util.Map.of(
+        "pivotos-plugin-ai-kb/KbEvalServiceImpl", 1,          // 评测记录列表 LIMIT（数值常量）
+        "pivotos-plugin-ai/AiApprovalAdviceServiceImpl", 1,   // 取最近一条建议 LIMIT 1
+        "pivotos-plugin-system/UserLocalFacade", 1,           // 用户面下拉 LIMIT（数值常量）
+        "pivotos-plugin-system/MiniAuthServiceImpl", 1,       // openid 精确取一条 LIMIT 1
+        "pivotos-plugin-system/SocialUserServiceImpl", 1,     // 第三方账号精确取一条 LIMIT 1
+        "pivotos-plugin-system/NoticeServiceImpl", 1,         // 公告置顶列表 LIMIT（Math.clamp 边界值）
+        "pivotos-plugin-mind/MindTodoServiceImpl", 1,         // 个人待办 LIMIT（Math.min 边界值）
+        "pivotos-plugin-mind/MindKnowledgeServiceImpl", 1);   // 个人知识 LIMIT（Math.min 边界值）
+
+    @Test
+    void a10_sql_last_fragment_forbidden_unless_registered() throws Exception {
+        Path[] roots = {Path.of("..", "pivotos-plugins"), Path.of("..", "pivotos-starters")};
+        var lastPattern = java.util.regex.Pattern.compile("\\.last\\s*\\(");
+        java.util.Map<String, Integer> found = new java.util.TreeMap<>();
+        for (Path root : roots) {
+            if (!Files.isDirectory(root)) {
+                continue;
+            }
+            try (var stream = Files.walk(root)) {
+                for (Path javaFile : stream
+                        .filter(p -> p.toString().contains(File.separator + "src" + File.separator + "main"))
+                        .filter(p -> p.toString().endsWith(".java")).toList()) {
+                    var matcher = lastPattern.matcher(Files.readString(javaFile));
+                    int count = 0;
+                    while (matcher.find()) {
+                        count++;
+                    }
+                    if (count > 0) {
+                        String key = normalizeKey(javaFile);
+                        found.put(key, found.getOrDefault(key, 0) + count);
+                    }
+                }
+            }
+        }
+        // ② 已登记文件的次数必须与登记值一致
+        for (var entry : ALLOWED_LAST_USAGES.entrySet()) {
+            int actual = found.getOrDefault(entry.getKey(), 0);
+            org.assertj.core.api.Assertions.assertThat(actual)
+                .as("L6 白名单失效：%s 登记 %d 处 last(，实际 %d 处——清理后请同步删登记，新增则改走 Limit/pagination",
+                        entry.getKey(), entry.getValue(), actual)
+                .isEqualTo(entry.getValue());
+        }
+        // ① 未登记文件出现 last( 一律失败
+        java.util.Set<String> unregistered = new java.util.TreeSet<>(found.keySet());
+        unregistered.removeAll(ALLOWED_LAST_USAGES.keySet());
+        org.assertj.core.api.Assertions.assertThat(unregistered)
+            .as("SQL 红线：禁止新的 last( 用法（PIVOTOS SQL 十条·禁 last()），发现: %s", unregistered)
+            .isEmpty();
+    }
+
+    /** 判定键 = 「模块名/类名」，使其不受包路径与主机绝对路径影响 */
+    private static String normalizeKey(Path javaFile) {
+        String path = javaFile.toString().replace("\\", "/");
+        int moduleIdx = path.lastIndexOf("/pivotos-plugins/");
+        if (moduleIdx < 0) {
+            moduleIdx = path.lastIndexOf("/pivotos-starters/");
+        }
+        String tail = moduleIdx >= 0 ? path.substring(moduleIdx + 1) : path;
+        String[] parts = tail.split("/");
+        String className = parts.length > 0 ? parts[parts.length - 1].replace(".java", "") : tail;
+        String module = parts.length > 1 ? parts[1] : "";
+        return module + "/" + className;
+    }
+
     // ========== A8：Plugin 表前缀白名单（《03》阶段2 登记卡点） ==========
     // 扫描各 Plugin 实体源码中的 @TableName 字面量，必须命中本插件登记的前缀。
     @Test
