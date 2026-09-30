@@ -83,4 +83,23 @@ public interface IWorkflowFacade {
      * @return 审批上下文；任务不存在返回 null，非本人待办抛 ServiceException
      */
     ApprovalTaskContextDTO getApprovalTaskContext(Long taskId);
+
+    // ---- S117 补充：A4E 受控自动预审（低风险单受控自动通过） ----
+
+    /**
+     * 审批通过指定待办任务（供 A4E 受控自动预审调用）。
+     *
+     * <p><b>归属闸</b>：本方法不加任何「系统代审」旁路——它走的是与管理端「通过」按钮
+     * 完全相同的 {@code FlowTaskService.pass}，而 warm-flow 的归属校验取自
+     * {@code LoginContext}（见 {@code WorkflowConfig.PermissionHandler}）。
+     * 因此本方法<b>只有在调用方请求线程里确实是审批人本人时才可能成功</b>；
+     * 非审批人调用会被引擎拒（实测：非审批人 1500「无法跳转到该节点」、审批人 code=0）。
+     *
+     * <p>这也是本方法不做「后台扫描代审」的原因：{@code LoginContext} 是只读 ScopedValue，
+     * 服务端无法以审批人身份伪造上下文，自动预审只能发生在审批人本人的请求内。
+     *
+     * @param taskId  待办任务 ID
+     * @param message 审批意见（自动预审会写入「AI 预审自动通过」口径的意见，便于历史追溯）
+     */
+    void approveTask(Long taskId, String message);
 }

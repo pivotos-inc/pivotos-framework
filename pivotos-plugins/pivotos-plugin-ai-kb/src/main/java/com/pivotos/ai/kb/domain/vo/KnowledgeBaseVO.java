@@ -17,6 +17,8 @@ public class KnowledgeBaseVO implements Serializable {
 
     private Long id;
     private String name;
+    /** 知识库类型（policy 制度类 / general 通用；A4E / S117） */
+    private String kbType;
     private String description;
     private String vectorStoreType;
     private String embeddingModel;

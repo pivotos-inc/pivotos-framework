@@ -39,6 +39,15 @@ public class ApprovalTaskContextDTO implements Serializable {
     /** 流程状态（warm-flow flow_status 码值） */
     private String flowStatus;
 
+    /**
+     * 当前待办的审批人数量（A4E / S117 受控自动预审：单审批人才可能自动通过）。
+     *
+     * <p>为什么必须由服务端给出：会签/票签节点下「自动通过」等于让 AI 代投一票，
+     * 语义与「代审批人完成审批」完全不同，必须能确定性排除。
+     * 取值口径同 {@code requireApprover}（APPROVAL + TRANSFER + DEPUTE 三类 flow_user 去重后的办理人数）。
+     */
+    private Integer approverCount;
+
     /** 发起人（实例 create_by，用户 ID 字符串口径） */
     private String createBy;
 

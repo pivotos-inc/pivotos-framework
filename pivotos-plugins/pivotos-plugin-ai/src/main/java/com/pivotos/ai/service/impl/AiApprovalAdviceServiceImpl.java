@@ -14,8 +14,12 @@ import com.pivotos.ai.domain.vo.ApprovalAdviceVO;
 import com.pivotos.ai.domain.vo.ApprovalReferenceVO;
 import com.pivotos.ai.kb.api.dto.KbOptionDTO;
 import com.pivotos.ai.kb.api.dto.KbSearchResultDTO;
+import com.pivotos.ai.kb.api.enums.KbType;
 import com.pivotos.ai.kb.api.facade.IKnowledgeBaseFacade;
 import com.pivotos.ai.mapper.AiApprovalAdviceMapper;
+import com.pivotos.ai.orchestrator.ApprovalAdviceProperties;
+import com.pivotos.ai.orchestrator.AutoApprovalPolicy;
+import com.pivotos.ai.domain.vo.AutoApprovalResultVO;
 import com.pivotos.ai.service.AiApprovalAdviceService;
 import com.pivotos.ai.service.AiProviderService;
 import com.pivotos.common.api.context.LoginUser;
@@ -94,6 +98,8 @@ public class AiApprovalAdviceServiceImpl implements AiApprovalAdviceService {
     private final AiProviderService aiProviderService;
     private final AiClientRegistry clientRegistry;
     private final Environment environment;
+    /** A4E 受控自动预审开关（S117；默认关闭） */
+    private final ApprovalAdviceProperties autoApproveProperties;
 
     @Override
     public SseEmitter streamAdvice(Long userId, ApprovalAdviceRequest request) {
@@ -160,6 +166,11 @@ public class AiApprovalAdviceServiceImpl implements AiApprovalAdviceService {
                         doneData.put("reason", parsed.reason());
                         doneData.put("references", references);
                         doneData.put("disclaimer", DISCLAIMER);
+                        // A4E：前端据此决定是否发起受控自动预审（它只是「够格发起」的提示，
+                        // 真正放行还要过 AutoApprovalPolicy 的全量规则，在审批人请求内判定）
+                        doneData.put("autoEligible", autoApproveProperties.isEnabled()
+                                && "approve".equals(parsed.conclusion())
+                                && !references.isEmpty());
                         sendEvent(emitter, "done", doneData);
                         emitter.complete();
                     });
@@ -171,13 +182,98 @@ public class AiApprovalAdviceServiceImpl implements AiApprovalAdviceService {
 
     @Override
     public ApprovalAdviceVO latestAdvice(Long userId, Long taskId) {
-        // userId 过滤即归属闸：建议记录只对生成者本人可见
-        AiApprovalAdvice advice = adviceMapper.selectOne(Wrappers.<AiApprovalAdvice>lambdaQuery()
+        AiApprovalAdvice advice = latestAdviceEntity(userId, taskId);
+        return advice == null ? null : toAdviceVO(advice);
+    }
+
+    /** 本人在该任务上的最近一条建议——userId 过滤即归属闸：建议记录只对生成者本人可见 */
+    private AiApprovalAdvice latestAdviceEntity(Long userId, Long taskId) {
+        return adviceMapper.selectOne(Wrappers.<AiApprovalAdvice>lambdaQuery()
                 .eq(AiApprovalAdvice::getTaskId, taskId)
                 .eq(AiApprovalAdvice::getUserId, userId)
                 .orderByDesc(AiApprovalAdvice::getId)
                 .last("LIMIT 1"));
-        return advice == null ? null : toAdviceVO(advice);
+    }
+
+    /* ================= A4E 受控自动预审（S117） ================= */
+
+    /**
+     * 受控自动预审：在<b>审批人本人的请求线程内</b>做确定性判定，规则全中则自动通过并留痕。
+     *
+     * <p><b>为什么必须由审批人本人发起请求</b>（这是本方法的架构前提，不是实现偷懒）：
+     * 自动通过最终要走 {@code FlowTaskService.pass}，而它的归属闸来自 warm-flow 的
+     * {@code PermissionHandler}——后者取的是 {@code LoginContext}。S117 开工实测：
+     * 非审批人调 pass → 1500「无法跳转到该节点」；审批人调 → code=0。
+     * 而 {@code LoginContext} 是只读 ScopedValue（无 runAs/bind），服务端无法代填身份，
+     * 所以「后台扫描待办自动通过」在当前架构下不可实现，只能落在审批人的请求内。
+     *
+     * <p><b>为什么不能在 SSE 回调里顺手做掉</b>：流式回调在反应式线程执行，
+     * {@code LoginContext} 已丢失（本类落库时要显式补审计字段就是因为这个），
+     * 在那里调 pass 会因 handler 解析成 anonymous 而被拒。
+     */
+    @Override
+    public AutoApprovalResultVO autoPass(Long userId, Long taskId) {
+        // 归属闸第一步：非该任务审批人在这里就被拦下（workflow 侧 requireApprover 口径）
+        ApprovalTaskContextDTO taskContext = loadTaskContext(taskId);
+        AutoApprovalResultVO vo = new AutoApprovalResultVO();
+        vo.setTaskId(taskId);
+        AiApprovalAdvice advice = latestAdviceEntity(userId, taskId);
+        if (advice == null) {
+            vo.setAutoPassed(false);
+            vo.setReason("本用户在该待办上尚无建议记录，无法自动预审");
+            vo.setRuleHits(List.of());
+            return vo;
+        }
+        vo.setAdviceId(advice.getId());
+        List<ApprovalReferenceVO> references = parseReferences(advice.getReferencesJson());
+        AutoApprovalPolicy.Decision decision = AutoApprovalPolicy.evaluate(new AutoApprovalPolicy.Input(
+                autoApproveProperties.isEnabled(),
+                autoApproveProperties.isRequirePolicyKb(),
+                autoApproveProperties.isRequireSingleApprover(),
+                advice.getConclusion(),
+                references,
+                isPolicyKb(advice.getKbId()),
+                taskContext.getApproverCount(),
+                taskContext.getFlowStatus(),
+                taskContext.getVariables() == null ? Map.of() : taskContext.getVariables(),
+                autoApproveProperties.getAmountVariableKey(),
+                autoApproveProperties.getMaxAmount()));
+
+        boolean passed = false;
+        if (decision.pass()) {
+            IWorkflowFacade workflowFacade = workflowFacadeProvider.getIfAvailable();
+            if (workflowFacade == null) {
+                throw new ServiceException(AiErrorCode.APPROVAL_TASK_NOT_FOUND);
+            }
+            workflowFacade.approveTask(taskId, autoApproveProperties.getMessage());
+            passed = true;
+        }
+        // 留痕：无论通过与否都记，事后必须能回答「为什么这条被/没被自动通过」
+        advice.setAutoPassed(passed ? 1 : 0);
+        advice.setAutoDecisionReason(truncate(decision.reason(), 500));
+        advice.setAutoRuleHits(JSON.toJSONString(decision.ruleHits()));
+        adviceMapper.updateById(advice);
+
+        vo.setAutoPassed(passed);
+        vo.setReason(decision.reason());
+        vo.setRuleHits(decision.ruleHits());
+        log.info("[PivotOS] AI 受控自动预审：taskId={} adviceId={} passed={} hits={}",
+                taskId, advice.getId(), passed, decision.ruleHits());
+        return vo;
+    }
+
+    /** 引用 JSON → 引用列表（解析失败静默置空） */
+    private List<ApprovalReferenceVO> parseReferences(String referencesJson) {
+        if (referencesJson == null || referencesJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            List<ApprovalReferenceVO> refs = JSON.parseArray(referencesJson, ApprovalReferenceVO.class);
+            return refs == null ? List.of() : refs;
+        } catch (Exception e) {
+            log.warn("[PivotOS] 审批建议引用 JSON 解析失败，按无引用从严处理: {}", e.getMessage());
+            return List.of();
+        }
     }
 
     /* ================= 待办上下文聚合 ================= */
@@ -210,8 +306,12 @@ public class AiApprovalAdviceServiceImpl implements AiApprovalAdviceService {
     /* ================= 知识库检索 ================= */
 
     /**
-     * 默认库策略：请求指定 > 配置项 pivotos.ai.approval.default-kb-id > listOptions 首个；
-     * 均无返回 null（走无制度依据降级，不阻断生成）。
+     * 默认库策略：请求指定 > 配置项 pivotos.ai.approval.default-kb-id >
+     * <b>listOptions 中首个制度类（kb_type=policy）库</b> > 首个启用库；均无返回 null（走无制度依据降级）。
+     *
+     * <p>为何把「优先制度类」插在「首个启用库」之前（A4E / S117）：制度类标记落地前，
+     * 选库只能靠「建库顺序」，一个通用库被先建就会让审批建议拿通用资料当制度依据；
+     * 现在 kb_type 是契约字段，制度类优先是确定性选择，不再依赖建库顺序。
      */
     private Long resolveKbId(Long requestedKbId) {
         if (requestedKbId != null) {
@@ -227,10 +327,35 @@ public class AiApprovalAdviceServiceImpl implements AiApprovalAdviceService {
         }
         try {
             List<KbOptionDTO> options = facade.listOptions();
-            return options.isEmpty() ? null : options.get(0).getId();
+            if (options.isEmpty()) {
+                return null;
+            }
+            return options.stream()
+                    .filter(option -> KbType.isPolicy(option.getKbType()))
+                    .findFirst()
+                    .orElse(options.get(0))
+                    .getId();
         } catch (Exception e) {
             log.warn("[PivotOS] 审批建议加载知识库选项失败，走无制度依据降级: {}", e.getMessage());
             return null;
+        }
+    }
+
+    /** 指定知识库是否为制度类（自动预审据此判定「依据是否来自制度库」） */
+    private boolean isPolicyKb(Long kbId) {
+        if (kbId == null) {
+            return false;
+        }
+        IKnowledgeBaseFacade facade = kbFacadeProvider.getIfAvailable();
+        if (facade == null) {
+            return false;
+        }
+        try {
+            return facade.listOptions().stream()
+                    .anyMatch(option -> kbId.equals(option.getId()) && KbType.isPolicy(option.getKbType()));
+        } catch (Exception e) {
+            log.warn("[PivotOS] 审批建议判定知识库类型失败，按非制度类从严处理: kbId={}, error={}", kbId, e.getMessage());
+            return false;
         }
     }
 
@@ -464,15 +589,25 @@ public class AiApprovalAdviceServiceImpl implements AiApprovalAdviceService {
         vo.setReason(advice.getReason());
         vo.setKbId(advice.getKbId());
         vo.setCreateTime(advice.getCreateTime());
-        if (advice.getReferencesJson() != null && !advice.getReferencesJson().isBlank()) {
-            try {
-                vo.setReferences(JSON.parseArray(advice.getReferencesJson(), ApprovalReferenceVO.class));
-            } catch (Exception e) {
-                log.warn("[PivotOS] 审批建议引用 JSON 解析失败，置空: adviceId={}, reason={}",
-                        advice.getId(), e.getMessage());
-            }
+        vo.setAutoPassed(advice.getAutoPassed() != null && advice.getAutoPassed() == 1);
+        vo.setAutoDecisionReason(advice.getAutoDecisionReason());
+        List<ApprovalReferenceVO> references = parseReferences(advice.getReferencesJson());
+        if (!references.isEmpty()) {
+            vo.setReferences(references);
         }
+        // 是否具备自动通过资格（轻量判定，不调 workflow）：开关开 + 结论通过 + 有制度依据。
+        // 它只是「可以发起自动预审」的提示，真正放行还要过 AutoApprovalPolicy 全量规则。
+        vo.setAutoEligible(autoApproveProperties.isEnabled()
+                && "approve".equals(advice.getConclusion())
+                && !references.isEmpty());
         return vo;
+    }
+
+    private String truncate(String value, int maxLen) {
+        if (value == null) {
+            return "";
+        }
+        return value.length() <= maxLen ? value : value.substring(0, maxLen);
     }
 
     /** SSE 事件下发：data 走 JSON 转换器（换行安全），IO 异常说明客户端已断开 */
