@@ -1,7 +1,9 @@
 package com.pivotos.migration.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.result.R;
+import com.pivotos.migration.api.enums.MigrationErrorCode;
 import com.pivotos.migration.domain.entity.MigrationArtifact;
 import com.pivotos.migration.service.MigrationArtifactService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -41,10 +43,20 @@ public class MigrationArtifactController {
         return R.ok(artifacts);
     }
 
-    @Operation(summary = "获取产物详情（含代码内容）")
+    /**
+     * 获取产物详情（含代码内容）。
+     *
+     * <p>同 {@code MigrationTaskController#detail} 口径：产物不存在抛 {@code ARTIFACT_NOT_FOUND 8064}，
+     * 「产物存在但内容为空」仍返回 {@code code=0}——两者此前都返回空 data + code=0，无法区分。
+     */
+    @Operation(summary = "获取产物详情（含代码内容；记录不存在返回 8064，内容为空仍返回 code=0）")
     @GetMapping("/{id}")
     public R<MigrationArtifact> detail(@PathVariable Long id) {
-        return R.ok(migrationArtifactService.getById(id));
+        MigrationArtifact artifact = migrationArtifactService.getById(id);
+        if (artifact == null) {
+            throw new ServiceException(MigrationErrorCode.ARTIFACT_NOT_FOUND);
+        }
+        return R.ok(artifact);
     }
 
     @Operation(summary = "产物落盘到目标目录")
