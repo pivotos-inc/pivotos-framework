@@ -34,6 +34,18 @@ public class ApprovalAdviceVO {
     @Schema(description = "检索所用知识库 ID")
     private Long kbId;
 
+    /** 是否受控自动通过（A4E / S117） */
+    @Schema(description = "是否受控自动通过")
+    private Boolean autoPassed;
+
+    /** 自动预审判定原因 */
+    @Schema(description = "自动预审判定原因")
+    private String autoDecisionReason;
+
+    /** 是否具备自动通过资格（供前端决定是否发起自动预审；不等于已通过） */
+    @Schema(description = "是否具备受控自动通过资格")
+    private Boolean autoEligible;
+
     /** 生成时间 */
     @Schema(description = "生成时间")
     private LocalDateTime createTime;

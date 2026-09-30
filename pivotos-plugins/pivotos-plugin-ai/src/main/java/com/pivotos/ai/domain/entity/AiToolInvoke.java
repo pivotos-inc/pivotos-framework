@@ -19,6 +19,12 @@ public class AiToolInvoke extends TenantBaseDO {
     /** 工具名（ai_tool.tool_name） */
     private String toolName;
 
+    /** 所属编排计划 ID（S116 A5-1；非编排调用为 NULL） */
+    private Long planId;
+
+    /** 编排步骤序号（S116 A5-1；非编排调用为 NULL） */
+    private Integer stepNo;
+
     /** 调用人 ID（上下文缺失为 null） */
     private Long userId;
 

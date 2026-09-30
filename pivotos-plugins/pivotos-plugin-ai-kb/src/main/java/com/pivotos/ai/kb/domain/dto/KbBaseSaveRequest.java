@@ -21,6 +21,13 @@ public class KbBaseSaveRequest implements Serializable {
     @NotBlank(message = "知识库名称不能为空")
     private String name;
 
+    /**
+     * 知识库类型（policy 制度类 / general 通用；A4E / S117）。
+     * 不传按 general 兜底——存量知识库默认不是制度类，自动预审不会拿它当依据。
+     */
+    @Schema(description = "知识库类型（policy 制度类 / general 通用，不传默认 general）")
+    private String kbType;
+
     /** 知识库描述 */
     @Schema(description = "知识库描述")
     private String description;

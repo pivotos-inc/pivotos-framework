@@ -1,10 +1,12 @@
-# PivotOS Framework（pivotos-framework）
+# 筱筱框架（PivotOS Framework / pivotos-framework）
 
-> PivotOS「一码三端」企业管理平台 —— 后端全部模块（Maven 多模块单仓），开发者：胡伟龙（Alex）
+> 筱筱框架（PivotOS）「一码三端」企业管理平台 —— 后端全部模块（Maven 多模块单仓），开发者：[胡伟龙（Alex）](https://www.293242.com/)
 >
 > 📖 在线文档：[pivotos-doc.293242.com](https://pivotos-doc.293242.com) ｜ 🖥️ PC 演示：[pivotos-pc.293242.com](https://pivotos-pc.293242.com) ｜ 📱 H5 演示：[pivotos-h5.293242.com](https://pivotos-h5.293242.com) ｜ [Apache-2.0](./LICENSE)
+>
+> 谨以此项目纪念女儿「筱筱」的诞生 —— 故本项目中文名取作**筱筱框架**，英文名沿用 PivotOS。
 
-PivotOS 是对标若依（RuoYi）功能面、以 **AI 为差异化主线** 的企业级快速开发平台：同一套后端支撑 PC 管理端、移动 H5/App、微信小程序三端。架构特色：**轻量微内核 + 彻底插件化 + AI 原生底座 + 单代码库双部署形态（单体/微服务）**。
+PivotOS 借鉴若依（RuoYi）的企业级功能面，并在 **插件化架构与 AI 原生能力** 上做差异化的企业级快速开发平台：同一套后端支撑 PC 管理端、移动 H5/App、微信小程序三端。架构特色：**轻量微内核 + 彻底插件化 + AI 原生底座 + 单代码库双部署形态（单体/微服务）**。
 
 ## 技术栈
 
@@ -51,7 +53,7 @@ pivotos-framework (groupId=com.pivotos)
 │   ├── plugin-ai               #   AI 对话（多供应商/多 Key/SSE 流式/会话落库）
 │   ├── plugin-ai-coding        #   AI Coding（自然语言生成单表/主子/树表 CRUD）
 │   ├── plugin-ai-kb            #   RAG 知识库（解析/分块/向量化/检索/重排/评测/引用溯源）
-│   ├── plugin-mind             #   枢磐·智域个人端（知识库/待办/AI 拆分，配 pivotos-mind 前端）
+│   ├── plugin-mind             #   PivotOS·智域个人端（知识库/待办/AI 拆分，配 pivotos-mind 前端）
 │   ├── plugin-generator        #   代码生成器（crud/sub/tree 三模板族，PC + uni-app 双端产物）
 │   ├── plugin-docsync          #   文档同步（在线文档站内容同步）
 │   ├── plugin-migration        #   迁移引擎（AI 驱动的系统迁移任务编排）
@@ -74,7 +76,7 @@ pivotos-framework (groupId=com.pivotos)
 - **代码生成器**：选表即出 CRUD（crud / sub 主子 / tree 树三模板族），前后端 + 菜单一键导入
 - **监控运维**：服务监控、缓存监控、运营看板
 - **任务调度**：XXL-Job 执行器开箱集成
-- **枢磐·智域（个人端）**：mind-user 第四账号体系 + 个人知识库 + 智能待办（AI 拆分）+ SSE 对话，配套前端见 [pivotos-mind](https://github.com/pivotos-inc/pivotos-mind)
+- **PivotOS·智域（个人端）**：mind-user 第四账号体系 + 个人知识库 + 智能待办（AI 拆分）+ SSE 对话，配套前端见 [pivotos-mind](https://github.com/pivotos-inc/pivotos-mind)
 
 ## 快速开始
 
@@ -106,7 +108,7 @@ source .env.dev && java -jar pivotos-admin-server/target/pivotos-admin-server.ja
 | --- | --- |
 | [pivotos-ui](https://github.com/pivotos-inc/pivotos-ui) | PC 管理端（Vue3 + Element Plus，pnpm Monorepo） |
 | [pivotos-app](https://github.com/pivotos-inc/pivotos-app) | 移动端（uni-app 一码三端：H5 / App / 小程序） |
-| [pivotos-mind](https://github.com/pivotos-inc/pivotos-mind) | 枢磐·智域个人端（C 端 AI 助手开源样板间，对接本仓 plugin-mind） |
+| [pivotos-mind](https://github.com/pivotos-inc/pivotos-mind) | PivotOS·智域个人端（C 端 AI 助手开源样板间，对接本仓 plugin-mind） |
 | [pivotos-docs](https://github.com/pivotos-inc/pivotos-docs) | 项目文档库（PRD / 架构 / 规范 / 流程 / 踩坑记录） |
 | pivotos-docsite | 在线文档站源码（VitePress，部署于 pivotos-doc.293242.com） |
 
@@ -116,6 +118,6 @@ source .env.dev && java -jar pivotos-admin-server/target/pivotos-admin-server.ja
 
 ## License
 
-[Apache License 2.0](./LICENSE) · Copyright 2026 胡伟龙（Alex）
+[Apache License 2.0](./LICENSE) · Copyright 2026 [胡伟龙（Alex）](https://www.293242.com/)
 
 凭据安全约定：`.env.dev` 等含真实凭据的文件一律不入库（`.gitignore` 已覆盖）；配置文件中凭据一律 `${ENV_VAR:}` 占位经环境变量注入。

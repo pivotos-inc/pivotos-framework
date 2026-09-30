@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-/** 枢磐·智域账密登录/注册请求体（H5 开发调试与兜底） */
+/** PivotOS·智域账密登录/注册请求体（H5 开发调试与兜底） */
 @Data
 public class MindPasswordBody {
 

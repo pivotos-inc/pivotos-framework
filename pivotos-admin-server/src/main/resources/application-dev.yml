@@ -98,11 +98,45 @@ pivotos:
         gate:
           build-enabled: true      # 落盘后跑 mvn compile / pnpm typecheck，不过即回滚
           timeout-seconds: 600
+    # A5-1 工具多步编排（S116）：与 locate/modify 同为「能力显式开启」口径，dev 显式开启
+    # 注意缩进：orchestrator 与 coding 同级（同属 pivotos.ai），缩进错了会静默绑不上
+    orchestrator:
+      enabled: true
+      max-steps: 10              # 单条计划步骤上限（防 LLM 产出失控长链）
+      max-intent-length: 500
+      model: qwen-plus           # 留空则取供应商默认模型
+      # 排除写工程源码的工具：改源码属 A4 评审面职责，编排面不给旁路
+      excluded-tools:
+        - writeCodeFile
+      # A5-2 重试（S117）：只对「只读步骤 + 工具本体执行失败」重试；
+      # 写步骤 write-enabled=false——写工具非幂等（实测连发两次站内信，消息数 +2），
+      # 且守卫把异常吞成文本，判不了失败发生在副作用前还是后，重试等于重复副作用。
+      # 注意缩进：retry/circuit 与 enabled 同级（同属 orchestrator），缩进错了静默失效。
+      retry:
+        enabled: true
+        max-attempts: 2
+        write-enabled: false
+        backoff-ms: 300
+      # A5-2 熔断（S117）：单条计划的重试预算，防故障态下反复重试放大调用量
+      circuit:
+        enabled: true
+        max-retries-per-plan: 3
+    # A4E 审批建议增强（S117）：受控自动预审——默认关闭（能力显式开启口径）。
+    # 注意缩进：approval 与 coding / orchestrator 同级（同属 pivotos.ai），
+    # auto-approve 与 approval 的下级属性同级；缩进挂错一级会静默失效。
+    approval:
+      auto-approve:
+        enabled: false
+        require-policy-kb: true
+        require-single-approver: true
+        amount-variable-key: ""
+        max-amount: 0
+        message: "AI 预审自动通过（依据制度检索结论，审批人已授权自动预审）"
   # 微信小程序（测试号）
   wechat:
     miniapp:
       appid: wx0a426f6d4bce0b5c
-      # 枢磐·智域小程序（比赛作品）AppID/Secret，待用户提供后填明文
+      # PivotOS·智域小程序（比赛作品）AppID/Secret，待用户提供后填明文
       configs:
         mind:
           appid: ${PIVOTOS_MIND_MINIAPP_APPID:}

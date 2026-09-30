@@ -14,6 +14,9 @@ public class KbOptionDTO {
     /** 知识库名称 */
     private String name;
 
+    /** 知识库类型（policy 制度类 / general 通用；A4E / S117） */
+    private String kbType;
+
     /** 查询改写开关（true=检索前 LLM 改写多轮问题，S68） */
     private Boolean queryRewrite;
 }

@@ -24,10 +24,10 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Collections;
 
 /**
- * 枢磐·智域认证接口（mind-user 独立 Token 体系）。
+ * PivotOS·智域认证接口（mind-user 独立 Token 体系）。
  * 个人端小程序一键登录，未注册自动建档，无需手机号/账密绑定。
  */
-@Tag(name = "智域认证", description = "枢磐·智域个人端认证接口")
+@Tag(name = "智域认证", description = "PivotOS·智域个人端认证接口")
 @RestController
 @RequestMapping("/mind/auth")
 @RequiredArgsConstructor

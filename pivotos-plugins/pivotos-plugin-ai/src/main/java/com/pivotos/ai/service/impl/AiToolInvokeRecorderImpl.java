@@ -3,6 +3,7 @@ package com.pivotos.ai.service.impl;
 import com.pivotos.ai.domain.entity.AiToolInvoke;
 import com.pivotos.ai.enums.ToolInvokeStatus;
 import com.pivotos.ai.mapper.AiToolInvokeMapper;
+import com.pivotos.ai.orchestrator.OrchestratorStepContext;
 import com.pivotos.ai.service.AiToolInvokeRecorder;
 import com.pivotos.common.api.context.LoginUser;
 import com.pivotos.starter.core.context.LoginContext;
@@ -13,10 +14,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * AI 工具调用审计记录器实现（S98 A2）
+ * AI 工具调用审计记录器实现（S98 A2；S116 A5-1 补编排维度）。
  *
- * <p>调用人/租户/traceId 取自 ScopedValue 上下文（调用线程内可用；
+ * <p>调用人 / 租户 / traceId 取自 ScopedValue 上下文（调用线程内可用；
  * 流式回调线程等无上下文场景记 null，口径同 ai_usage）。
+ *
+ * <p><b>S116 扩展点</b>：{@code plan_id} / {@code step_no} 取自
+ * {@link OrchestratorStepContext} 的作用域值——只有 {@code PlanExecutor} 逐步调用工具的那一刻
+ * 它才被绑定。因此本类对编排逻辑零感知：对话 / MCP / REST 直连这三条既有链路的写库行为逐字不变。
  */
 @Service
 @RequiredArgsConstructor
@@ -42,6 +47,11 @@ public class AiToolInvokeRecorderImpl implements AiToolInvokeRecorder {
             invoke.setErrorMsg(truncate(errorMsg, ERROR_MAX_LEN));
             invoke.setCostMs(costMs);
             invoke.setTraceId(TraceContext.get());
+            OrchestratorStepContext.StepRef step = OrchestratorStepContext.get();
+            if (step != null) {
+                invoke.setPlanId(step.planId());
+                invoke.setStepNo(step.stepNo());
+            }
             LoginUser loginUser = LoginContext.get();
             if (loginUser != null) {
                 invoke.setUserId(loginUser.getUserId());

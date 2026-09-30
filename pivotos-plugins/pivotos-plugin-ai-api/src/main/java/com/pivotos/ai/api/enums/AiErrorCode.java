@@ -36,10 +36,37 @@ public enum AiErrorCode implements ErrorCode {
     AI_TOOL_NOT_FOUND(5060, "AI 工具不存在"),
     AI_TOOL_STATUS_INVALID(5061, "工具状态值非法（0正常 1停用）"),
 
+    // ---------- A5-1 工具多步编排（S116 启用，承接 Agent/MCP 段） ----------
+    ORCHESTRATOR_DISABLED(5062, "AI 工具编排未启用"),
+    ORCHESTRATOR_PLAN_EMPTY(5063, "未能规划出可执行的工具调用链"),
+    ORCHESTRATOR_TOOL_UNKNOWN(5064, "编排计划包含未注册或已停用的工具"),
+    ORCHESTRATOR_ARGS_INVALID(5065, "编排计划参数不合法"),
+    ORCHESTRATOR_REF_INVALID(5066, "编排计划引用了不合法的前序步骤结果"),
+    ORCHESTRATOR_WRITE_AUTO_CONFIRM(5067, "编排计划不允许代为确认写操作"),
+    ORCHESTRATOR_STEP_LIMIT(5068, "编排计划步骤数超过上限"),
+    ORCHESTRATOR_PLAN_NOT_FOUND(5069, "编排计划不存在"),
+    ORCHESTRATOR_STEP_FAILED(5070, "编排执行中断于此步骤"),
+
+    // ---------- A5-2 编排可靠性（S117 启用：5071 起） ----------
+    // 5070 是「执行中断于此步骤」，与下面两个语义不同：5070 说明「某步失败了」，
+    // 5071 说明「失败太多，后续步骤根本没跑」，5072 说明「重试了但仍失败」。
+    // 用户据此能区分「重试有没有用」，这是 S111 定下的错误码纪律。
+    ORCHESTRATOR_CIRCUIT_BROKEN(5071, "连续步骤失败已达熔断阈值，编排已中止（后续步骤未执行）"),
+    ORCHESTRATOR_RETRY_EXHAUSTED(5072, "该步骤重试后仍失败"),
+
+    // ---------- S118 AI-2 四入口（SSE 入口启用：5073 起） ----------
+    // SSE 入口内的异常必须落成 error 帧而非抛出（否则会被全局兜底改写成 HTTP 5xx，
+    // 客户端拿不到结构化原因），非业务异常统一收敛到本码。
+    AI_TOOL_STREAM_FAILED(5073, "AI 工具流式调用失败"),
+
     // ---------- AI 审批助手（S101） ----------
     APPROVAL_TASK_NOT_FOUND(5081, "待办任务不存在或已办结"),
     ADVICE_GEN_FAILED(5082, "AI 审批建议生成失败，请稍后重试"),
-    APPROVAL_NOT_APPROVER(5083, "仅当前任务的审批人可生成建议");
+    APPROVAL_NOT_APPROVER(5083, "仅当前任务的审批人可生成建议"),
+
+    // ---------- A4E 审批建议增强（S117 启用：5084 起） ----------
+    APPROVAL_AUTO_DISABLED(5084, "受控自动预审未启用"),
+    APPROVAL_AUTO_REJECTED(5085, "该待办不满足受控自动通过的确定性规则，请人工审批");
 
     private final int code;
     private final String msg;

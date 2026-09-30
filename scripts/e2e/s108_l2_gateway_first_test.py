@@ -10,9 +10,13 @@ S108 回归：L2 清偿复验（flow_start_exception_test.py 的 fixture 漂移�
 匹配变量发起成功（正常链路未破坏）。
 """
 import json
+import os
 import sys
 
 import requests
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import dev_db  # noqa: E402  统一物理清理口径（S116 搭车项①）
 
 BASE = "http://localhost:8080"
 FLOW_CODE = "l2_gw_first_s108"
@@ -109,9 +113,50 @@ def main():
             r = requests.put(f"{BASE}/workflow/instance/{ins_id}/terminate", headers=hdr, timeout=10)
             log("CLEAN", f"终止实例 {ins_id}：code={r.json().get('code')}")
         r = requests.delete(f"{BASE}/workflow/definition/{def_id}", headers=hdr, timeout=10)
-        log("CLEAN", f"删除一次性定义 {def_id}：code={r.json().get('code')}")
+        code = r.json().get("code")
+        # 定义删除守卫按 del_flag=0 的实例计数：terminate 不清计数 → DELETE 被拒（1500），
+        # 于是每跑一次就堆一份定义（S116 开工实测 dev 库已堆 6 份 l2_gw_first_s108）。
+        # 统一口径：守卫拒绝也照旧走物理清理，不留 del_flag=0/1 的任何残留。
+        log("CLEAN", f"删除一次性定义 {def_id}：code={code}（非 0 亦由物理清理兜底）")
+        leftover = purge_definitions_by_code(FLOW_CODE)
+        assert leftover == 0, f"自清失败：{FLOW_CODE} 仍残留 {leftover} 份定义"
 
-    log("ALL-PASS", "L2 复验完成：网关首节点形态下失败文案已翻译 + gt 条件路由正确 + 现场已清理")
+    log("ALL-PASS", "L2 复验完成：网关首节点形态下失败文案已翻译 + gt 条件路由正确 + 现场已物理清空")
+
+
+def purge_definitions_by_code(flow_code):
+    """物理清理某 flow_code 的全部定义（含历史遗留）及其实例，返回清理后剩余份数。
+
+    顺序不能反：先按 definition_id 物理清实例（含 flow_user/task/cc/his_task），再删定义，
+    否则定义删了实例还在，会留下孤儿行。
+    """
+    conn = dev_db.connect_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM flow_definition WHERE flow_code=%s", (flow_code,))
+            def_ids = [row[0] for row in cur.fetchall()]
+        cleared = []
+        for did in def_ids:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM flow_instance WHERE definition_id=%s", (did,))
+                ins_ids = [row[0] for row in cur.fetchall()]
+            if ins_ids:
+                dev_db.purge_flow_instances(ins_ids)
+            dev_db.purge_flow_definition(did)
+            cleared.append(did)
+        if cleared:
+            log("CLEAN", f"物理清理定义 {len(cleared)} 份：{cleared}")
+    finally:
+        conn.close()
+    # 复核必须换一条新连接：dev_db 的删除走的是自己的连接，
+    # 在同一连接的 REPEATABLE READ 快照里 COUNT 会读到删除前的旧值
+    verify = dev_db.connect_db()
+    try:
+        with verify.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM flow_definition WHERE flow_code=%s", (flow_code,))
+            return cur.fetchone()[0]
+    finally:
+        verify.close()
 
 
 if __name__ == "__main__":

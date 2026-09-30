@@ -8,6 +8,7 @@ import com.pivotos.ai.mapper.AiToolMapper;
 import com.pivotos.ai.mapper.AiToolRoleMapper;
 import com.pivotos.ai.service.AiToolGuardService;
 import com.pivotos.ai.tool.ToolForbiddenException;
+import com.pivotos.ai.tool.ToolGuardSignal;
 import com.pivotos.common.api.context.LoginUser;
 import com.pivotos.starter.auth.account.StpAppUtil;
 import com.pivotos.starter.auth.account.StpSysUtil;
@@ -73,10 +74,10 @@ public class AiToolGuardServiceImpl implements AiToolGuardService {
     public void checkAllowed(ToolSnapshot snapshot, LoginUser loginUser) {
         AiTool tool = snapshot.tool();
         if (tool.getStatus() != null && tool.getStatus() == 1) {
-            throw new ToolForbiddenException("工具已停用：" + tool.getToolName());
+            throw new ToolForbiddenException(ToolGuardSignal.DISABLED + tool.getToolName());
         }
         if (loginUser == null || loginUser.getUserId() == null) {
-            throw new ToolForbiddenException("工具调用需登录上下文：" + tool.getToolName());
+            throw new ToolForbiddenException(ToolGuardSignal.LOGIN_REQUIRED + tool.getToolName());
         }
         List<String> whitelist = snapshot.roleCodes();
         if (whitelist.isEmpty() || whitelist.contains(WILDCARD_ROLE)) {
@@ -87,7 +88,7 @@ public class AiToolGuardServiceImpl implements AiToolGuardService {
         if (!hit) {
             log.warn("[PivotOS] AI 工具越权调用被拒：tool={} userId={} roles={} whitelist={}",
                     tool.getToolName(), loginUser.getUserId(), userRoles, whitelist);
-            throw new ToolForbiddenException("当前角色无权调用工具：" + tool.getToolName());
+            throw new ToolForbiddenException(ToolGuardSignal.FORBIDDEN + tool.getToolName());
         }
     }
 

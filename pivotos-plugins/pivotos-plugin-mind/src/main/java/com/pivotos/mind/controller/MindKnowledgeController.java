@@ -28,7 +28,7 @@ import java.util.List;
 /**
  * 智域知识库接口
  */
-@Tag(name = "智域知识库", description = "枢磐·智域个人知识库")
+@Tag(name = "智域知识库", description = "PivotOS·智域个人知识库")
 @RestController
 @RequestMapping("/mind/knowledge")
 @RequiredArgsConstructor

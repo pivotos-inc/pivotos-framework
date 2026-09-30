@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
 
-/** 枢磐·智域认证编排实现 */
+/** PivotOS·智域认证编排实现 */
 @Service
 @RequiredArgsConstructor
 public class MindAuthServiceImpl implements MindAuthService {

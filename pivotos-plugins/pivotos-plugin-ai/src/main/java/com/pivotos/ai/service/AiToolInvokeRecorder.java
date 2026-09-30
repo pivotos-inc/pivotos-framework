@@ -3,21 +3,22 @@ package com.pivotos.ai.service;
 import com.pivotos.ai.enums.ToolInvokeStatus;
 
 /**
- * AI 工具调用审计记录器（S98 A2）
+ * 工具调用审计记录器（S98 A2；S116 A5-1 扩展编排维度）。
  *
- * <p>全量留痕口径：成功/失败/越权拒绝/预检拦截每次调用落一条 ai_tool_invoke，
- * 落库失败仅记 WARN 不阻断工具链路（审计是旁路，不是业务门禁）。
+ * <p>编排场景下额外落 {@code plan_id} / {@code step_no}：取值来自
+ * {@code OrchestratorStepContext} 的当前作用域（由 {@code PlanExecutor} 在逐步调用前绑定），
+ * 记录器本身不感知编排逻辑——这样普通工具调用（对话 / MCP / REST）的行为完全不变。
  */
 public interface AiToolInvokeRecorder {
 
     /**
-     * 记录一次工具调用
+     * 记录一次工具调用。
      *
-     * @param toolName 工具名
-     * @param args     入参原文（JSON，内部截断至 1000 字符）
-     * @param status   调用状态
-     * @param errorMsg 失败/拒绝原因（成功传 null，内部截断至 500 字符）
-     * @param costMs   执行耗时（毫秒）
+     * @param toolName  工具名
+     * @param args      入参原文（会自动截断）
+     * @param status    调用状态
+     * @param errorMsg  失败 / 拒绝原因
+     * @param costMs    执行耗时（毫秒）
      */
     void record(String toolName, String args, ToolInvokeStatus status, String errorMsg, long costMs);
 }

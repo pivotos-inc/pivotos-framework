@@ -3,6 +3,7 @@ package com.pivotos.ai.kb.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.pivotos.ai.kb.api.dto.KbSearchResultDTO;
+import com.pivotos.ai.kb.api.enums.KbType;
 import com.pivotos.ai.kb.domain.dto.KbBaseSaveRequest;
 import com.pivotos.ai.kb.domain.dto.KbBaseUpdateRequest;
 import com.pivotos.ai.kb.domain.entity.AiKbChunk;
@@ -117,6 +118,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private void fillEntity(KnowledgeBase entity, KbBaseSaveRequest request) {
         entity.setName(request.getName().strip());
+        entity.setKbType(normalizeKbType(request.getKbType()));
         entity.setDescription(request.getDescription());
         entity.setVectorStoreType(request.getVectorStoreType().toLowerCase());
         entity.setEmbeddingModel(StringUtils.hasText(request.getEmbeddingModel())
@@ -135,10 +137,26 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         }
     }
 
+    /**
+     * 知识库类型归一化（A4E / S117）：只认 policy / general 两个枚举值，
+     * 空值兜底 general，其余一律拒绝——自由文本会让「是否制度类」退化成字符串匹配。
+     */
+    private String normalizeKbType(String value) {
+        if (!StringUtils.hasText(value)) {
+            return KbType.GENERAL;
+        }
+        String trimmed = value.strip().toLowerCase();
+        if (KbType.POLICY.equals(trimmed) || KbType.GENERAL.equals(trimmed)) {
+            return trimmed;
+        }
+        throw new ServiceException("不支持的知识库类型: " + value);
+    }
+
     private KnowledgeBaseVO toVO(KnowledgeBase entity) {
         KnowledgeBaseVO vo = new KnowledgeBaseVO();
         vo.setId(entity.getId());
         vo.setName(entity.getName());
+        vo.setKbType(entity.getKbType());
         vo.setDescription(entity.getDescription());
         vo.setVectorStoreType(entity.getVectorStoreType());
         vo.setEmbeddingModel(entity.getEmbeddingModel());
