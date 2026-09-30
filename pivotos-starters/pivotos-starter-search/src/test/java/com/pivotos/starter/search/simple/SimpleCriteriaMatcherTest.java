@@ -140,4 +140,80 @@ class SimpleCriteriaMatcherTest {
         assertFalse(SimpleCriteriaMatcher.matches(map,
                 List.of(SearchCriteria.of("operTime", SearchOp.LT, SearchLogic.AND, base.minusDays(1)))));
     }
+
+    // ==================== S122：时间字符串 ↔ 时间对象归一 ====================
+    // 文档侧时间在「实体 → JSON → Map」后落成字符串（fastjson2：2026-09-30 10:30:15），
+    // 条件侧是 LocalDateTime 对象；不归一则时间条件在 simple 实现下恒不成立（返回空结果集）。
+
+    @Test
+    void shouldCompareSpaceSeparatedTimeStringWithLocalDateTimeCriteria() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("operTime", "2026-09-30 10:30:15");
+        LocalDateTime start = LocalDateTime.of(2026, 9, 1, 0, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 9, 30, 23, 59, 59);
+        assertTrue(SimpleCriteriaMatcher.matches(map,
+                List.of(SearchCriteria.of("operTime", SearchOp.BETWEEN, SearchLogic.AND, start, end))));
+        assertTrue(SimpleCriteriaMatcher.matches(map,
+                List.of(SearchCriteria.of("operTime", SearchOp.GE, SearchLogic.AND, start))));
+        assertFalse(SimpleCriteriaMatcher.matches(map,
+                List.of(SearchCriteria.of("operTime", SearchOp.LT, SearchLogic.AND, start))));
+    }
+
+    @Test
+    void shouldCompareIsoTSeparatedTimeString() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("operTime", "2026-09-30T10:30:15");
+        LocalDateTime start = LocalDateTime.of(2026, 9, 30, 0, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 10, 1, 0, 0);
+        assertTrue(SimpleCriteriaMatcher.matches(map,
+                List.of(SearchCriteria.of("operTime", SearchOp.BETWEEN, SearchLogic.AND, start, end))));
+    }
+
+    @Test
+    void shouldCompareOffsetAndInstantTimeString() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("operTime", "2026-09-30T10:30:15+08:00");
+        assertTrue(SimpleCriteriaMatcher.matches(map,
+                List.of(SearchCriteria.of("operTime", SearchOp.GT, SearchLogic.AND,
+                        java.time.Instant.parse("2026-09-30T00:00:00Z")))));
+
+        Map<String, Object> instantDoc = new HashMap<>();
+        instantDoc.put("operTime", "2026-09-30T02:30:15Z");
+        assertFalse(SimpleCriteriaMatcher.matches(instantDoc,
+                List.of(SearchCriteria.of("operTime", SearchOp.LT, SearchLogic.AND,
+                        java.time.Instant.parse("2026-09-30T02:00:00Z")))));
+    }
+
+    @Test
+    void shouldComparePureDateStringWithLocalDateCriteria() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("operTime", "2026-09-30");
+        assertTrue(SimpleCriteriaMatcher.matches(map,
+                List.of(SearchCriteria.of("operTime", SearchOp.GE, SearchLogic.AND,
+                        java.time.LocalDate.of(2026, 9, 1)))));
+        assertFalse(SimpleCriteriaMatcher.matches(map,
+                List.of(SearchCriteria.of("operTime", SearchOp.LT, SearchLogic.AND,
+                        java.time.LocalDate.of(2026, 9, 1)))));
+    }
+
+    @Test
+    void shouldTreatUnparsableTextAsNotComparableWhenOtherSideIsTemporal() {
+        // 一侧是真时间、另一侧是解析不出的文本：不可比 → 条件不成立（不退化成字符串比较而意外命中）
+        Map<String, Object> map = new HashMap<>();
+        map.put("operTime", "不是时间");
+        assertFalse(SimpleCriteriaMatcher.matches(map,
+                List.of(SearchCriteria.of("operTime", SearchOp.GE, SearchLogic.AND,
+                        LocalDateTime.of(2026, 1, 1, 0, 0)))));
+        assertTrue(SimpleCriteriaMatcher.matches(map,
+                List.of(SearchCriteria.of("operTime", SearchOp.IS_NOT_NULL, SearchLogic.AND))));
+    }
+
+    @Test
+    void shouldKeepStringOrderingForNonTemporalText() {
+        // 非时间文本仍走字符串比较（String vs String 语义不变）
+        Map<String, Object> map = new HashMap<>();
+        map.put("module", "用户管理");
+        assertTrue(SimpleCriteriaMatcher.matches(map,
+                List.of(SearchCriteria.of("module", SearchOp.GT, SearchLogic.AND, "aaa"))));
+    }
 }

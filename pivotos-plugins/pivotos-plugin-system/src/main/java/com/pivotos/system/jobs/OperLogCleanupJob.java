@@ -6,6 +6,7 @@ import com.pivotos.starter.job.api.JobExecutionRecorder;
 import com.pivotos.starter.job.api.JobHandlerRegistry;
 import com.pivotos.system.domain.entity.SysOperLog;
 import com.pivotos.system.mapper.SysOperLogMapper;
+import com.pivotos.system.search.OperLogSearchSupport;
 import com.xxl.job.core.handler.annotation.XxlJob;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -15,6 +16,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * Operation log cleanup scheduled job.
@@ -38,16 +41,19 @@ public class OperLogCleanupJob {
     private final SysOperLogMapper operLogMapper;
     private final ObjectProvider<JobExecutionRecorder> recorder;
     private final JobHandlerRegistry registry;
+    private final OperLogSearchSupport searchSupport;
 
     @Value("${pivotos.job.oper-log-retention-days:180}")
     private int retentionDays;
 
     public OperLogCleanupJob(SysOperLogMapper operLogMapper,
                              ObjectProvider<JobExecutionRecorder> recorder,
-                             JobHandlerRegistry registry) {
+                             JobHandlerRegistry registry,
+                             OperLogSearchSupport searchSupport) {
         this.operLogMapper = operLogMapper;
         this.recorder = recorder;
         this.registry = registry;
+        this.searchSupport = searchSupport;
     }
 
     /** 自注册：支持管理端手动触发 */
@@ -68,9 +74,21 @@ public class OperLogCleanupJob {
         log.info("[Job] OperLog cleanup started: retentionDays={}", retentionDays);
 
         LocalDateTime cutoffTime = LocalDateTime.now().minusDays(retentionDays);
-        LambdaQueryWrapper<SysOperLog> wrapper = new LambdaQueryWrapper<>();
-        wrapper.lt(SysOperLog::getOperTime, cutoffTime);
-        int deletedCount = operLogMapper.delete(wrapper);
+        // 先取主键再删表：索引侧只能按 id 删（S122 双写后索引与表必须同生共死，否则检索会命中已删数据）
+        LambdaQueryWrapper<SysOperLog> idQuery = new LambdaQueryWrapper<>();
+        idQuery.lt(SysOperLog::getOperTime, cutoffTime).select(SysOperLog::getId);
+        List<Long> ids = operLogMapper.selectList(idQuery).stream()
+                .map(SysOperLog::getId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        int deletedCount = 0;
+        if (!ids.isEmpty()) {
+            LambdaQueryWrapper<SysOperLog> deleteQuery = new LambdaQueryWrapper<>();
+            deleteQuery.lt(SysOperLog::getOperTime, cutoffTime);
+            deletedCount = operLogMapper.delete(deleteQuery);
+        }
+        searchSupport.deleteByIds(ids);
 
         log.info("[Job] OperLog cleanup done: deleted={}, cutoffTime={}", deletedCount, cutoffTime);
     }

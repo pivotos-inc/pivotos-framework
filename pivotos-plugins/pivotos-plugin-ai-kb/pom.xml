@@ -95,5 +95,23 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
+
+        <!-- 检索抽象契约（S122）：只依赖 -api（零 Spring / 零第三方 / 零 ES） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search-api</artifactId>
+        </dependency>
+
+        <!-- 测试：主 Starter（含 simple 内存兜底）+ Spring Boot Test（本插件首个 IT 基建） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

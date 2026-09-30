@@ -62,6 +62,29 @@ class SearchTemplateImplTest {
         assertEquals(LocalDateTime.of(2026, 1, 1, 0, 0), first.getOperTime());
     }
 
+    /**
+     * S122 回归：文档侧时间是字符串、条件侧是 LocalDateTime，时间区间必须真能检出
+     * （修复前 between 恒判 false，表现为「带时间区间的查询永远返回空」）。
+     */
+    @Test
+    void shouldSupportTimeRangeAfterJsonRoundTrip() {
+        SearchPage<OperLogDoc> page = template.search(LambdaSearchQuery.of(OperLogDoc.class)
+                .between(OperLogDoc::getOperTime, LocalDateTime.of(2025, 12, 31, 0, 0),
+                        LocalDateTime.of(2026, 1, 3, 23, 59, 59))
+                .page(1, 10));
+        assertEquals(3, page.getTotal());
+        assertTrue(page.getRecords().stream()
+                .allMatch(d -> !d.getOperTime().isAfter(LocalDateTime.of(2026, 1, 3, 23, 59, 59))));
+
+        // 端点闭合：GE 命中端点值本身
+        assertEquals(5, template.search(LambdaSearchQuery.of(OperLogDoc.class)
+                .ge(OperLogDoc::getOperTime, LocalDateTime.of(2026, 1, 1, 0, 0))
+                .page(1, 10)).getTotal());
+        assertEquals(1, template.search(LambdaSearchQuery.of(OperLogDoc.class)
+                .lt(OperLogDoc::getOperTime, LocalDateTime.of(2026, 1, 2, 0, 0))
+                .page(1, 10)).getTotal());
+    }
+
     @Test
     void shouldFilterWithLambdaConditions() {
         SearchPage<OperLogDoc> page = template.search(LambdaSearchQuery.of(OperLogDoc.class)

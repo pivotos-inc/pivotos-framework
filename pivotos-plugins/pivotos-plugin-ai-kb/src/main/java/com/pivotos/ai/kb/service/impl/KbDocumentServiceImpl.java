@@ -12,10 +12,12 @@ import com.pivotos.ai.kb.enums.KbDocStatusEnum;
 import com.pivotos.ai.kb.mapper.AiKbChunkMapper;
 import com.pivotos.ai.kb.mapper.KbDocumentMapper;
 import com.pivotos.ai.kb.mapper.KnowledgeBaseMapper;
+import com.pivotos.ai.kb.search.KbDocSearchSupport;
 import com.pivotos.ai.kb.service.KbDocumentService;
 import com.pivotos.ai.kb.service.KbPipelineService;
 import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.page.PageResult;
+import com.pivotos.starter.search.api.template.SearchPage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,9 +36,22 @@ public class KbDocumentServiceImpl implements KbDocumentService {
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final AiKbChunkMapper chunkMapper;
     private final KbPipelineService pipelineService;
+    private final KbDocSearchSupport searchSupport;
 
+    /**
+     * 分页查询文档：默认走检索抽象（S122），检索不可用时回退 MyBatis-Plus。
+     */
     @Override
     public PageResult<KbDocumentVO> page(KbDocPageQuery query) {
+        SearchPage<KbDocument> searched = searchSupport.search(query);
+        if (searched != null) {
+            List<KbDocumentVO> list = searched.getRecords().stream().map(this::toVO).toList();
+            return new PageResult<>(list, searched.getTotal(), searched.getPageNum(), searched.getPageSize());
+        }
+        return pageFromDb(query);
+    }
+
+    private PageResult<KbDocumentVO> pageFromDb(KbDocPageQuery query) {
         var wrapper = Wrappers.<KbDocument>lambdaQuery()
                 .eq(query.getKbId() != null, KbDocument::getKbId, query.getKbId())
                 .like(StringUtils.hasText(query.getFileName()), KbDocument::getFileName, query.getFileName())
@@ -72,6 +87,8 @@ public class KbDocumentServiceImpl implements KbDocumentService {
         entity.setVectorCount(0);
         entity.setChunkCount(0);
         documentMapper.insert(entity);
+        // 双写检索索引（S122）：索引写失败不影响上传主链路
+        searchSupport.index(entity);
 
         // 同步触发向量化（大文件后续可改异步）
         pipelineService.index(kb, entity);
@@ -85,6 +102,8 @@ public class KbDocumentServiceImpl implements KbDocumentService {
         KnowledgeBase kb = requireKnowledgeBase(entity.getKbId());
         pipelineService.deleteByDoc(kb, entity);
         documentMapper.deleteById(id);
+        // 索引与表同生共死：表删了索引还留着，列表页会查出已删文档
+        searchSupport.deleteById(id);
     }
 
     @Override
@@ -94,6 +113,7 @@ public class KbDocumentServiceImpl implements KbDocumentService {
         // 先删除旧向量，再重新索引
         pipelineService.deleteByDoc(kb, entity);
         pipelineService.index(kb, entity);
+        searchSupport.index(requireDocument(id));
     }
 
     @Override

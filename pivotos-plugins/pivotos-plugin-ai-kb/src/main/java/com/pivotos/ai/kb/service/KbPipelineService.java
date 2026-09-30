@@ -12,6 +12,7 @@ import com.pivotos.ai.kb.mapper.AiKbChunkMapper;
 import com.pivotos.ai.kb.mapper.KbDocumentMapper;
 import com.pivotos.ai.kb.retriever.Bm25Retriever;
 import com.pivotos.ai.kb.retriever.RrfFusion;
+import com.pivotos.ai.kb.search.KbDocSearchSupport;
 import com.pivotos.ai.kb.splitter.SemanticChunkSplitter;
 import com.pivotos.ai.kb.vectorstore.KbVectorStoreFactory;
 import com.pivotos.file.api.facade.IFileFacade;
@@ -50,6 +51,8 @@ public class KbPipelineService {
     private final OcrExtractor ocrExtractor;
     /** 重排契约（S65）：plugin-ai 未装配或无配置时静默降级为原召回顺序 */
     private final ObjectProvider<IRerankFacade> rerankFacadeProvider;
+    /** S122：文档状态/块数变化要同步回检索索引，否则列表页会看到过期的状态 */
+    private final KbDocSearchSupport searchSupport;
 
     /**
      * 对指定文档执行向量化索引。
@@ -146,12 +149,15 @@ public class KbPipelineService {
                     .set(KbDocument::getVectorCount, chunks.size())
                     .set(KbDocument::getChunkCount, chunks.size())
                     .set(KbDocument::getErrorMsg, null));
+            // 同步检索索引：状态/块数已变，索引不跟上会导致列表页显示旧的「处理中」
+            searchSupport.index(doc);
             log.info("[PivotOS-KB] 文档向量化完成: kbId={}, docId={}, chunks={}", kb.getId(), doc.getId(), chunks.size());
         } catch (Exception e) {
             log.error("[PivotOS-KB] 文档向量化失败: kbId={}, docId={}", kb.getId(), doc.getId(), e);
             doc.setStatus(KbDocStatusEnum.FAILED.getValue());
             doc.setErrorMsg(e.getMessage());
             documentMapper.updateById(doc);
+            searchSupport.index(doc);
         }
     }
 
@@ -305,6 +311,7 @@ public class KbPipelineService {
                 .eq(KbDocument::getId, doc.getId())
                 .set(KbDocument::getStatus, status.getValue())
                 .set(KbDocument::getErrorMsg, errorMsg));
+        searchSupport.index(doc);
     }
 
     /** 计算字符串 MD5（用于文本块 content_hash 去重） */

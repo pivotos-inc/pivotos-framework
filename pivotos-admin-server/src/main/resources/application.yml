@@ -111,6 +111,16 @@ pivotos:
     type: ${PIVOTOS_SEARCH_TYPE:simple}
     # 多环境共用一套 ES 时用它做索引名前缀隔离，留空表示不加前缀
     index-prefix: ${PIVOTOS_SEARCH_INDEX_PREFIX:}
+    # S122 业务检索开关：每条链路可单独关（关闭即回到 MyBatis 查询，零数据/零迁移的一键回滚）
+    # 数据来源：写侧双写索引 + 起服时索引为空则从数据库全量回灌（simple 内存实现重启即失，靠它恢复）
+    oper-log:
+      enabled: ${PIVOTOS_SEARCH_OPER_LOG_ENABLED:true}
+      bootstrap-on-start: true
+      bootstrap-max-rows: 50000
+    kb-doc:
+      enabled: ${PIVOTOS_SEARCH_KB_DOC_ENABLED:true}
+      bootstrap-on-start: true
+      bootstrap-max-rows: 20000
   workflow:
     # D1（v2.14.0）：旧内置设计器（warm-flow 自带 jar，/warm-flow-ui/）入口退役。
     # false / 缺省 —— 守卫拦截旧入口（HTTP 410 + code=4100），单入口为 bpmn-js 新版设计器；
