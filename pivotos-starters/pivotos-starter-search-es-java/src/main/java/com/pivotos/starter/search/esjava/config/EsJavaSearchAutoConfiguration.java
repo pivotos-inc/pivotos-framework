@@ -41,8 +41,9 @@ public class EsJavaSearchAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(EsJavaSearchProvider.class)
-    public EsJavaSearchProvider esJavaSearchProvider(ElasticsearchClient client) {
+    public EsJavaSearchProvider esJavaSearchProvider(ElasticsearchClient client, SearchProperties properties) {
         log.info("[PivotOS] 搜索 Provider 已注册：{}", SearchProviderType.ES_JAVA.getCode());
-        return new EsJavaSearchProvider(client);
+        return new EsJavaSearchProvider(client, properties.getEsJava() != null
+                && properties.getEsJava().isRefreshOnWrite());
     }
 }

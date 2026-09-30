@@ -84,5 +84,12 @@ public class SearchProperties {
          * 兼容模式：用 8.x 客户端连 7.17 服务端时置 true（官方 compatibility header）
          */
         private boolean compatibilityMode = false;
+
+        /**
+         * 写入后是否等待刷新（ES 近实时：默认写后最多 1s 才可检索）。
+         * 置 true = 写后立即可检索（refresh=wait_for），代价是每次索引写入多一次 refresh 开销，
+         * 高频写链路（如操作日志）不建议开；默认 false。
+         */
+        private boolean refreshOnWrite = false;
     }
 }

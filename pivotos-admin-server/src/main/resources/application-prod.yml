@@ -68,6 +68,11 @@ pivotos:
     port: 9999
     group-id: 3   # XXL-Job admin 中 pivotos-executor 执行器组 ID
     access-token: 123456
+  # 检索（S121/S122）：生产环境 ES 尚未部署，显式保持 simple（进程内内存兜底，重启即失）。
+  # 部署 ES 后：引入 pivotos-starter-search-es-java 并把 type 改为 es-java、补 es-java.uris/username/password 即可，
+  # 业务代码零改动；检索不可用时链路自动回退数据库查询。
+  search:
+    type: ${PIVOTOS_SEARCH_TYPE:simple}
   # 微信小程序（测试号）
   wechat:
     miniapp:

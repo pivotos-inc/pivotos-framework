@@ -3,7 +3,12 @@ package com.pivotos.starter.search.esjava;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.FieldSort;
 import co.elastic.clients.elasticsearch._types.SortOptions;
+import co.elastic.clients.elasticsearch._types.Refresh;
 import co.elastic.clients.elasticsearch._types.SortOrder;
+import co.elastic.clients.elasticsearch._types.mapping.DynamicTemplate;
+import co.elastic.clients.elasticsearch._types.mapping.KeywordProperty;
+import co.elastic.clients.elasticsearch._types.mapping.Property;
+import co.elastic.clients.elasticsearch._types.mapping.TypeMapping;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.core.CountRequest;
 import co.elastic.clients.elasticsearch.core.DeleteRequest;
@@ -14,6 +19,7 @@ import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.elasticsearch.core.search.TrackHits;
 import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
 import co.elastic.clients.elasticsearch.indices.ExistsRequest;
+import co.elastic.clients.util.NamedValue;
 import com.pivotos.starter.search.api.document.SearchDocument;
 import com.pivotos.starter.search.api.document.SearchHit;
 import com.pivotos.starter.search.api.document.SearchResult;
@@ -42,8 +48,16 @@ public class EsJavaSearchProvider implements SearchProvider {
 
     private final ElasticsearchClient client;
 
+    /** 写入后是否 wait_for 刷新（ES 近实时权衡，见 SearchProperties.EsJava#refreshOnWrite） */
+    private final boolean refreshOnWrite;
+
     public EsJavaSearchProvider(ElasticsearchClient client) {
+        this(client, false);
+    }
+
+    public EsJavaSearchProvider(ElasticsearchClient client, boolean refreshOnWrite) {
         this.client = client;
+        this.refreshOnWrite = refreshOnWrite;
     }
 
     @Override
@@ -58,6 +72,8 @@ public class EsJavaSearchProvider implements SearchProvider {
                 .index(document.getIndexName())
                 .id(document.getId())
                 .document(document.getSource())
+                // ES 默认近实时（1s refresh）；refreshOnWrite=true 时改为 wait_for，写后立即可检索
+                .refresh(refreshOnWrite ? Refresh.WaitFor : Refresh.False)
                 .build()));
     }
 
@@ -114,10 +130,31 @@ public class EsJavaSearchProvider implements SearchProvider {
         return Boolean.TRUE.equals(exists);
     }
 
+    /**
+     * 建索引（不存在时）。<b>必须带 mapping</b>，不能交给动态映射：
+     * ES 动态映射会把字符串落成 {@code text}（standard 分词），而本抽象的条件语义是
+     * <b>确定性过滤</b>（eq / like / 时间区间），打在分词后的 text 字段上会静默失效——
+     * 中文场景实测：{@code term(module:"用户管理")} 命中 0、{@code wildcard(module:"*用户*")} 命中 0
+     * （分词成单字），而同样条件打 {@code keyword} 命中正常。
+     * 故这里用 dynamic_templates 把所有字符串字段落成 keyword（与 simple 实现的「整值比较」语义一致）。
+     * <p>时间以定长字符串 {@code yyyy-MM-dd HH:mm:ss} 存放，keyword 的字典序 = 时间序，区间与排序均正确。
+     */
     @Override
     public void createIndexIfAbsent(String indexName) {
+        TypeMapping mapping = new TypeMapping.Builder()
+                .dynamicTemplates(NamedValue.of("strings_as_keywords", new DynamicTemplate.Builder()
+                        .matchMappingType("string")
+                        .mapping(new Property.Builder().keyword(new KeywordProperty.Builder()
+                                .ignoreAbove(8191)
+                                .build())
+                                .build())
+                        .build()))
+                .build();
         try {
-            execute(() -> client.indices().create(new CreateIndexRequest.Builder().index(indexName).build()));
+            execute(() -> client.indices().create(new CreateIndexRequest.Builder()
+                    .index(indexName)
+                    .mappings(mapping)
+                    .build()));
         } catch (SearchException e) {
             // 索引已存在时 ES 返回 400 resource_already_exists_exception，属预期，降级为 debug
             log.debug("[PivotOS][search] es-java 索引 {} 创建跳过（可能已存在）：{}", indexName, e.getMessage());

@@ -101,12 +101,17 @@ class EsJavaQueryBuilderTest {
         assertTrue(json.contains("\"exists\""), json);
     }
 
+    /**
+     * MATCH 在 ES 侧用 wildcard「包含」表达，与 simple 实现的语义对齐（simple 是 contains、无分词）。
+     * 不能翻译成 ES 的 match：索引里字符串一律 keyword（见 EsJavaSearchProvider#createIndexIfAbsent），
+     * match 打在分词字段上会导致中文检索静默失效。
+     */
     @Test
-    void shouldBuildMatchForFullText() {
+    void shouldBuildWildcardContainsForMatch() {
         String json = json(EsJavaQueryBuilder.build(List.of(
                 SearchCriteria.of("title", SearchOp.MATCH, SearchLogic.AND, "登录失败"))));
-        assertTrue(json.contains("\"match\""), json);
-        assertTrue(json.contains("登录失败"), json);
+        assertTrue(json.contains("\"wildcard\""), json);
+        assertTrue(json.contains("*登录失败*"), json);
     }
 
     @Test
@@ -126,13 +131,18 @@ class EsJavaQueryBuilderTest {
         assertTrue(json.contains("minimum_should_match"), json);
     }
 
+    /**
+     * 时间条件必须落成索引里时间的真实形态：<b>定长字符串</b>。
+     * 曾错转成 epoch 毫秒——而 ES 里存的是 {@code "2026-09-30 22:38:20"}（keyword），
+     * 结果是「数字 vs 字符串」比大小，命中恒为 0 且不报错（真机实测才暴露）。
+     */
     @Test
-    void shouldNormalizeTemporalValueToEpochMillis() {
+    void shouldNormalizeTemporalValueToIndexedStringForm() {
         LocalDateTime time = LocalDateTime.of(2026, 9, 30, 12, 0);
         String json = json(EsJavaQueryBuilder.build(List.of(
                 SearchCriteria.of("operTime", SearchOp.GE, SearchLogic.AND, time))));
-        // 时间统一转 epoch 毫秒，避免 JSON 里出现 LocalDateTime 对象导致 ES 无法解析
-        assertTrue(json.matches(".*\"gte\":\\s*\\d+.*"), json);
+        assertTrue(json.contains("\"gte\": \"2026-09-30 12:00:00\"")
+                        || json.contains("\"gte\":\"2026-09-30 12:00:00\""), json);
     }
 
     @Test

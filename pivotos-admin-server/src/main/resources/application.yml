@@ -111,6 +111,18 @@ pivotos:
     type: ${PIVOTOS_SEARCH_TYPE:simple}
     # 多环境共用一套 ES 时用它做索引名前缀隔离，留空表示不加前缀
     index-prefix: ${PIVOTOS_SEARCH_INDEX_PREFIX:}
+    # es-java 实现（官方 elasticsearch-java 8.19.18，面向 ES 8.x/9.x）。
+    # 未引入 pivotos-starter-search-es-java 模块时，即便 type=es-java 也会回落到 simple 并打 WARN（配错也能起服）。
+    # 具体地址/口令写在各环境的 application-{profile}.yml（dev 用 175.24.176.176，test 用 10.0.0.7）。
+    es-java:
+      uris: ${PIVOTOS_ES_JAVA_URIS:http://localhost:9200}
+      username: ${PIVOTOS_ES_JAVA_USERNAME:}
+      password: ${PIVOTOS_ES_JAVA_PASSWORD:}
+      connect-timeout: 3000
+      socket-timeout: 30000
+      # ES 默认近实时（写后最多 1s 才可检索）。置 true 改为 refresh=wait_for：写后立即可检索，
+      # 代价是每次索引写入多一次 refresh 开销，高频写链路（操作日志）不建议开。
+      refresh-on-write: ${PIVOTOS_ES_JAVA_REFRESH_ON_WRITE:false}
     # S122 业务检索开关：每条链路可单独关（关闭即回到 MyBatis 查询，零数据/零迁移的一键回滚）
     # 数据来源：写侧双写索引 + 起服时索引为空则从数据库全量回灌（simple 内存实现重启即失，靠它恢复）
     oper-log:

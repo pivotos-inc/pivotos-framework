@@ -52,12 +52,17 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-excel</artifactId>
         </dependency>
-        <!-- search Starter（S121）：只引主 Starter（含 simple 内存兜底），
-             刻意不引 easy-es / es-java 两个实现模块——不带来任何第三方搜索引擎依赖，
-             无 ES 环境零配置即可起服；需要接 ES 时按需引入对应实现模块并配 pivotos.search.type -->
+        <!-- search Starter（S121）：主 Starter（含 simple 内存兜底）+ es-java 实现（ES 8.x/9.x）。
+             S121-D2 的「只引主 Starter」在真接 ES 时按约定放开这一行：dev/test 已配 ES 地址
+             （175.24.176.176 / 10.0.0.7），type=es-java 时走真 ES；未配或连不上时检索自动回退数据库查询，
+             业务不受影响。es-java 与 easy-es 两个实现模块绝不可同时引入（同一 GA 坐标版本互斥）。 -->
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-search</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search-es-java</artifactId>
         </dependency>
 
         <!-- ===== 业务 Plugin（system-api/message-api 由 plugin 传递带入） ===== -->

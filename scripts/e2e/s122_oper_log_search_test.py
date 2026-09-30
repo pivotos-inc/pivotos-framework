@@ -17,6 +17,7 @@ import sys
 from datetime import datetime, timedelta
 
 import pymysql
+import time
 import requests
 
 BASE = "http://localhost:8080"
@@ -104,6 +105,8 @@ check("PASS4", 0 < filtered["total"] <= total,
 
 # ── Step 5: 纯 SQL 插入的行不进索引（证明读的是索引不是 DB） ───
 log("STEP5", f"SQL 插入哨兵行 module={SENTINEL_MODULE}")
+# 幂等：上一轮若中途失败会留下哨兵行，先清掉再插（否则主键冲突，脚本无法重复执行）
+sql_execute("DELETE FROM sys_oper_log WHERE module=%s", (SENTINEL_MODULE,))
 sql_execute(
     "INSERT INTO sys_oper_log (id, module, oper_type, oper_name, oper_user_id, method, "
     "request_method, request_url, request_params, status, duration, oper_time, "
@@ -121,6 +124,9 @@ log("STEP6", "触发 @Log 埋点接口 POST /system/user/export")
 before = page({"pageNum": 1, "pageSize": 1, "module": "用户管理"})["total"]
 r = requests.post(f"{BASE}/system/user/export", json={}, headers=HDR, timeout=120)
 log("STEP6", f"导出接口 HTTP {r.status_code}（导出成功/权限不足均不影响本断言，重点是 @Log 落库）")
+# ES 实现是近实时（默认 1s refresh）：写后最多 1s 才可检索，这里等 2s 再断言。
+# simple 实现是同步的，等待同样无害——本脚本需在两种实现下都能过。
+time.sleep(2)
 after = page({"pageNum": 1, "pageSize": 1, "module": "用户管理"})["total"]
 check("PASS6", after > before,
       f"用户管理 日志数 {before} → {after}（@Log 切面写入后经双写进入索引，立即可被检索）")

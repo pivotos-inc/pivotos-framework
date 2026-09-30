@@ -4,7 +4,6 @@ import co.elastic.clients.elasticsearch._types.FieldValue;
 import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.ExistsQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.MatchAllQuery;
-import co.elastic.clients.elasticsearch._types.query_dsl.MatchQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.RangeQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.TermQuery;
@@ -20,6 +19,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.Date;
@@ -34,6 +34,10 @@ import java.util.List;
  * @since 2.16.0
  */
 public final class EsJavaQueryBuilder {
+
+    /** 索引内时间的字符串格式（与 SearchEntityMapper 序列化后的形态一致，定长故字典序 = 时间序） */
+    private static final DateTimeFormatter TIME_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private EsJavaQueryBuilder() {
     }
@@ -79,8 +83,9 @@ public final class EsJavaQueryBuilder {
                     JsonData.of(normalize(c.getValues().get(1))), true, true);
             case IS_NULL -> not(exists(field));
             case IS_NOT_NULL -> exists(field);
-            case MATCH -> new Query.Builder().match(new MatchQuery.Builder()
-                    .field(field).query(String.valueOf(c.value())).build()).build();
+            // MATCH 对齐 simple 实现的语义：simple 下是「任一字符串字段包含」（无分词），
+            // 而 ES 的 match 是分词检索，两者语义不同；索引里字符串一律 keyword，故用 wildcard 表达「包含」。
+            case MATCH -> wildcard(field, "*" + c.value() + "*");
         };
     }
 
@@ -138,20 +143,26 @@ public final class EsJavaQueryBuilder {
     }
 
     /**
-     * 值归一化：时间统一转 epoch 毫秒（ES date 字段的默认存储口径），其余原样
+     * 值归一化：<b>时间统一转定长字符串 {@code yyyy-MM-dd HH:mm:ss}</b>，其余原样。
+     * <p>为什么不是 epoch 毫秒（2026-09-30 真机实测纠正）：索引里的文档来自
+     * {@code SearchEntityMapper}（实体 → JSON → Map），时间经序列化后落到 ES 里是
+     * <b>字符串</b>（dynamic_templates 又把它映射成 keyword），实测存的形态就是
+     * {@code "2026-09-30 22:38:20"}。若条件侧转 epoch 毫秒，就是「数字 vs keyword 字符串」比大小，
+     * 命中恒为 0 且不报错——和 simple 侧「时间字符串不参与比较」是同一类静默失效。
+     * 定长格式的字典序 = 时间序，故 keyword 上的区间与排序均正确。
      */
     private static Object normalize(Object value) {
         if (value instanceof Date d) {
-            return d.getTime();
+            return TIME_FORMAT.format(LocalDateTime.ofInstant(d.toInstant(), ZoneId.systemDefault()));
         }
         if (value instanceof Instant i) {
-            return i.toEpochMilli();
+            return TIME_FORMAT.format(LocalDateTime.ofInstant(i, ZoneId.systemDefault()));
         }
         if (value instanceof LocalDateTime ldt) {
-            return ldt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+            return TIME_FORMAT.format(ldt);
         }
         if (value instanceof LocalDate ld) {
-            return ld.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+            return TIME_FORMAT.format(ld.atStartOfDay());
         }
         return value == null ? "" : value;
     }
