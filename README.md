@@ -1,6 +1,6 @@
 # PivotOS Framework（pivotos-framework）
 
-> PivotOS「一码三端」企业管理平台 —— 后端全部模块（Maven 多模块单仓），开发者：胡伟龙（Alex）
+> PivotOS「一码三端」企业管理平台 —— 后端全部模块（Maven 多模块单仓），开发者：[胡伟龙（Alex）](https://www.293242.com/)
 >
 > 📖 在线文档：[pivotos-doc.293242.com](https://pivotos-doc.293242.com) ｜ 🖥️ PC 演示：[pivotos-pc.293242.com](https://pivotos-pc.293242.com) ｜ 📱 H5 演示：[pivotos-h5.293242.com](https://pivotos-h5.293242.com) ｜ [Apache-2.0](./LICENSE)
 
@@ -116,6 +116,6 @@ source .env.dev && java -jar pivotos-admin-server/target/pivotos-admin-server.ja
 
 ## License
 
-[Apache License 2.0](./LICENSE) · Copyright 2026 胡伟龙（Alex）
+[Apache License 2.0](./LICENSE) · Copyright 2026 [胡伟龙（Alex）](https://www.293242.com/)
 
 凭据安全约定：`.env.dev` 等含真实凭据的文件一律不入库（`.gitignore` 已覆盖）；配置文件中凭据一律 `${ENV_VAR:}` 占位经环境变量注入。
