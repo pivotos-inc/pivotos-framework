@@ -26,6 +26,11 @@
         <module>pivotos-starter-excel</module>
         <module>pivotos-starter-datascope</module>
         <module>pivotos-starter-job</module>
+        <!-- ST-SEARCH（S121）：契约包 + 主 Starter（simple 兜底）+ Easy-ES / elasticsearch-java 双实现 -->
+        <module>pivotos-starter-search-api</module>
+        <module>pivotos-starter-search</module>
+        <module>pivotos-starter-search-easy-es</module>
+        <module>pivotos-starter-search-es-java</module>
     </modules>
 
     <dependencyManagement>

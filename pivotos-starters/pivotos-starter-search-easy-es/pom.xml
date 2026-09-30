@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-starters</artifactId>
+        <version>2.15.0</version>
+    </parent>
+
+    <artifactId>pivotos-starter-search-easy-es</artifactId>
+
+    <name>pivotos-starter-search-easy-es</name>
+    <description>ST-SEARCH 实现一：Easy-ES（easy-es-core 3.0.2，内嵌 elasticsearch-java 7.17.28，面向 ES 7.17）</description>
+
+    <dependencies>
+        <!-- 契约包（不依赖主 Starter，保持实现模块可独立引入） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search-api</artifactId>
+        </dependency>
+
+        <!-- ⚠️ 只引 easy-es-core，刻意不引 easy-es-spring：
+             后者的自动装配基线是 Spring Boot 2.7.16 / Spring 5.3.30，与本项目 Spring Boot 4.1 不匹配
+             （ClassPathMapperScanner / MapperScannerConfigurer 在 Spring 6+ 已迁包）。
+             客户端与 Mapper 实例一律自建。 -->
+        <dependency>
+            <groupId>org.dromara.easy-es</groupId>
+            <artifactId>easy-es-core</artifactId>
+        </dependency>
+
+        <!-- ⚠️ 版本隔离例外（二）：easy-es-core 3.0.2 编译期依赖的底层客户端是
+             co.elastic.clients:elasticsearch-java 7.17.28（面向 ES 7.17）。但 easy-es-parent 的
+             dependencyManagement 会被本项目 BOM 里 import 的 spring-boot-dependencies 覆盖
+             （实测被仲裁到 9.4.2），导致 easy-es 运行期按 7.17 API 调用 9.x 客户端必炸。
+             故此处显式把版本钉回 7.17.28（含其底层 rest-client），与 es-java 实现模块的 8.19.x 分模块隔离。 -->
+        <dependency>
+            <groupId>co.elastic.clients</groupId>
+            <artifactId>elasticsearch-java</artifactId>
+            <version>7.17.28</version>
+        </dependency>
+        <dependency>
+            <groupId>org.elasticsearch.client</groupId>
+            <artifactId>elasticsearch-rest-client</artifactId>
+            <version>7.17.28</version>
+        </dependency>
+
+        <!-- JacksonJsonpMapper 依赖 Jackson 2（com.fasterxml），与 Jackson 3（tools.jackson）包名不同可共存 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <!-- 测试 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

@@ -196,6 +196,13 @@
                 <artifactId>jackson-datatype-jsr310</artifactId>
                 <version>${jackson2.version}</version>
             </dependency>
+            <!-- Jackson 2（com.fasterxml）：ES 官方客户端的 JacksonJsonpMapper 依赖它，
+                 与项目主用的 Jackson 3（tools.jackson）包名不同可共存，故单列版本不参与 Spring Boot 仲裁 -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson2.version}</version>
+            </dependency>
 
             <!-- ========== MapStruct-Plus ========== -->
             <dependency>
@@ -286,6 +293,18 @@
                 <artifactId>easy-es-boot-starter</artifactId>
                 <version>${easy-es.version}</version>
             </dependency>
+            <!-- S121：只引 easy-es-core（含 wrapper/DSL 与底层 es-java 7.17.28），
+                 刻意不引 easy-es-boot-starter —— 后者会带入 easy-es-spring（Spring Boot 2.7 基线，
+                 与本项目 Spring Boot 4.1 不兼容） -->
+            <dependency>
+                <groupId>org.dromara.easy-es</groupId>
+                <artifactId>easy-es-core</artifactId>
+                <version>${easy-es.version}</version>
+            </dependency>
+            <!-- 注：co.elastic.clients:elasticsearch-java 刻意不在本 BOM 仲裁。
+                 Easy-ES 3.0.2 把同一 GA 锁在 7.17.28（面向 ES 7.17），而 es-java 实现需要 8.19.x
+                 （面向 ES 8.x/9.x）；若在此统一仲裁会覆盖 easy-es 内部的 7.17.28 导致其运行期不兼容。
+                 两个实现模块各自隔离，且绝不同时被同一应用引入。 -->
             <dependency>
                 <groupId>org.elasticsearch</groupId>
                 <artifactId>elasticsearch</artifactId>
@@ -417,6 +436,26 @@
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-starter-job</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-search-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-search</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-search-easy-es</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-search-es-java</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
