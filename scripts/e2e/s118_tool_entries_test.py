@@ -200,6 +200,16 @@ log("PASS5", f"SSE 错误帧 code={err_payload['code']} msg={err_payload['msg']}
 
 # ── Step 6: 入口④ CLI ─────────────────────────────────────
 log("STEP6", "CLI 入口 scripts/pivot-ai-tool ...")
+# CLI 的 token 默认取本机缓存 ~/.cache/pivotos/tool-cli-token，那是**仓外残留状态**：
+# 换机 / CI / 缓存被清即报「[4] 未提供 token 且无凭据」exit=1（S119 首跑实证）。
+# 口径同 S115 K1「fixture 一律脚本自生产，不依赖仓外残留」：先 login 再 list/call。
+login_out = subprocess.run([sys.executable, CLI, "login",
+                            "--username", "admin", "--password", "admin123"],
+                           capture_output=True, timeout=120)
+assert login_out.returncode == 0, \
+    f"CLI login 失败 rc={login_out.returncode}: {login_out.stderr.decode()[:300]}"
+log("PASS6a", "CLI login 成功（token 由脚本自生产，不依赖本机缓存残留）")
+
 env_out = subprocess.run([sys.executable, CLI, "list", "--size", "5", "--json"],
                          capture_output=True, timeout=120)
 assert env_out.returncode == 0, f"CLI list 失败 rc={env_out.returncode}: {env_out.stderr.decode()[:300]}"
