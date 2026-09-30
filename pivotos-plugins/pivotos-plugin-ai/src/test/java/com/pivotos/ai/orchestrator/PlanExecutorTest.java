@@ -37,7 +37,7 @@ class PlanExecutorTest {
                 List.of("instanceId", "confirm"), true));
         OrchestratorProperties properties = new OrchestratorProperties();
         properties.setMaxSteps(10);
-        executor = new PlanExecutor(toolService, new ToolPlanValidator(properties));
+        executor = new PlanExecutor(toolService, new ToolPlanValidator(properties), properties);
     }
 
     private static final String INSTANCE_JSON = "{\"total\":1,\"pageNum\":1,\"list\":["
@@ -167,5 +167,97 @@ class PlanExecutorTest {
         executor.execute(readPlan(), specs, 106L, false, System.nanoTime());
         // 作用域只包裹工具调用本身，结束后自动解绑
         Assertions.assertNull(OrchestratorStepContext.get());
+    }
+
+    /* ================= A5-2 重试 / 熔断 / 轨迹（S117） ================= */
+
+    private PlanExecutor executorWith(OrchestratorProperties props) {
+        props.setMaxSteps(10);
+        // 单测不等退避，避免用例被 sleep 拖慢
+        props.getRetry().setBackoffMs(0);
+        return new PlanExecutor(toolService, new ToolPlanValidator(props), props);
+    }
+
+    @Test
+    @DisplayName("A5-2 重试：只读步骤执行失败后重试一次成功，轨迹记 attempts=2")
+    void readonlyStepRetriesThenSucceeds() {
+        Mockito.when(toolService.invokeTool(Mockito.eq("queryMyFlowInstances"), Mockito.anyString()))
+                .thenReturn(ToolGuardSignal.EXEC_FAILED + "连接超时", INSTANCE_JSON);
+        PlanRunResult result = executor.execute(readPlan(), specs, 201L, false, System.nanoTime());
+        Assertions.assertTrue(result.success());
+        Assertions.assertEquals(1, result.retryCount());
+        Assertions.assertEquals(2, result.traces().get(0).attemptCount());
+        Assertions.assertFalse(result.circuitBroken());
+        Mockito.verify(toolService, Mockito.times(2))
+                .invokeTool(Mockito.eq("queryMyFlowInstances"), Mockito.anyString());
+    }
+
+    @Test
+    @DisplayName("A5-2 写步骤零重试：写工具失败后不再重试（非幂等，重试会重复副作用）")
+    void writeStepNeverRetries() {
+        Mockito.when(toolService.invokeTool(Mockito.eq("queryMyFlowInstances"), Mockito.anyString()))
+                .thenReturn(INSTANCE_JSON);
+        Mockito.when(toolService.invokeTool(Mockito.eq("urgeFlowInstance"), Mockito.anyString()))
+                .thenReturn(ToolGuardSignal.EXEC_FAILED + "催办失败");
+        PlanRunResult result = executor.execute(readWritePlan(), specs, 202L, true, System.nanoTime());
+        Assertions.assertEquals("failed", result.status());
+        Assertions.assertEquals(0, result.retryCount(), "写步骤不得产生任何重试");
+        Assertions.assertEquals(1, result.traces().get(1).attemptCount());
+        Mockito.verify(toolService, Mockito.times(1))
+                .invokeTool(Mockito.eq("urgeFlowInstance"), Mockito.anyString());
+    }
+
+    @Test
+    @DisplayName("A5-2 终态失败不重试：权限拒绝一次都不重试")
+    void terminalFailureNeverRetries() {
+        Mockito.when(toolService.invokeTool(Mockito.eq("queryMyFlowInstances"), Mockito.anyString()))
+                .thenReturn(ToolGuardSignal.FORBIDDEN + "queryMyFlowInstances");
+        PlanRunResult result = executor.execute(readWritePlan(), specs, 203L, true, System.nanoTime());
+        Assertions.assertEquals(0, result.retryCount());
+        Assertions.assertFalse(result.circuitBroken(), "压根没重试就不算熔断");
+        Mockito.verify(toolService, Mockito.times(1))
+                .invokeTool(Mockito.eq("queryMyFlowInstances"), Mockito.anyString());
+    }
+
+    @Test
+    @DisplayName("A5-2 熔断：重试预算耗尽后不再重试，剩余步骤记 skipped")
+    void circuitBreaksAfterBudgetExhausted() {
+        OrchestratorProperties props = new OrchestratorProperties();
+        props.getRetry().setMaxAttempts(5);
+        props.getCircuit().setMaxRetriesPerPlan(2);
+        PlanExecutor exec = executorWith(props);
+        Mockito.when(toolService.invokeTool(Mockito.eq("queryMyFlowInstances"), Mockito.anyString()))
+                .thenReturn(ToolGuardSignal.EXEC_FAILED + "持续失败");
+        PlanRunResult result = exec.execute(readWritePlan(), specs, 204L, true, System.nanoTime());
+        Assertions.assertEquals("failed", result.status());
+        Assertions.assertEquals(2, result.retryCount(), "预算 2 → 最多重试 2 次");
+        Assertions.assertTrue(result.circuitBroken());
+        Assertions.assertTrue(result.summary().contains("熔断"));
+        // 首次 + 2 次重试 = 3 次调用，第 4 次不再发生
+        Mockito.verify(toolService, Mockito.times(3))
+                .invokeTool(Mockito.eq("queryMyFlowInstances"), Mockito.anyString());
+        // 第 2 步从未发起调用 → 轨迹里必须能看到 skipped，而不是「轨迹少了一行」
+        Assertions.assertEquals(2, result.traces().size());
+        Assertions.assertEquals(PlanStepTrace.SKIPPED, result.traces().get(1).status());
+        Mockito.verify(toolService, Mockito.never())
+                .invokeTool(Mockito.eq("urgeFlowInstance"), Mockito.anyString());
+    }
+
+    @Test
+    @DisplayName("A5-2 可观测：成功链每步都有轨迹，含耗时与尝试次数")
+    void successTracesEveryStep() {
+        Mockito.when(toolService.invokeTool(Mockito.eq("queryMyFlowInstances"), Mockito.anyString()))
+                .thenReturn(INSTANCE_JSON);
+        Mockito.when(toolService.invokeTool(Mockito.eq("urgeFlowInstance"), Mockito.anyString()))
+                .thenReturn("催办通知已发送");
+        PlanRunResult result = executor.execute(readWritePlan(), specs, 205L, true, System.nanoTime());
+        Assertions.assertEquals(2, result.traces().size());
+        for (PlanStepTrace trace : result.traces()) {
+            Assertions.assertEquals(PlanStepTrace.SUCCESS, trace.status());
+            Assertions.assertEquals(1, trace.attemptCount());
+            Assertions.assertNotNull(trace.tool());
+            Assertions.assertNotNull(trace.argsJson());
+        }
+        Assertions.assertTrue(result.traces().get(1).write(), "第 2 步是写操作");
     }
 }

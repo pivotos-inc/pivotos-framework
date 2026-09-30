@@ -31,6 +31,15 @@ public class AiApprovalAdvice extends TenantBaseDO {
     /** 结论（approve 建议通过 / reject 建议驳回 / need_info 需补充材料） */
     private String conclusion;
 
+    /** 是否受控自动通过（A4E / S117；0 未通过 1 已自动通过） */
+    private Integer autoPassed;
+
+    /** 自动预审判定原因（未启用 / 未命中规则 / 命中明细） */
+    private String autoDecisionReason;
+
+    /** 低风险规则命中明细（JSON 数组） */
+    private String autoRuleHits;
+
     /** 结论理由（模型输出；结构化解析失败时为原文降级） */
     private String reason;
 

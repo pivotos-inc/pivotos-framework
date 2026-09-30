@@ -6,8 +6,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.pivotos.ai.api.enums.AiErrorCode;
 import com.pivotos.ai.domain.dto.AiToolPlanQuery;
 import com.pivotos.ai.domain.entity.AiToolPlan;
+import com.pivotos.ai.domain.entity.AiToolPlanStep;
 import com.pivotos.ai.domain.vo.AiToolPlanVO;
 import com.pivotos.ai.mapper.AiToolPlanMapper;
+import com.pivotos.ai.mapper.AiToolPlanStepMapper;
+import com.pivotos.ai.orchestrator.PlanStepTrace;
 import com.pivotos.ai.orchestrator.OrchestratorProperties;
 import com.pivotos.ai.orchestrator.PlanExecutor;
 import com.pivotos.ai.orchestrator.PlanRunResult;
@@ -62,6 +65,7 @@ public class AiOrchestratorServiceImpl implements AiOrchestratorService {
     private static final Logger log = LoggerFactory.getLogger(AiOrchestratorServiceImpl.class);
 
     private final AiToolPlanMapper planMapper;
+    private final AiToolPlanStepMapper stepMapper;
     private final OrchestratorProperties properties;
     private final PlanDraftService draftService;
     private final ToolPlanValidator validator;
@@ -79,7 +83,7 @@ public class AiOrchestratorServiceImpl implements AiOrchestratorService {
         List<String> errors = validator.validate(plan, specs);
         AiToolPlan entity = insertPlan(text, plan, errors.isEmpty() ? "draft" : "failed",
                 errors.isEmpty() ? "" : String.join("；", errors));
-        AiToolPlanVO vo = toVO(entity, plan, null, specs);
+        AiToolPlanVO vo = toVO(entity, plan, null, specs, Map.of());
         vo.setErrors(errors);
         log.info("[PivotOS] AI 编排规划：planId={} steps={} errors={}", entity.getId(), plan.steps().size(), errors.size());
         return vo;
@@ -114,7 +118,7 @@ public class AiOrchestratorServiceImpl implements AiOrchestratorService {
                         .orderByDesc(AiToolPlan::getCreateTime));
         Map<String, ToolSpec> specs = loadToolSpecs();
         List<AiToolPlanVO> list = page.getRecords().stream()
-                .map(entity -> toVO(entity, parsePlanJson(entity), null, specs))
+                .map(entity -> toVO(entity, parsePlanJson(entity), null, specs, loadStepTraces(entity.getId())))
                 .collect(Collectors.toList());
         return new PageResult<>(list, page.getTotal(), query.getPageNum(), query.getPageSize());
     }
@@ -122,7 +126,7 @@ public class AiOrchestratorServiceImpl implements AiOrchestratorService {
     @Override
     public AiToolPlanVO detail(Long id) {
         AiToolPlan entity = requirePlan(id);
-        return toVO(entity, parsePlanJson(entity), null, loadToolSpecs());
+        return toVO(entity, parsePlanJson(entity), null, loadToolSpecs(), loadStepTraces(entity.getId()));
     }
 
     @Override
@@ -239,6 +243,8 @@ public class AiOrchestratorServiceImpl implements AiOrchestratorService {
         entity.setBlockedStep(0);
         entity.setResultSummary(truncate(summary, 1000));
         entity.setCostMs(0L);
+        entity.setRetryCount(0);
+        entity.setCircuitBroken(0);
         entity.setTraceId(TraceContext.get());
         LoginUser loginUser = LoginContext.get();
         if (loginUser != null) {
@@ -254,14 +260,77 @@ public class AiOrchestratorServiceImpl implements AiOrchestratorService {
         entity.setBlockedStep(result.blockedStep());
         entity.setResultSummary(truncate(result.summary(), 1000));
         entity.setCostMs(result.costMs());
+        entity.setRetryCount(result.retryCount());
+        entity.setCircuitBroken(result.circuitBroken() ? 1 : 0);
+        entity.setFailReason(truncate(failReasonOf(result), 1000));
         planMapper.updateById(entity);
-        log.info("[PivotOS] AI 编排执行：planId={} status={} executed={} blocked={}",
-                entity.getId(), result.status(), result.executedSteps(), result.blockedStep());
-        return toVO(entity, plan, result, loadToolSpecs());
+        saveStepTraces(entity, result);
+        log.info("[PivotOS] AI 编排执行：planId={} status={} executed={} blocked={} retry={} circuit={}",
+                entity.getId(), result.status(), result.executedSteps(), result.blockedStep(),
+                result.retryCount(), result.circuitBroken());
+        return toVO(entity, plan, result, loadToolSpecs(), loadStepTraces(entity.getId()));
+    }
+
+    /**
+     * 落步骤轨迹（A5-2 可观测）。
+     *
+     * <p>为什么先清旧行：{@code ai_tool_invoke} 是「每次调用」的累积留痕（重跑叠加，S116 K3），
+     * 而步骤轨迹是「最近一次执行的视图」——叠加会让前端出现两组同序号步骤，无法回答
+     * 「这一步现在到底是什么状态」。因此这里按 plan_id 物理删除后重写。
+     */
+    private void saveStepTraces(AiToolPlan entity, PlanRunResult result) {
+        if (result.traces() == null || result.traces().isEmpty()) {
+            return;
+        }
+        stepMapper.delete(Wrappers.<AiToolPlanStep>lambdaQuery()
+                .eq(AiToolPlanStep::getPlanId, entity.getId()));
+        String traceId = TraceContext.get();
+        for (PlanStepTrace trace : result.traces()) {
+            AiToolPlanStep row = new AiToolPlanStep();
+            row.setPlanId(entity.getId());
+            row.setStepNo(trace.stepNo());
+            row.setToolName(trace.tool());
+            row.setWriteFlag(trace.write() ? 1 : 0);
+            row.setAttemptCount(trace.attemptCount());
+            row.setStatus(trace.status());
+            row.setArgsJson(truncate(trace.argsJson(), 2000));
+            row.setOutputSummary(truncate(trace.outputSummary(), 2000));
+            row.setErrorMessage(truncate(trace.error(), 1000));
+            row.setCostMs(trace.costMs());
+            row.setTraceId(traceId);
+            stepMapper.insert(row);
+        }
+    }
+
+    /** 步骤轨迹（步骤序号 → 轨迹行），供 VO 合并 */
+    private Map<Integer, AiToolPlanStep> loadStepTraces(Long planId) {
+        if (planId == null) {
+            return Map.of();
+        }
+        List<AiToolPlanStep> rows = stepMapper.selectList(Wrappers.<AiToolPlanStep>lambdaQuery()
+                .eq(AiToolPlanStep::getPlanId, planId));
+        Map<Integer, AiToolPlanStep> map = new LinkedHashMap<>();
+        for (AiToolPlanStep row : rows) {
+            map.put(row.getStepNo(), row);
+        }
+        return map;
+    }
+
+    /** 失败原因取终态失败步骤的信号原文（成功/待确认为空） */
+    private String failReasonOf(PlanRunResult result) {
+        if (result.traces() == null) {
+            return "";
+        }
+        return result.traces().stream()
+                .filter(t -> PlanStepTrace.FAILED.equals(t.status()))
+                .map(PlanStepTrace::error)
+                .filter(value -> value != null && !value.isEmpty())
+                .findFirst()
+                .orElse("");
     }
 
     private AiToolPlanVO toVO(AiToolPlan entity, ToolPlan plan, PlanRunResult result,
-                              Map<String, ToolSpec> specs) {
+                              Map<String, ToolSpec> specs, Map<Integer, AiToolPlanStep> traces) {
         AiToolPlanVO vo = new AiToolPlanVO();
         vo.setId(entity.getId());
         vo.setIntent(entity.getIntent());
@@ -272,6 +341,9 @@ public class AiOrchestratorServiceImpl implements AiOrchestratorService {
         vo.setBlockedStep(entity.getBlockedStep());
         vo.setResultSummary(entity.getResultSummary());
         vo.setCostMs(entity.getCostMs());
+        vo.setRetryCount(entity.getRetryCount());
+        vo.setCircuitBroken(entity.getCircuitBroken() != null && entity.getCircuitBroken() == 1);
+        vo.setFailReason(entity.getFailReason());
         vo.setCreateTime(entity.getCreateTime());
         vo.setUnmapped(plan == null ? "" : plan.unmapped());
         List<AiToolPlanVO.PlanStepVO> stepVOs = new ArrayList<>();
@@ -286,6 +358,13 @@ public class AiOrchestratorServiceImpl implements AiOrchestratorService {
                 item.setWrite(spec != null && spec.write());
                 if (result != null) {
                     item.setOutput(result.outputs().get(step.no()));
+                }
+                AiToolPlanStep row = traces == null ? null : traces.get(step.no());
+                if (row != null) {
+                    item.setAttemptCount(row.getAttemptCount());
+                    item.setStepStatus(row.getStatus());
+                    item.setStepCostMs(row.getCostMs());
+                    item.setError(row.getErrorMessage());
                 }
                 stepVOs.add(item);
             }

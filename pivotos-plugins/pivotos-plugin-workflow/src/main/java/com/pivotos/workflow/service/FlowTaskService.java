@@ -339,6 +339,24 @@ public class FlowTaskService {
      * warm-flow 加签/减签引擎层只校参数与人数，不校调用者归属，
      * 故在服务层兜底：非本任务审批人拒绝，防止任意登录用户操作他人任务。
      */
+    /**
+     * 当前待办的审批人数量（A4E / S117）：取值口径与 {@link #requireApprover} 完全一致
+     * （APPROVAL + TRANSFER + DEPUTE 三类 flow_user 去重后的办理人数），
+     * 避免「归属判定」与「是否单审批人判定」用两套口径而对不上。
+     */
+    private int countApprovers(Long taskId) {
+        List<User> users = FlowEngine.userService().listByAssociatedAndTypes(taskId,
+                UserType.APPROVAL.getKey(), UserType.TRANSFER.getKey(), UserType.DEPUTE.getKey());
+        if (users == null) {
+            return 0;
+        }
+        return (int) users.stream()
+                .map(User::getProcessedBy)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .count();
+    }
+
     private void requireApprover(Long taskId) {
         Long userId = LoginContext.getUserId();
         if (userId == null) {
@@ -400,6 +418,7 @@ public class FlowTaskService {
         dto.setTaskId(taskId);
         dto.setInstanceId(task.getInstanceId());
         dto.setNodeName(task.getNodeName());
+        dto.setApproverCount(countApprovers(taskId));
         Instance ins = insService.getById(task.getInstanceId());
         if (ins != null) {
             String flowName = ins.getFlowName();

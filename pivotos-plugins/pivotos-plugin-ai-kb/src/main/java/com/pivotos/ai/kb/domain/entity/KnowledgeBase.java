@@ -20,6 +20,13 @@ public class KnowledgeBase extends TenantBaseDO {
     /** 知识库名称 */
     private String name;
 
+    /**
+     * 知识库类型（policy 制度类 / general 通用；A4E / S117 制度类标记）。
+     * 给默认值的理由：kb_type 列 NOT NULL，而既有调用方（含 IT）不会传该字段，
+     * 实体层兜底可保证任意 insert 路径都不会写入 NULL（MySQL 严格模式下会直接报错）。
+     */
+    private String kbType = com.pivotos.ai.kb.api.enums.KbType.GENERAL;
+
     /** 知识库描述 */
     private String description;
 

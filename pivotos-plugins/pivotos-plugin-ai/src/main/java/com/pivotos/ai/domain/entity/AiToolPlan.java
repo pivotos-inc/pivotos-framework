@@ -47,6 +47,15 @@ public class AiToolPlan extends TenantBaseDO {
     /** 总耗时（毫秒） */
     private Long costMs;
 
+    /** 本次执行累计重试次数（A5-2 / S117；写步骤恒为 0） */
+    private Integer retryCount;
+
+    /** 是否触发熔断（A5-2 / S117：1 熔断，后续步骤未再发起调用） */
+    private Integer circuitBroken;
+
+    /** 失败原因（A5-2 / S117：终态失败信号原文） */
+    private String failReason;
+
     /** 链路追踪 ID */
     private String traceId;
 }

@@ -7,6 +7,7 @@ import com.pivotos.workflow.api.dto.WorkflowInstanceDTO;
 import com.pivotos.workflow.api.dto.WorkflowPendingTaskDTO;
 import com.pivotos.workflow.api.dto.WorkflowStatsDTO;
 import com.pivotos.workflow.domain.dto.StartInstanceCmd;
+import com.pivotos.workflow.domain.dto.TaskActionCmd;
 import com.pivotos.workflow.domain.dto.TaskPageQuery;
 import com.pivotos.workflow.domain.vo.WorkflowInstanceVO;
 import com.pivotos.workflow.domain.vo.WorkflowTaskVO;
@@ -111,6 +112,20 @@ public class WorkflowFacadeImpl implements IWorkflowFacade {
     @Override
     public ApprovalTaskContextDTO getApprovalTaskContext(Long taskId) {
         return flowTaskService.approvalTaskContext(taskId);
+    }
+
+    // ---- S117 A4E 受控自动预审 ----
+
+    /**
+     * 审批通过：直接复用管理端「通过」按钮的 {@link FlowTaskService#pass}，不做任何旁路。
+     * 归属闸由 warm-flow 经 {@code LoginContext} 校验，非审批人调用会被引擎拒绝。
+     */
+    @Override
+    public void approveTask(Long taskId, String message) {
+        TaskActionCmd cmd = new TaskActionCmd();
+        cmd.setTaskId(taskId);
+        cmd.setMessage(message);
+        flowTaskService.pass(cmd);
     }
 
     private TaskPageQuery buildPageQuery(int pageNum, int pageSize) {

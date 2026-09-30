@@ -2,6 +2,7 @@ package com.pivotos.ai.controller;
 
 import com.pivotos.ai.domain.dto.ApprovalAdviceRequest;
 import com.pivotos.ai.domain.vo.ApprovalAdviceVO;
+import com.pivotos.ai.domain.vo.AutoApprovalResultVO;
 import com.pivotos.ai.service.AiApprovalAdviceService;
 import com.pivotos.common.core.enums.error.GlobalErrorCode;
 import com.pivotos.common.core.exception.ServiceException;
@@ -45,6 +46,16 @@ public class AiApprovalAdviceController {
     @GetMapping("/advice/{taskId}/latest")
     public R<ApprovalAdviceVO> latest(@PathVariable Long taskId) {
         return R.ok(approvalAdviceService.latestAdvice(requireUserId(), taskId));
+    }
+
+    /**
+     * 受控自动预审（A4E / S117）：确定性低风险规则全中才自动通过，默认关闭。
+     * 归属闸在 workflow 侧（非审批人 5083），自动通过走的是与管理端「通过」按钮同一条 pass。
+     */
+    @Operation(summary = "受控自动预审（默认关闭；低风险单命中规则才自动通过）")
+    @PostMapping("/auto-pass")
+    public R<AutoApprovalResultVO> autoPass(@Validated @RequestBody ApprovalAdviceRequest request) {
+        return R.ok(approvalAdviceService.autoPass(requireUserId(), request.getTaskId()));
     }
 
     /** 三体系统一登录校验（未登录 → 1002，与 Sa-Token 未登录同码） */

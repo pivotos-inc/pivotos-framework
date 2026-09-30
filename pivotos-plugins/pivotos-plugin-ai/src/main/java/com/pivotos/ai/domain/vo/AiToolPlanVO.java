@@ -41,6 +41,15 @@ public class AiToolPlanVO {
     /** 总耗时（毫秒） */
     private Long costMs;
 
+    /** 本次执行累计重试次数（A5-2 / S117；写步骤恒为 0） */
+    private Integer retryCount;
+
+    /** 是否触发熔断（A5-2 / S117） */
+    private Boolean circuitBroken;
+
+    /** 失败原因（终态失败信号原文） */
+    private String failReason;
+
     /** 能力缺口说明（计划为空时） */
     private String unmapped;
 
@@ -71,5 +80,17 @@ public class AiToolPlanVO {
 
         /** 执行输出（未执行为 null） */
         private String output;
+
+        /** 实际尝试次数（A5-2；未执行为 0，写步骤恒 ≤ 1） */
+        private Integer attemptCount;
+
+        /** 步骤终态（success / failed / need_confirm / skipped；未执行为 null） */
+        private String stepStatus;
+
+        /** 本步耗时（毫秒，含重试） */
+        private Long stepCostMs;
+
+        /** 失败原因（终态失败信号原文，成功为 null） */
+        private String error;
     }
 }
