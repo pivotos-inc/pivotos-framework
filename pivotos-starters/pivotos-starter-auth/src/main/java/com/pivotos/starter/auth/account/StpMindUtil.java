@@ -4,7 +4,7 @@ import cn.dev33.satoken.session.SaSession;
 import cn.dev33.satoken.stp.StpLogic;
 
 /**
- * 枢磐·智域（PivotMind）个人端账号体系：mind-user。
+ * PivotOS·智域（PivotMind）个人端账号体系：mind-user。
  * 与 wx-mini-user / app-user / sys-user 独立隔离，避免个人用户与企业用户混用。
  */
 public final class StpMindUtil {

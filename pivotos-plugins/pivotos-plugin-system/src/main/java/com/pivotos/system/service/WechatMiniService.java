@@ -6,7 +6,7 @@ public interface WechatMiniService {
     /** 默认小程序标识 */
     String DEFAULT_APP = "default";
 
-    /** 枢磐·智域小程序标识 */
+    /** PivotOS·智域小程序标识 */
     String MIND_APP = "mind";
 
     /**

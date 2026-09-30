@@ -2,7 +2,7 @@ package com.pivotos.system.service;
 
 import com.pivotos.system.domain.vo.MindLoginVO;
 
-/** 枢磐·智域认证编排（个人端独立账号体系） */
+/** PivotOS·智域认证编排（个人端独立账号体系） */
 public interface MindAuthService {
 
     /** 渠道标识：sys_social_user.channel */

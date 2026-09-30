@@ -106,7 +106,7 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-migration</artifactId>
         </dependency>
-        <!-- mind 插件（枢磐·智域个人端：知识库 + 智能待办） -->
+        <!-- mind 插件（PivotOS·智域个人端：知识库 + 智能待办） -->
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-mind</artifactId>

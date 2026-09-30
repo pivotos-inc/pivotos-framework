@@ -8,7 +8,7 @@ import java.util.Map;
 
 /**
  * 微信小程序配置（{@code pivotos.wechat.miniapp.*}）。
- * <p>支持多小程序：默认 key 为 {@code default}，枢磐·智域 key 为 {@code mind}。
+ * <p>支持多小程序：默认 key 为 {@code default}，PivotOS·智域 key 为 {@code mind}。
  * 兼容旧版单小程序平铺配置（appid/secret），未命名时映射到 default。
  */
 @Data

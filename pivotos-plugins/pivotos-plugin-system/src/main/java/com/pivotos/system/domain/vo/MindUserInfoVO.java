@@ -5,7 +5,7 @@ import lombok.Data;
 
 import java.util.List;
 
-/** 枢磐·智域当前登录用户信息（简化版：不含角色权限） */
+/** PivotOS·智域当前登录用户信息（简化版：不含角色权限） */
 @Data
 @AllArgsConstructor
 public class MindUserInfoVO {
