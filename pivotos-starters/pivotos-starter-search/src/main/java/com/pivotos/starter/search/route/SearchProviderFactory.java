@@ -41,13 +41,26 @@ public class SearchProviderFactory {
         this.configuredType = SearchProviderType.of(properties == null ? null : properties.getType());
 
         SearchProvider chosen = configuredType == null ? null : map.get(configuredType);
+        // 实现已注册但启动期自检未通过（ES 不可达 / 服务端版本不在支持区间 / 兼容头冲突）：
+        // 走与「未命中」完全相同的回落路径，保证应用照常起服
+        boolean selfCheckFailed = chosen != null && !chosen.isAvailable();
+        if (selfCheckFailed) {
+            log.warn("[PivotOS] 搜索实现 {} 自检未通过（服务端版本/连通性校验失败，详见上方 WARN）",
+                    configuredType.getCode());
+            chosen = null;
+        }
         if (chosen == null) {
             chosen = map.get(SearchProviderType.SIMPLE);
             this.fallback = true;
-            log.warn("[PivotOS] 搜索实现未命中：type={}（已注册 {}）；已回落到 simple 内存实现，"
-                            + "检索结果仅单进程可见且重启即失。生产请引入 pivotos-starter-search-easy-es 或 -es-java 并配置对应 ES 地址。",
-                    properties == null ? null : properties.getType(),
-                    map.keySet().stream().map(SearchProviderType::getCode).collect(Collectors.toList()));
+            if (!selfCheckFailed) {
+                log.warn("[PivotOS] 搜索实现未命中：type={}（已注册 {}）；已回落到 simple 内存实现，"
+                                + "检索结果仅单进程可见且重启即失。生产请引入 pivotos-starter-search-easy-es 或 -es-java 并配置对应 ES 地址。",
+                        properties == null ? null : properties.getType(),
+                        map.keySet().stream().map(SearchProviderType::getCode).collect(Collectors.toList()));
+            } else {
+                log.warn("[PivotOS] 已回落到 simple 内存实现：检索结果仅单进程可见且重启即失；"
+                        + "ES 恢复后需重启应用重新探测。");
+            }
         } else {
             this.fallback = false;
             log.info("[PivotOS] 搜索实现：type={}（已注册实现 {}）", configuredType.getCode(),

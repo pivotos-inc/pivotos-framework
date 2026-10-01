@@ -61,6 +61,22 @@ class SearchProviderFactoryTest {
         assertTrue(factory.isFallback());
     }
 
+    /**
+     * 实现已注册但启动期自检未通过（ES 不可达 / 服务端版本不在支持区间 / 兼容头冲突）
+     * ——与「未注册」走同一条回落路径，保证应用照常起服
+     */
+    @Test
+    void shouldFallbackToSimpleWhenProviderIsUnavailable() {
+        SimpleSearchProvider simple = new SimpleSearchProvider();
+        FakeProvider esJava = new FakeProvider(SearchProviderType.ES_JAVA, false);
+
+        SearchProviderFactory factory = new SearchProviderFactory(List.of(simple, esJava), props("es-java"));
+
+        assertSame(simple, factory.get());
+        assertEquals(SearchProviderType.SIMPLE, factory.effectiveType());
+        assertTrue(factory.isFallback());
+    }
+
     @Test
     void shouldThrowWhenNoProviderAtAll() {
         assertThrows(IllegalStateException.class,
@@ -70,9 +86,20 @@ class SearchProviderFactoryTest {
     private static class FakeProvider implements SearchProvider {
 
         private final SearchProviderType type;
+        private final boolean available;
 
         FakeProvider(SearchProviderType type) {
+            this(type, true);
+        }
+
+        FakeProvider(SearchProviderType type, boolean available) {
             this.type = type;
+            this.available = available;
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return available;
         }
 
         @Override

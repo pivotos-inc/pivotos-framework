@@ -120,6 +120,10 @@ pivotos:
       password: ${PIVOTOS_ES_JAVA_PASSWORD:}
       connect-timeout: 3000
       socket-timeout: 30000
+      # 兼容模式：用 8.19 客户端连 ES 7.x 服务端时置 true（发 compatible-with=7 官方兼容头）。
+      # 连 8.x / 9.x 服务端必须保持 false——实测 ES 9.5.3 会拒绝 compatible-with=7
+      # （media_type_header_exception 400）；启动期版本探测会据此判不可用并回落 simple。
+      compatibility-mode: ${PIVOTOS_ES_JAVA_COMPATIBILITY_MODE:false}
       # ES 默认近实时（写后最多 1s 才可检索）。置 true 改为 refresh=wait_for：写后立即可检索，
       # 代价是每次索引写入多一次 refresh 开销，高频写链路（操作日志）不建议开。
       refresh-on-write: ${PIVOTOS_ES_JAVA_REFRESH_ON_WRITE:false}

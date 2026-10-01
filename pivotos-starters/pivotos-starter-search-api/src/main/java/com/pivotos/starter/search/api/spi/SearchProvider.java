@@ -59,4 +59,15 @@ public interface SearchProvider {
      * 索引不存在则创建（simple 实现为惰性建桶）
      */
     void createIndexIfAbsent(String indexName);
+
+    /**
+     * 该实现<b>当前是否可用</b>。默认 true（simple 等本地实现恒可用）。
+     * <p>远端实现（easy-es / es-java）在启动期做一次服务端探测：ES 不可达、服务端版本不在支持区间、
+     * 或兼容头与服务端版本冲突时返回 false。路由工厂据此<b>回落到 simple 并打 WARN</b>，
+     * 而不是让应用起不来或让每次检索都抛异常——与「配错也能起服」的既有口径一致。
+     * <p>注意：探测结果在启动期缓存，运行期不会反复发起；ES 后来恢复时需要重启应用重新探测。
+     */
+    default boolean isAvailable() {
+        return true;
+    }
 }
