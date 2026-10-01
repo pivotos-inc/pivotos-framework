@@ -3,8 +3,10 @@ package com.pivotos.starter.search.esjava.config;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import com.pivotos.starter.search.api.config.SearchProperties;
 import com.pivotos.starter.search.api.enums.SearchProviderType;
+import com.pivotos.starter.search.api.spi.SearchHealthProvider;
 import com.pivotos.starter.search.esjava.EsJavaSearchProvider;
 import com.pivotos.starter.search.esjava.client.EsJavaClientFactory;
+import com.pivotos.starter.search.esjava.health.EsJavaSearchHealthProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -51,5 +53,17 @@ public class EsJavaSearchAutoConfiguration {
         log.info("[PivotOS] 搜索 Provider 已注册：{}（服务端 {}，可用={}）",
                 SearchProviderType.ES_JAVA.getCode(), provider.serverVersion().raw(), provider.isAvailable());
         return provider;
+    }
+
+    /**
+     * ES 健康采集（系统监控 · ES 监控页）。
+     * <p>契约在 {@code starter-search-api} 的 {@link SearchHealthProvider}，monitor 插件只认契约，
+     * 因此它不会（也不允许）依赖本实现模块；没引本模块时 monitor 侧拿不到该 Bean，走降级文案。
+     */
+    @Bean
+    @ConditionalOnMissingBean(SearchHealthProvider.class)
+    public SearchHealthProvider esJavaSearchHealthProvider(ElasticsearchClient client,
+                                                           EsJavaSearchProvider provider) {
+        return new EsJavaSearchHealthProvider(client, provider.isAvailable(), provider.serverVersion().raw());
     }
 }

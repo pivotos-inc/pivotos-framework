@@ -19,9 +19,6 @@ import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.elasticsearch.core.search.TrackHits;
 import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
 import co.elastic.clients.elasticsearch.indices.ExistsRequest;
-import co.elastic.clients.transport.ElasticsearchTransport;
-import co.elastic.clients.transport.ElasticsearchTransportBase;
-import co.elastic.clients.transport.rest_client.RestClientTransport;
 import co.elastic.clients.util.NamedValue;
 import com.pivotos.starter.search.api.document.SearchDocument;
 import com.pivotos.starter.search.api.document.SearchHit;
@@ -32,6 +29,7 @@ import com.pivotos.starter.search.api.exception.SearchException;
 import com.pivotos.starter.search.api.query.SearchOrder;
 import com.pivotos.starter.search.api.spi.SearchProvider;
 import com.pivotos.starter.search.esjava.query.EsJavaQueryBuilder;
+import com.pivotos.starter.search.esjava.support.EsRestSupport;
 import com.pivotos.starter.search.esjava.support.EsServerVersion;
 import com.pivotos.starter.search.esjava.support.EsServerVersionProbe;
 import org.apache.http.entity.ContentType;
@@ -276,28 +274,19 @@ public class EsJavaSearchProvider implements SearchProvider {
         }
     }
 
-    /** 低层客户端（拿不到时为 null） */
+    /** 低层客户端（拿不到时为 null）——统一走 {@link EsRestSupport} */
     private RestClient lowLevelClient() {
-        ElasticsearchTransport transport = client == null ? null : client._transport();
-        return transport instanceof RestClientTransport rest ? rest.restClient() : null;
+        return EsRestSupport.lowLevelClient(client);
     }
 
     /** 当前客户端实际使用的媒体类型（Accept 头），兼容模式下为 compatible-with=7 */
     private String mediaType() {
-        if (client == null || client._transport() == null) {
-            return ElasticsearchTransportBase.JSON_CONTENT_TYPE;
-        }
-        for (Map.Entry<String, String> header : client._transport().options().headers()) {
-            if ("Accept".equalsIgnoreCase(header.getKey())) {
-                return header.getValue();
-            }
-        }
-        return ElasticsearchTransportBase.JSON_CONTENT_TYPE;
+        return EsRestSupport.mediaType(client);
     }
 
     /** 该客户端是否工作在兼容模式（Accept 头带 compatible-with=7） */
     private boolean isCompatibilityMode() {
-        return mediaType().contains("compatible-with=7");
+        return EsRestSupport.isCompatibilityMode(client);
     }
 
     private void applyOrders(SearchRequest.Builder builder, List<SearchOrder> orders) {
