@@ -31,6 +31,9 @@
         <module>pivotos-starter-search</module>
         <module>pivotos-starter-search-easy-es</module>
         <module>pivotos-starter-search-es-java</module>
+        <!-- ST-DATAINSPECT（S130）：通用数据监控契约包 + 主 Starter（MySQL 实现 + SQL 安全闸门） -->
+        <module>pivotos-starter-datainspect-api</module>
+        <module>pivotos-starter-datainspect</module>
     </modules>
 
     <dependencyManagement>

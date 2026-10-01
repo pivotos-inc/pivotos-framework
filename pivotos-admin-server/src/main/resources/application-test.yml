@@ -5,7 +5,8 @@ spring:
       datasource:
         master:
           # 开发库 pivotos；中间件已迁至公网服务器 175.24.176.176（2026-07-31 搬迁）
-          url: jdbc:mysql://10.0.0.7:3306/pivotos_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          # allowMultiQueries=false（S130）：驱动层禁用堆叠查询
+          url: jdbc:mysql://10.0.0.7:3306/pivotos_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false
           username: root
           password: mysql_DNCi3f
           driver-class-name: com.mysql.cj.jdbc.Driver

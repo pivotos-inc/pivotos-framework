@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-starters</artifactId>
+        <version>2.15.0</version>
+    </parent>
+
+    <artifactId>pivotos-starter-datainspect</artifactId>
+
+    <name>pivotos-starter-datainspect</name>
+    <description>ST-DATAINSPECT 通用数据监控主 Starter：DataSourceInspector 路由工厂 + SQL 安全闸门 + MySQL 实现（只读）</description>
+
+    <dependencies>
+        <!-- 契约包（零 Spring 依赖） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-datainspect-api</artifactId>
+        </dependency>
+
+        <!-- 租户上下文（TenantContext）与脱敏工具（SensitiveMasker） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-core</artifactId>
+        </dependency>
+
+        <!-- 租户内置忽略表清单唯一来源：TenantProperties.BUILTIN_IGNORE_TABLES
+             （刻意不复制一份常量，避免两边漂移） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-tenant</artifactId>
+        </dependency>
+
+        <!-- SQL AST 解析：与 DataPermissionInterceptor 同源同版本（BOM 钉 4.9） -->
+        <dependency>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+        </dependency>
+
+        <!-- Spring 能力标记 optional：下游必为 Spring Boot 应用，optional 仅避免把 Starter 传递出去 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <!-- 测试 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

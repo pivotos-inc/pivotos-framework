@@ -81,6 +81,14 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- S130 通用数据监控：只引契约包（零中间件依赖），
+             MySQL / Redis / ES 实现由启动器（admin-server）引入，插件侧靠 SPI Bean 获取 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-datainspect-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
