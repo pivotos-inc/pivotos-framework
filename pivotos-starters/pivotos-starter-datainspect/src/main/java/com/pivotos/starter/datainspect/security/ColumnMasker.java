@@ -34,6 +34,11 @@ public final class ColumnMasker {
         return column != null && pattern.matcher(column).matches();
     }
 
+    /** 列名或键名任一命中即脱敏（Redis 的 key 本身就是凭证，如 Authorization:sys-user:token:xxx） */
+    public boolean isSensitive(String column, String keyName) {
+        return isSensitive(column) || isSensitive(keyName);
+    }
+
     /** 脱敏类型：凭据全星，手机号/邮箱/身份证/银行卡按类型部分掩码（保持可读性） */
     public SensitiveType typeOf(String column) {
         if (column == null) {
@@ -62,10 +67,22 @@ public final class ColumnMasker {
      * 脱敏取值：非字符串统一转字符串后按类型掩码；<b>未命中规则的列原样返回</b>。
      */
     public Object mask(String column, Object value) {
-        if (value == null || !isSensitive(column)) {
+        return mask(column, value, null);
+    }
+
+    /**
+     * 脱敏取值（列名或键名任一命中即脱敏）。
+     *
+     * <p>{@code keyName} 存在的理由：Redis 的结果集列名是固定的 {@code field/value}，但 <b>key 名本身
+     * 就可能是凭证</b>（{@code Authorization:sys-user:token:xxx}）——只看列名会整片漏脱敏。
+     */
+    public Object mask(String column, Object value, String keyName) {
+        boolean byColumn = isSensitive(column);
+        boolean byKey = isSensitive(keyName);
+        if (value == null || (!byColumn && !byKey)) {
             return value;
         }
         String text = value instanceof String s ? s : String.valueOf(value);
-        return SensitiveMasker.mask(text, typeOf(column));
+        return SensitiveMasker.mask(text, typeOf(byKey ? keyName : column));
     }
 }

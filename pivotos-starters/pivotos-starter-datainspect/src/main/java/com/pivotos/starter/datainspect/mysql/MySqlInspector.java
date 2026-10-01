@@ -349,11 +349,18 @@ public class MySqlInspector implements DataSourceInspector {
                         }
                         rows.add(row);
                     }
+                    // 取到上限也要标记：闸门会把 LIMIT 注入语句，因此「结果集正好等于上限」与
+                    // 「还有更多」在实现层无法区分——按「可能不完整」告知用户（透明即安全）。
+                    // 修这个的起因：审计表涨到正好 200 行时，rows=200 但 truncated=false，
+                    // 前端会误显示「结果完整」（S130-P2 实测暴露的 P1 遗留缺陷）。
+                    if (!truncated && rows.size() >= maxRows) {
+                        truncated = true;
+                    }
                     if (maskedCount > 0) {
                         warnings.add("已脱敏 " + maskedCount + " 个单元格（命中敏感列名规则）");
                     }
                     if (truncated) {
-                        warnings.add("结果已截断，仅返回前 " + maxRows + " 行");
+                        warnings.add("结果已截断，仅返回前 " + maxRows + " 行（是否已到末行未知）");
                     }
                 }
             }

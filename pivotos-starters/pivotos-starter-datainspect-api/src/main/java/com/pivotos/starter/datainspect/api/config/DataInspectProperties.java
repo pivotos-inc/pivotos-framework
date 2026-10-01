@@ -79,23 +79,41 @@ public class DataInspectProperties {
     @Data
     public static class Es {
 
+        /** 单次 _search 返回文档数上限（硬上限 1000，与服务端无关） */
         private int maxRows = 100;
 
-        /** 单次返回的索引/key 上限 */
+        /** 单次返回的索引上限 */
         private int maxItems = 500;
+
+        /** 单个字段值截断长度（字符） */
+        private int valueTruncateBytes = 2048;
     }
 
     /** Redis 组件配置 */
     @Data
     public static class Redis {
 
-        /** SCAN 单次迭代数量 */
+        /** SCAN 单次迭代数量（COUNT 提示值，不是上限） */
         private int scanCount = 500;
 
-        /** 单次返回 key 上限 */
+        /**
+         * SCAN 轮次上限（第一重保护：防大库长时间游走）。
+         *
+         * <p>一轮 = {@code scanCount} 个 key，因此最多遍历 {@code maxScanIterations * scanCount} 个 key
+         *（默认 20 × 500 = 10000），与 {@code maxKeys}（返回上限，第二重保护）是两把独立的锁。
+         */
+        private int maxScanIterations = 20;
+
+        /** 单次返回 key 上限（第二重保护：防结果集爆炸） */
         private int maxKeys = 1000;
 
-        /** 单次 value 截断字节 */
+        /** 单次 value 截断长度（字符，第三重保护：防大 value 拖垮渲染） */
         private int valueTruncateBytes = 2048;
+
+        /** 未显式传 pattern 时使用的默认 pattern */
+        private String defaultPattern = "*";
+
+        /** 集合类型单页返回元素上限（hash/list/set/zset 预览） */
+        private int maxElements = 100;
     }
 }

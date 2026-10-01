@@ -67,8 +67,10 @@ public class DataMonitorController {
     @Operation(summary = "列举表 / 索引 / key")
     @GetMapping("/tables")
     @SaCheckPermission(value = "monitor:data:list", type = StpSysUtil.TYPE)
-    public R<List<TableItem>> tables(@RequestParam String component, @RequestParam(required = false) String schema) {
-        return R.ok(dataMonitorService.tables(component, schema));
+    public R<List<TableItem>> tables(@RequestParam String component,
+                                     @RequestParam(required = false) String schema,
+                                     @RequestParam(required = false) String pattern) {
+        return R.ok(dataMonitorService.tables(component, schema, pattern));
     }
 
     @Operation(summary = "统计信息")

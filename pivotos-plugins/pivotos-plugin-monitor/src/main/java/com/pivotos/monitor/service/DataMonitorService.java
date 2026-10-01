@@ -88,13 +88,19 @@ public class DataMonitorService {
         }
     }
 
-    public List<TableItem> tables(String component, String schema) {
+    /**
+     * 列举表 / 索引 / key。
+     *
+     * @param pattern 过滤 pattern（Redis key 空间可能极大，<b>必须支持收窄</b>，见设计 §11-6）；
+     *                其余组件忽略该参数（{@link DataSourceInspector#listTables(String, String)} 默认实现）
+     */
+    public List<TableItem> tables(String component, String schema, String pattern) {
         Optional<DataSourceInspector> inspector = resolve(component);
         if (inspector.isEmpty()) {
             return List.of();
         }
         try {
-            return inspector.get().listTables(schema);
+            return inspector.get().listTables(schema, pattern);
         } catch (Exception e) {
             log.warn("[PivotOS][monitor] 列举表失败，已降级：{}", e.getMessage());
             return List.of();
