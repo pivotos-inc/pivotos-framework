@@ -9,6 +9,8 @@ import co.elastic.clients.elasticsearch._types.mapping.DynamicTemplate;
 import co.elastic.clients.elasticsearch._types.mapping.KeywordProperty;
 import co.elastic.clients.elasticsearch._types.mapping.Property;
 import co.elastic.clients.elasticsearch._types.mapping.TypeMapping;
+import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
+import co.elastic.clients.elasticsearch._types.query_dsl.MultiMatchQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.core.CountRequest;
 import co.elastic.clients.elasticsearch.core.DeleteRequest;
@@ -27,6 +29,8 @@ import com.pivotos.starter.search.api.enums.SearchErrorCode;
 import com.pivotos.starter.search.api.enums.SearchProviderType;
 import com.pivotos.starter.search.api.exception.SearchException;
 import com.pivotos.starter.search.api.query.SearchOrder;
+import com.pivotos.starter.search.api.score.ScoredSearchRequest;
+import com.pivotos.starter.search.api.score.SearchScorer;
 import com.pivotos.starter.search.api.spi.SearchProvider;
 import com.pivotos.starter.search.esjava.query.EsJavaQueryBuilder;
 import com.pivotos.starter.search.esjava.support.EsRestSupport;
@@ -35,6 +39,7 @@ import com.pivotos.starter.search.esjava.support.EsServerVersionProbe;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.elasticsearch.client.Request;
+import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.RestClient;
@@ -196,6 +201,76 @@ public class EsJavaSearchProvider implements SearchProvider {
         return SearchResult.of(hits, total);
     }
 
+    /**
+     * 打分召回：走 ES 引擎侧 <b>BM25</b>（{@code multi_match}），而不是把候选拉回本地重排。
+     * <p>为什么要单独一条通道：确定性索引把字符串一律落成 keyword（S122 缺陷①的修法），
+     * 而 keyword 只有「整值相等」一种命中形态，<b>没有词频/逆文档频率，打不了 BM25</b>。
+     * 故全文字段在建索引时按 {@link #createFullTextIndexIfAbsent} 落成 text，这里按 multi_match 打分。
+     *
+     * <p><b>7.17 与 9.x 的差异处理</b>（S127 教训：类型化 API 的序列化形态可能与 7.17 不兼容，
+     * 拿不准就走低层 RestClient 发原始 JSON）：
+     * <ul>
+     *   <li>建索引/补映射：一律走低层 RestClient 原始 JSON（{@code match_mapping_type} 用字符串形态，
+     *       数组形态会被 7.17 拒绝）；</li>
+     *   <li>检索：{@code multi_match} + {@code bool.filter} 的 DSL 在 7.17 与 9.x 上形态一致，
+     *       且<b>刻意不带 type 参数</b>（默认 best_fields，两个版本同义），故用类型化 API；
+     *       双目标真机 IT（{@code EsJavaScoredRealServerIT}）负责钉住这一点。</li>
+     * </ul>
+     *
+     * <p>退化口径：无关键词（无相关性概念）或未指定打分字段（ES 侧无法像 simple 那样「扫全部字段」）
+     * → 走 SPI 默认的「取候选窗口 + 本地确定性重打分」，<b>绝不退化成 score 恒 0</b>。
+     */
+    @Override
+    public SearchResult searchScored(ScoredSearchRequest request) {
+        if (request == null) {
+            return SearchResult.empty();
+        }
+        if (!request.hasKeyword() || !request.hasFields()) {
+            log.debug("[PivotOS][search] es-java 打分召回走本地重打分：keyword={}, fields={}",
+                    request.hasKeyword(), request.getFields());
+            return SearchProvider.super.searchScored(request);
+        }
+
+        Query criteriaQuery = EsJavaQueryBuilder.build(request.getCriteria());
+        MultiMatchQuery multiMatch = new MultiMatchQuery.Builder()
+                .query(request.getKeyword())
+                .fields(request.getFields())
+                .build();
+        Query query = new Query.Builder().bool(new BoolQuery.Builder()
+                .must(new Query.Builder().multiMatch(multiMatch).build())
+                .filter(criteriaQuery)
+                .build()).build();
+
+        co.elastic.clients.elasticsearch.core.SearchRequest.Builder builder =
+                new co.elastic.clients.elasticsearch.core.SearchRequest.Builder()
+                        .index(request.getIndexName())
+                        .query(query)
+                        .from(0)
+                        .size(request.getTopK())
+                        .trackTotalHits(new TrackHits.Builder().enabled(true).build());
+
+        SearchResponse<Map> response = execute(() -> client.search(builder.build(), Map.class));
+        List<SearchHit> hits = new ArrayList<>();
+        if (response != null && response.hits() != null) {
+            for (Hit<Map> hit : response.hits().hits()) {
+                hits.add(SearchHit.of(hit.id(), hit.score() == null ? 0D : hit.score(),
+                        hit.source() == null ? Map.of() : hit.source()));
+            }
+        }
+        // 确定性：ES 只保证按 _score 降序，同分的先后由 Lucene 内部顺序决定（会漂移），
+        // 这里统一按「分数降序 + id 升序」重排，保证同一条 query 两次召回顺序一致。
+        hits = SearchScorer.sortByScoreThenId(hits);
+
+        List<SearchHit> kept = new ArrayList<>(hits.size());
+        for (SearchHit hit : hits) {
+            if (hit.getScore() >= request.getMinScore()) {
+                kept.add(hit);
+            }
+        }
+        // total 取「过阈值」的条数：与 simple 实现同一口径（不分页，故不受 ES total 语义影响）
+        return SearchResult.of(kept, kept.size());
+    }
+
     @Override
     public long count(com.pivotos.starter.search.api.document.SearchRequest request) {
         Query query = EsJavaQueryBuilder.build(request.getCriteria());
@@ -248,7 +323,143 @@ public class EsJavaSearchProvider implements SearchProvider {
         }
     }
 
+    /**
+     * 全文通道建索引（S128）：显式字段落成 <b>text</b>（供 BM25 打分），其余字符串仍走 keyword 动态模板。
+     * <p><b>为什么必须单列</b>：{@link #createIndexIfAbsent} 刻意把所有字符串落成 keyword，
+     * 那条 mapping 上打 multi_match 只能整值命中；而反过来，把确定性过滤用的字段改成 text
+     * 又会让中文 EQ / 时间区间静默失效（S122 缺陷①）。故「显式声明的字段建 text，其余 keyword」——
+     * 一份索引同时服务<b>确定性过滤</b>与<b>全文打分</b>两条通道，不必双写两份数据。
+     *
+     * <p>索引已存在时改为 <b>PUT /{index}/_mapping</b> 追加 text 字段：
+     * <ul>
+     *   <li>字段尚未映射 → 追加成功；</li>
+     *   <li>字段已被 keyword 动态模板映射 → ES 报 mapper 冲突，此时<b>不重试、不抛异常</b>，
+     *       只 WARN：该字段退化为「整值命中」，其余通道不受影响（运维需删索引重建才能拿到真 BM25）。</li>
+     * </ul>
+     *
+     * <p>JSON 一律走低层 RestClient 原始发送（S127 教训：类型化 API 的
+     * {@code match_mapping_type} 会序列化成数组，ES 7.17 拒绝）。
+     */
+    @Override
+    public void createFullTextIndexIfAbsent(String indexName, List<String> fields) {
+        List<String> safeFields = sanitizeFields(fields);
+        if (safeFields.isEmpty()) {
+            // 没有显式全文字段 → 与确定性索引无差别，建同一份即可（后续 searchScored 会走本地重打分）
+            createIndexIfAbsent(indexName);
+            return;
+        }
+        RestClient lowLevel = lowLevelClient();
+        if (lowLevel == null) {
+            createIndexTyped(indexName);
+            return;
+        }
+        String mediaType = mediaType();
+        boolean created = putJson(lowLevel, "PUT", "/" + indexName,
+                buildFullTextMapping(safeFields), mediaType, indexName);
+        if (created) {
+            return;
+        }
+        // 索引已存在（400 resource_already_exists_exception 属预期）→ 追加 text 字段映射
+        putJson(lowLevel, "PUT", "/" + indexName + "/_mapping",
+                buildProperties(safeFields), mediaType, indexName);
+    }
+
     // ==================== 内部 ====================
+
+    /**
+     * 完整 mapping：显式字段 text + 其余字符串 keyword（动态模板）。
+     */
+    static String buildFullTextMapping(List<String> fields) {
+        // 手工拼 JSON（低层 RestClient 只收字符串）：大括号层级极易写错，
+        // 写错时 ES 回 400 且索引会被后续写入的动态映射「兜住」——表面能跑，实际拿不到 text 字段。
+        // 故 buildFullTextMappingTest 直接断言结构，别靠人眼数括号。
+        return "{\"mappings\":{\"dynamic_templates\":[{\"strings_as_keywords\":{"
+                + "\"match_mapping_type\":\"string\","
+                + "\"mapping\":{\"type\":\"keyword\",\"ignore_above\":8191}}}]"
+                + ",\"properties\":" + buildPropertiesBody(fields) + "}}";
+    }
+
+    static String buildProperties(List<String> fields) {
+        return "{\"properties\":" + buildPropertiesBody(fields) + "}";
+    }
+
+    /**
+     * <b>不指定 analyzer</b>：默认 standard 分词器在 7.17 / 8.x / 9.x 上行为一致，
+     * 引入 IK 之类的插件会让「有没有插件」变成环境差异，进而让召回结果不可比（S127 同口径教训）。
+     */
+    private static String buildPropertiesBody(List<String> fields) {
+        StringBuilder sb = new StringBuilder("{");
+        for (int i = 0; i < fields.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append('"').append(fields.get(i)).append("\":{\"type\":\"text\"}");
+        }
+        return sb.append('}').toString();
+    }
+
+    /**
+     * 字段名白名单（防 JSON 注入 + 防把非法名写进 mapping）：只放行字母、数字、下划线与点。
+     */
+    private static List<String> sanitizeFields(List<String> fields) {
+        List<String> safe = new ArrayList<>();
+        if (fields == null) {
+            return safe;
+        }
+        for (String field : fields) {
+            if (field == null || field.isBlank()) {
+                continue;
+            }
+            String trimmed = field.trim();
+            if (!trimmed.matches("[A-Za-z0-9_.]+")) {
+                log.warn("[PivotOS][search] es-java 忽略非法全文字段名：{}（只允许字母/数字/下划线/点）", trimmed);
+                continue;
+            }
+            if (!safe.contains(trimmed)) {
+                safe.add(trimmed);
+            }
+        }
+        return safe;
+    }
+
+    /**
+     * 发原始 JSON：Accept 与 Content-Type 必须成对带同一个 compatible-with，否则服务端报
+     * {@code media_type_header_exception}（S127 实测）。
+     *
+     * @return true = 请求成功（2xx）；false = 服务端返回 >= 300（索引已存在等预期情形）
+     */
+    private boolean putJson(RestClient lowLevel, String method, String endpoint, String body,
+                            String mediaType, String indexName) {
+        try {
+            Request request = new Request(method, endpoint);
+            request.setEntity(new StringEntity(body, ContentType.parse(mediaType)));
+            RequestOptions.Builder options = RequestOptions.DEFAULT.toBuilder();
+            options.addHeader("Accept", mediaType);
+            options.addHeader("Content-Type", mediaType);
+            request.setOptions(options.build());
+            Response response = lowLevel.performRequest(request);
+            int status = response.getStatusLine().getStatusCode();
+            if (status >= 300) {
+                log.debug("[PivotOS][search] es-java {} 返回 {}（服务端 {}）", endpoint, status, serverVersion.raw());
+                return false;
+            }
+            return true;
+        } catch (ResponseException e) {
+            // 「索引已存在」是预期分支（例如先 count 触发了建索引），下一步本就是追加映射，不该打 WARN；
+            // 只有其它失败（如字段已被 keyword 定型、JSON 被拒）才报警
+            if (e.getMessage() != null && e.getMessage().contains("resource_already_exists")) {
+                log.debug("[PivotOS][search] es-java 索引 {} 已存在，改走追加映射（服务端 {}）", indexName, serverVersion.raw());
+            } else {
+                log.warn("[PivotOS][search] es-java 全文映射写入失败（索引 {} 可能字段已被 keyword 定型）：{}",
+                        indexName, e.getMessage());
+            }
+            return false;
+        } catch (Exception e) {
+            log.warn("[PivotOS][search] es-java 全文映射写入失败（索引 {}）：{}  {}",
+                    indexName, serverVersion.raw(), e.getMessage());
+            return false;
+        }
+    }
 
     /**
      * 类型化建索引（<b>仅兜底路径</b>）。

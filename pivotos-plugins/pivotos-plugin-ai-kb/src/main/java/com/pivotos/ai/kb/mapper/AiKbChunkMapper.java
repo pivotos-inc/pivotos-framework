@@ -6,6 +6,7 @@ import com.pivotos.ai.kb.domain.entity.AiKbChunk;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
@@ -23,9 +24,13 @@ public interface AiKbChunkMapper extends BaseMapper<AiKbChunk> {
 
     /**
      * 批量插入文本块。
+     * <p><b>必须回填自增主键</b>（S128）：文本块要按主键写全文索引，
+     * 主键为空时 {@code SearchEntityMapper#resolveDocId} 无法确定文档 id，
+     * 索引会整批失败且只留一条 WARN（症状是「索引里始终没有块」）。
      *
      * @param list 文本块列表
      */
+    @Options(useGeneratedKeys = true, keyProperty = "id")
     @Insert({
             "<script>",
             "INSERT INTO ai_kb_chunk (kb_id, doc_id, chunk_index, content, content_hash, tenant_id, create_time)",

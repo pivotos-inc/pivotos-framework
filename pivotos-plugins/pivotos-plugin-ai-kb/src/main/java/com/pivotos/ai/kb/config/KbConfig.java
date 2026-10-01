@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Configuration;
  * 保证评估顺序。
  */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({KbProperties.class, KbDocSearchProperties.class})
+@EnableConfigurationProperties({KbProperties.class, KbDocSearchProperties.class, KbChunkSearchProperties.class})
 public class KbConfig {
 
     @Bean
