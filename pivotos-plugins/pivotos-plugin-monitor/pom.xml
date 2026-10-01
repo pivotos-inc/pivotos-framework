@@ -73,6 +73,14 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- ES 监控：搜索健康 SPI 契约（只引 api 包，符合 ArchUnit A1/A2——
+             monitor 不得依赖 -es-java / -easy-es 实现模块，指标经 SearchHealthProvider 获取） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
