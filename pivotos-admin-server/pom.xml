@@ -64,6 +64,12 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-search-es-java</artifactId>
         </dependency>
+        <!-- datainspect Starter（S130）：通用数据监控（DB/ES/Redis）+ SQL 安全闸门。
+             主 Starter 已含 MySQL 实现；Redis / ES 实现由后续 Sprint 引入对应模块（-redis / -es）。 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-datainspect</artifactId>
+        </dependency>
 
         <!-- ===== 业务 Plugin（system-api/message-api 由 plugin 传递带入） ===== -->
         <dependency>

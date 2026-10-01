@@ -5,7 +5,9 @@ spring:
       datasource:
         master:
           # 开发库 pivotos；中间件已迁至公网服务器 175.24.176.176（2026-07-31 搬迁）
-          url: jdbc:mysql://175.24.176.176:3306/pivotos_dev?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          # allowMultiQueries=false（S130）：驱动层禁用堆叠查询，是数据监控 SQL 闸门的第二道防线
+          # （第一道是闸门的单语句校验，两道独立生效，不互相依赖）
+          url: jdbc:mysql://175.24.176.176:3306/pivotos_dev?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false
           username: root
           password: mysql_DNCi3f
           driver-class-name: com.mysql.cj.jdbc.Driver
@@ -142,6 +144,18 @@ pivotos:
   #   · 连 7.x（如 175.24.176.176:9201，ES 7.17.28）——compatibility-mode 置 true 发 compatible-with=7。
   #   二者只改这一个开关，无需换依赖（不做 shade 双客户端）。启动期会打印服务端版本，
   #   版本不在支持区间（7.17 ~ 9.x）或兼容头与版本冲突时自动回落 simple 并打 WARN，不会让应用起不来。
+  # ST-DATAINSPECT（S130）：通用数据监控。安全默认——只查白名单表（allow-all-tables=false），
+  # 需要放开某张表就在这里加（表白名单是硬生效的安全过滤，与 monitor:data:* 权限无关）
+  datainspect:
+    mysql:
+      table-whitelist:
+        - sys_user
+        - sys_config
+        - sys_notice
+        - sys_oper_log
+        - sys_login_log
+        - sys_job
+        - sys_job_log
   search:
     type: ${PIVOTOS_SEARCH_TYPE:es-java}
     es-java:

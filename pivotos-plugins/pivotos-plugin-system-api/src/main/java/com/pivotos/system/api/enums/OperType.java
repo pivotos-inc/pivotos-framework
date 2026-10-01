@@ -10,6 +10,8 @@ public enum OperType {
     REVOKE("撤回"),
     EXPORT("导出"),
     IMPORT("导入"),
+    /** S130 数据监控：自由 SQL / 预览执行（高危，需 monitor:data:query / :preview） */
+    QUERY("查询"),
     OTHER("其他");
 
     private final String label;
