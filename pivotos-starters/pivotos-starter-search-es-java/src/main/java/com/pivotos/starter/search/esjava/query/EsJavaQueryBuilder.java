@@ -190,7 +190,10 @@ public final class EsJavaQueryBuilder {
             return FieldValue.of(n.longValue());
         }
         if (value instanceof TemporalAccessor || value instanceof Date) {
-            return FieldValue.of(((Number) normalize(value)).longValue());
+            // 时间必须与索引里存的形态一致（定长字符串），不能转毫秒：
+            // 索引里是 keyword 字符串，用数字比大小命中恒为 0 且不报错（S122 缺陷②）。
+            // 旧实现在此把 normalize 的返回值强转成 Number，传 LocalDateTime/Date 会直接 CCE。
+            return FieldValue.of(String.valueOf(normalize(value)));
         }
         return FieldValue.of(value.toString());
     }

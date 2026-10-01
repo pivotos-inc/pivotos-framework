@@ -34,16 +34,22 @@ public class EsJavaSearchAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public ElasticsearchClient elasticsearchClient(SearchProperties properties) {
-        log.info("[PivotOS] 搜索实现：es-java（官方客户端 8.19.x），节点 {}",
-                properties.getEsJava() == null ? List.of() : properties.getEsJava().getUris());
-        return EsJavaClientFactory.create(properties.getEsJava());
+        SearchProperties.EsJava config = properties.getEsJava();
+        log.info("[PivotOS] 搜索实现：es-java（官方客户端 8.19.x），节点 {}，兼容模式={}",
+                config == null ? List.of() : config.getUris(),
+                config != null && config.isCompatibilityMode());
+        return EsJavaClientFactory.create(config);
     }
 
     @Bean
     @ConditionalOnMissingBean(EsJavaSearchProvider.class)
     public EsJavaSearchProvider esJavaSearchProvider(ElasticsearchClient client, SearchProperties properties) {
-        log.info("[PivotOS] 搜索 Provider 已注册：{}", SearchProviderType.ES_JAVA.getCode());
-        return new EsJavaSearchProvider(client, properties.getEsJava() != null
+        // 构造时探测服务端版本；不可用（版本不在支持区间 / 不可达 / 兼容头冲突）不会抛异常，
+        // 而是标记 isAvailable=false，由 SearchProviderFactory 回落到 simple 并打 WARN
+        EsJavaSearchProvider provider = new EsJavaSearchProvider(client, properties.getEsJava() != null
                 && properties.getEsJava().isRefreshOnWrite());
+        log.info("[PivotOS] 搜索 Provider 已注册：{}（服务端 {}，可用={}）",
+                SearchProviderType.ES_JAVA.getCode(), provider.serverVersion().raw(), provider.isAvailable());
+        return provider;
     }
 }

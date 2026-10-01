@@ -8,6 +8,9 @@ import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
 import co.elastic.clients.elasticsearch.indices.ExistsRequest;
+import co.elastic.clients.transport.ElasticsearchTransport;
+import co.elastic.clients.transport.ElasticsearchTransportBase;
+import co.elastic.clients.transport.rest_client.RestClientTransport;
 import com.pivotos.starter.search.api.document.SearchDocument;
 import com.pivotos.starter.search.api.document.SearchHit;
 import com.pivotos.starter.search.api.document.SearchResult;
@@ -16,8 +19,14 @@ import com.pivotos.starter.search.api.enums.SearchProviderType;
 import com.pivotos.starter.search.api.exception.SearchException;
 import com.pivotos.starter.search.api.spi.SearchProvider;
 import com.pivotos.starter.search.easyes.query.EasyEsQueryBuilder;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.StringEntity;
 import org.dromara.easyes.core.conditions.select.LambdaEsQueryWrapper;
 import org.dromara.easyes.core.kernel.BaseEsMapperImpl;
+import org.elasticsearch.client.Request;
+import org.elasticsearch.client.RequestOptions;
+import org.elasticsearch.client.Response;
+import org.elasticsearch.client.RestClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +50,25 @@ import java.util.Map;
 public class EasyEsSearchProvider implements SearchProvider {
 
     private static final Logger log = LoggerFactory.getLogger(EasyEsSearchProvider.class);
+
+    /**
+     * 建索引的原始 mapping：<b>必须带 dynamic_templates</b>，不能交给动态映射。
+     * <p>与 es-java 实现同一病灶（S122 缺陷①）：动态映射把字符串落成 text（standard 分词），
+     * 中文精确 EQ / 模糊 LIKE / 时间区间会<b>静默失效</b>（实测 {@code term(module:"用户管理")} 命中 0）。
+     * 这里统一把字符串落成 keyword（定长时间字符串的字典序 = 时间序，区间与排序均正确）。
+     * <p>用原始 JSON 而非类型化 API 的原因：es-java 客户端 7.17 与 8.x 对
+     * {@code match_mapping_type} 的序列化形态不同（String vs List），原始 JSON 在两个版本上通用。
+     */
+    private static final String KEYWORD_DYNAMIC_TEMPLATE_MAPPING = "{\"mappings\":{\"dynamic_templates\":["
+            + "{\"strings_as_keywords\":{\"match_mapping_type\":\"string\","
+            + "\"mapping\":{\"type\":\"keyword\",\"ignore_above\":8191}}}]}}";
+
+    /**
+     * 媒体类型：easy-es 内嵌的 es-java 被锁在 7.17.28，其默认 Accept/Content-Type 即本值。
+     * <b>兼容头必须成对出现</b>（Accept 与 Content-Type 带同一个 compatible-with），
+     * 只带一个会被服务端判 {@code media_type_header_exception}。
+     */
+    private static final String MEDIA_TYPE = ElasticsearchTransportBase.JSON_CONTENT_TYPE;
 
     private final BaseEsMapperImpl<HashMap> mapper;
     private final ElasticsearchClient client;
@@ -114,11 +142,42 @@ public class EasyEsSearchProvider implements SearchProvider {
 
     @Override
     public void createIndexIfAbsent(String indexName) {
+        RestClient lowLevel = lowLevelClient();
+        if (lowLevel == null) {
+            createIndexTyped(indexName);
+            return;
+        }
+        try {
+            Request request = new Request("PUT", "/" + indexName);
+            request.setEntity(new StringEntity(KEYWORD_DYNAMIC_TEMPLATE_MAPPING,
+                    ContentType.parse(MEDIA_TYPE)));
+            RequestOptions.Builder options = RequestOptions.DEFAULT.toBuilder();
+            options.addHeader("Accept", MEDIA_TYPE);
+            options.addHeader("Content-Type", MEDIA_TYPE);
+            request.setOptions(options.build());
+            Response response = lowLevel.performRequest(request);
+            int status = response.getStatusLine().getStatusCode();
+            if (status >= 300) {
+                log.warn("[PivotOS][search] easy-es 索引 {} 创建返回 {}", indexName, status);
+            }
+        } catch (Exception e) {
+            // 索引已存在时 ES 返回 400 resource_already_exists_exception，属预期，降级为 debug
+            log.debug("[PivotOS][search] easy-es 索引 {} 创建跳过（可能已存在）：{}", indexName, e.getMessage());
+        }
+    }
+
+    /** 兜底：拿不到低层客户端时退回类型化 API（无 mapping，仅供测试替身场景） */
+    private void createIndexTyped(String indexName) {
         try {
             execute(() -> client.indices().create(new CreateIndexRequest.Builder().index(indexName).build()));
         } catch (SearchException e) {
             log.debug("[PivotOS][search] easy-es 索引 {} 创建跳过（可能已存在）：{}", indexName, e.getMessage());
         }
+    }
+
+    private RestClient lowLevelClient() {
+        ElasticsearchTransport transport = client == null ? null : client._transport();
+        return transport instanceof RestClientTransport rest ? rest.restClient() : null;
     }
 
     // ==================== 内部 ====================

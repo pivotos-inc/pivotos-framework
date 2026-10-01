@@ -81,7 +81,12 @@ public class SearchProperties {
         private int socketTimeout = 30000;
 
         /**
-         * 兼容模式：用 8.x 客户端连 7.17 服务端时置 true（官方 compatibility header）
+         * 兼容模式：<b>用 8.19 客户端连 ES 7.x 服务端时置 true</b>。
+         * <p>置 true 时客户端在 Accept / Content-Type 上发
+         * {@code application/vnd.elasticsearch+json; compatible-with=7}（官方 compatibility header），
+         * 让 8.x 客户端的 wire 形态降到 7.x。
+         * <p><b>连 8.x / 9.x 服务端时必须保持 false</b>——实测 ES 9.5.3 会拒绝 compatible-with=7
+         * （{@code media_type_header_exception} 400），此时启动期版本探测会判为不可用并回落 simple。
          */
         private boolean compatibilityMode = false;
 
