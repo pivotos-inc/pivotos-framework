@@ -46,6 +46,17 @@ public interface DataSourceInspector {
     /** 列举表 / 索引 / key */
     List<TableItem> listTables(String schema);
 
+    /**
+     * 列举表 / 索引 / key（带过滤 pattern）。
+     *
+     * <p>存在理由：Redis 的 key 空间可能极大，<b>必须让用户能用 pattern 收窄</b>（设计 §11-6 明列风险），
+     * 否则一次 SCAN 就能把监控页和 Redis 一起拖慢。默认实现忽略 pattern（MySQL / ES 走这条），
+     * 只有 Redis 覆写它——给 SPI 增方法必须给 default，否则既有实现全部编译失败（S128 教训）。
+     */
+    default List<TableItem> listTables(String schema, String pattern) {
+        return listTables(schema);
+    }
+
     /** 分页预览：内部固定语句，不接受用户语句 */
     QueryResult preview(PreviewRequest request);
 

@@ -12,13 +12,42 @@
     <artifactId>pivotos-starter-datainspect</artifactId>
 
     <name>pivotos-starter-datainspect</name>
-    <description>ST-DATAINSPECT 通用数据监控主 Starter：DataSourceInspector 路由工厂 + SQL 安全闸门 + MySQL 实现（只读）</description>
+    <description>ST-DATAINSPECT 通用数据监控主 Starter：DataSourceInspector 路由工厂 + SQL 安全闸门 + MySQL / Redis / ES 实现（只读）</description>
 
     <dependencies>
         <!-- 契约包（零 Spring 依赖） -->
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-datainspect-api</artifactId>
+        </dependency>
+
+        <!-- Redis 组件（SCAN + TYPE 感知取值）：optional —— 未引入时 Bean 因 @ConditionalOnClass 缺席，
+             组件清单里以 available=false + IMPL_MISSING 出现，不污染 classpath（设计 D1 精简方案的落地形态：
+             与 P1 一样复用既有模块，避免为「复用 ColumnMasker」再拆模块导致契约与实现分离） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-redis</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ES 组件：复用 es-java 既有客户端 / 鉴权 / 兼容头 / EsRestSupport，不另建连接。
+             optional 同上：type=simple 时 Bean 缺席，组件降级并在 UI 明示原因 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search-es-java</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ES 原始 JSON 解析（Jackson 2，与项目主用的 Jackson 3 包名不同可共存；版本由 BOM 仲裁） -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <optional>true</optional>
         </dependency>
 
         <!-- 租户上下文（TenantContext）与脱敏工具（SensitiveMasker） -->

@@ -46,4 +46,20 @@ class ColumnMaskerTest {
         // 命中规则的列按字符串掩码
         assertEquals("****", masker.mask("token", 1234));
     }
+
+    @Test
+    void 键名命中即脱敏_Redis的key本身就是凭证() {
+        // 列名固定为 value（不命中），但 key 名含 token —— 只看列名会整片漏脱敏
+        assertFalse(masker.isSensitive("value"));
+        assertTrue(masker.isSensitive("value", "Authorization:sys-user:token:abc"));
+        assertEquals("********", masker.mask("value", "abcdefgh", "Authorization:sys-user:token:abc"));
+        // key 不敏感时列名也不敏感 → 原样返回
+        assertEquals("abcdefgh", masker.mask("value", "abcdefgh", "sys:config:site"));
+    }
+
+    @Test
+    void 键名与列名都命中时按键名定类型() {
+        // key 含 mobile → 走 MOBILE 部分掩码（比全星更可读）
+        assertEquals("138****1234", masker.mask("value", "13812341234", "sys:mobile:bind:1"));
+    }
 }
