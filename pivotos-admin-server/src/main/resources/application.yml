@@ -137,6 +137,29 @@ pivotos:
       enabled: ${PIVOTOS_SEARCH_KB_DOC_ENABLED:true}
       bootstrap-on-start: true
       bootstrap-max-rows: 20000
+    # S128：知识库「全文召回通道」（RAG 的关键词那一路，与上面 kb-doc 的列表检索不是一回事）
+    # 走同一个 search 抽象：simple = 进程内确定性 BM25；es-java = 引擎侧 BM25（multi_match）
+    kb-chunk:
+      enabled: ${PIVOTOS_SEARCH_KB_CHUNK_ENABLED:true}
+      bootstrap-on-start: true
+      bootstrap-max-rows: 20000
+      # 参与打分的字段（须与建索引时一致；指向 keyword 字段只会整值命中，拿不到 BM25）
+      fields:
+        - content
+      # 召回分数阈值（0 = 不裁剪）
+      min-score: 0.0
+      # 候选窗口：仅「本地重打分」退化路径（如 easy-es 实现）生效，0 = 交给实现决定
+      candidate-window: 0
+      # 搜索通道不可用或为空时回退库内 BM25（召回是增强而非强依赖，默认允许回退）
+      fallback-to-db-bm25: true
+      # RRF 融合：向量通道 + 全文通道。只看名次不看分数，故两路无需归一化
+      fusion:
+        # RRF 常数 k（越大越削弱头部名次权重）
+        k: 60
+        vector-weight: 1.0
+        full-text-weight: 1.0
+        # 融合分阈值（0 = 不裁剪；调大可裁掉「只在通道尾部擦到」的弱候选）
+        min-score: 0.0
   # ---------- ST-DATAINSPECT（S130）：通用数据监控（DB / ES / Redis） ----------
   # 铁律：权限（monitor:data:*）只决定「能不能点按钮」；下面的安全过滤永远硬生效，二者不可互相替代。
   # 即使超管（*:*），DROP / DELETE / UPDATE / INSERT / ALTER / TRUNCATE / GRANT / 多语句 / 注释绕过 也一律拒绝。

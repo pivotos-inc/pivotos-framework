@@ -22,6 +22,9 @@ import java.util.Map;
 @Component
 public class RrfFusion {
 
+    /** 写入向量库时回填的文本块内容 hash（S128）：让两路结果能按同一身份对齐，不必再按内容现算 MD5 */
+    public static final String META_CHUNK_HASH = "chunk_hash";
+
     private static final int K = 60;
 
     /**
@@ -77,8 +80,12 @@ public class RrfFusion {
         return results.subList(0, Math.min(topK, results.size()));
     }
 
-    /** 计算 content 前 100 字的 MD5 hash（用于跨检索路匹配同一文本块） */
-    private String hashOf(String content) {
+    /**
+     * 计算 content 前 100 字的 MD5 hash（用于跨检索路匹配同一文本块）。
+     * <p>S128 起对外可见：{@code KbHybridFusion} 在向量结果没有 {@link #META_CHUNK_HASH} 时
+     * 用它兜底，保证「有没有埋 hash」不改变融合行为。
+     */
+    public static String hashOf(String content) {
         if (content == null || content.isEmpty()) {
             return "empty";
         }
@@ -86,7 +93,7 @@ public class RrfFusion {
         return md5Hex(prefix);
     }
 
-    private String md5Hex(String input) {
+    private static String md5Hex(String input) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
             byte[] digest = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));

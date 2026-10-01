@@ -49,6 +49,24 @@ public final class LambdaSearchQuery<T> {
     private int pageNum = 1;
     private int pageSize = 20;
 
+    /**
+     * 打分召回的查询词（S128）。非空时该查询可交给 {@code SearchTemplate#searchScored}：
+     * 有它才有「相关度」概念，为空则退化为「按条件取前 N 条」。
+     */
+    private String keyword;
+
+    /** 参与打分的字段（空 = 全部字符串字段） */
+    private final List<String> fullTextFields = new ArrayList<>();
+
+    /** 召回分数阈值（低于此值丢弃） */
+    private double minScore = 0D;
+
+    /**
+     * 候选窗口：仅在「本地重打分」退化路径上有意义，见 {@code ScoredSearchRequest#candidateWindow}。
+     * 0 表示交给实现自行决定默认值。
+     */
+    private int candidateWindow = 0;
+
     private LambdaSearchQuery(Class<T> entityType) {
         this.entityType = entityType;
     }
@@ -163,6 +181,54 @@ public final class LambdaSearchQuery<T> {
      */
     public LambdaSearchQuery<T> limit(int size) {
         return page(1, size);
+    }
+
+    // ==================== 打分召回（S128） ====================
+
+    /**
+     * 打分召回的查询词。设置了它，该查询就可以交给 {@code SearchTemplate#searchScored} 走相关性通道。
+     */
+    public LambdaSearchQuery<T> keyword(String keyword) {
+        this.keyword = keyword;
+        return this;
+    }
+
+    /**
+     * 参与打分的字段（不指定则用全部字符串字段）。
+     * <p>在 ES 实现里它决定 {@code multi_match} 打哪些字段，<b>必须与实际 mapping 的类型一致</b>
+     * ——打 keyword 字段只能整值命中，要真 BM25 必须指向 text 字段。
+     */
+    public LambdaSearchQuery<T> fullTextFields(String... fields) {
+        this.fullTextFields.clear();
+        if (fields != null) {
+            for (String field : fields) {
+                if (field != null && !field.isBlank()) {
+                    this.fullTextFields.add(field.trim());
+                }
+            }
+        }
+        return this;
+    }
+
+    /**
+     * 召回分数阈值（默认 0，即不裁剪）
+     */
+    public LambdaSearchQuery<T> minScore(double minScore) {
+        this.minScore = minScore;
+        return this;
+    }
+
+    /**
+     * 候选窗口（仅本地重打分退化路径生效，0 = 由实现决定）
+     */
+    public LambdaSearchQuery<T> candidateWindow(int candidateWindow) {
+        this.candidateWindow = candidateWindow;
+        return this;
+    }
+
+    /** 是否带打分关键词 */
+    public boolean hasKeyword() {
+        return keyword != null && !keyword.isBlank();
     }
 
     // ==================== 索引 ====================
