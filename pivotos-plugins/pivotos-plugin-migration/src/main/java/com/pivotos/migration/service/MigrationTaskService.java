@@ -46,6 +46,18 @@ public interface MigrationTaskService extends IService<MigrationTask> {
     String generateMigrationPlan(Long taskId);
 
     /**
+     * 计划复位（L10 清偿：替代「手工 DELETE migration_step / migration_artifact 再回置状态」）。
+     * 清除该任务全部步骤与「未落盘」产物，把任务状态回退到 ANALYZED(4) 并清空计划字段。
+     *
+     * <p>前置状态：ANALYZED(4) / PLANNED(6) / ROLLED_BACK(12)；执行中与已完成不允许复位。
+     * 已落盘（{@code applied=true}）的产物行刻意保留，否则 rollback 会再也找不到对应文件。
+     *
+     * @param taskId 任务 ID
+     * @return 清除的步骤 + 未落盘产物条数
+     */
+    int resetPlan(Long taskId);
+
+    /**
      * 完成任务：校验任务状态为 EXECUTED(8) 且全部步骤已 COMPLETED，推进 → COMPLETED(9)。
      *
      * @param taskId 任务 ID
