@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-starters</artifactId>
+        <version>2.16.0</version>
+    </parent>
+
+    <artifactId>pivotos-starter-search-es-java</artifactId>
+
+    <name>pivotos-starter-search-es-java</name>
+    <description>ST-SEARCH 实现二：官方 elasticsearch-java 客户端（8.19.x，面向 ES 8.x/9.x）</description>
+
+    <dependencies>
+        <!-- 契约包（不依赖主 Starter，保持实现模块可独立引入） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search-api</artifactId>
+        </dependency>
+
+        <!-- ⚠️ 版本隔离例外：elasticsearch-java 刻意不在 pivotos-dependencies 统一仲裁。
+             Easy-ES 3.0.2 内部把同一 GA 锁在 7.17.28（面向 ES 7.17），本实现需要 8.19.x（面向 ES 8.x/9.x）；
+             若放进 BOM dependencyManagement 会覆盖 easy-es 内部的 7.17.28 仲裁导致其运行期不兼容。
+             故此处显式带版本，且两个实现模块绝不同时被同一应用引入。 -->
+        <dependency>
+            <groupId>co.elastic.clients</groupId>
+            <artifactId>elasticsearch-java</artifactId>
+            <version>8.19.18</version>
+        </dependency>
+
+        <!-- JacksonJsonpMapper 依赖 Jackson 2（com.fasterxml），与项目主用的 Jackson 3（tools.jackson）
+             包名不同可共存；版本由 BOM 的 jackson2.version 仲裁 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <!-- 测试 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

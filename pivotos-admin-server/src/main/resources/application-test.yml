@@ -5,7 +5,8 @@ spring:
       datasource:
         master:
           # 开发库 pivotos；中间件已迁至公网服务器 175.24.176.176（2026-07-31 搬迁）
-          url: jdbc:mysql://10.0.0.7:3306/pivotos_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          # allowMultiQueries=false（S130）：驱动层禁用堆叠查询
+          url: jdbc:mysql://10.0.0.7:3306/pivotos_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false
           username: root
           password: mysql_DNCi3f
           driver-class-name: com.mysql.cj.jdbc.Driver
@@ -68,6 +69,14 @@ pivotos:
     port: 9999
     group-id: 3   # XXL-Job admin 中 pivotos-executor 执行器组 ID
     access-token: 123456
+  # 检索（S121/S122）：test 环境 ES——10.0.0.7:9200（内网，与 test 库同机；口令与 dev 一致）
+  # 注意：10.0.0.7 属内网网段，非该 VPC 内（如开发机）访问不通——检索会自动回退数据库查询，不影响业务。
+  search:
+    type: ${PIVOTOS_SEARCH_TYPE:es-java}
+    es-java:
+      uris: ${PIVOTOS_ES_JAVA_URIS:http://10.0.0.7:9200}
+      username: ${PIVOTOS_ES_JAVA_USERNAME:elastic}
+      password: ${PIVOTOS_ES_JAVA_PASSWORD:Elastic_RGRSPM}
   # 微信小程序（测试号）
   wechat:
     miniapp:

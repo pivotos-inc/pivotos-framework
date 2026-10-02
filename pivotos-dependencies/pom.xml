@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>2.15.0</version>
+        <version>2.16.0</version>
     </parent>
 
     <artifactId>pivotos-dependencies</artifactId>
@@ -64,6 +64,8 @@
         <!-- ==================== 搜索（Easy-ES 锁定 ES 7.17.28） ==================== -->
         <easy-es.version>3.0.2</easy-es.version>
         <elasticsearch.version>7.17.28</elasticsearch.version>
+        <!-- es-java 实现所用的官方客户端版本（面向 ES 8.x/9.x；与服务端 9.5.3 wire 兼容） -->
+        <elasticsearch-java.version>8.19.18</elasticsearch-java.version>
 
         <!-- ==================== AI（Spring AI 2.0：SB4.1/SF7/Jackson3 原生适配；
              SAA 1.1.2.0 仅支持 SB3.5，待其发布 SB4 版后再评估换装编排层） ==================== -->
@@ -101,6 +103,26 @@
             <dependency>
                 <groupId>com.baomidou</groupId>
                 <artifactId>mybatis-plus-jsqlparser</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+            <!--
+              mybatis-plus-extension 必须显式钉到与 starter 同一个版本（S125 实测缺陷）。
+
+              经过：warm-flow-mybatis-plus-sb4-starter 1.8.7 直接传递依赖
+              com.baomidou:mybatis-plus-extension:3.5.15，而 mybatis-plus-spring-boot4-starter
+              3.5.17 并不传递引入 extension 模块（3.5.17 把它拆出去了），于是 classpath 上
+              extension 只有 warm-flow 带来的 3.5.15：
+                · 3.5.17 的 spring.repository.CrudRepository 继承 extension.repository.AbstractRepository，
+                  其 saveBatch 调用 executeBatch(Collection, int, BiFunction)（3.5.17 新增的重载）；
+                · 3.5.15 的 AbstractRepository 没有这个重载
+                → 运行期 NoSuchMethodError，凡走 ServiceImpl#saveBatch 的链路 100% 500
+                  （实测 POST /system/user/import 恒「系统内部错误」，用户导入整条链路不可用）。
+
+              这里显式仲裁到 ${mybatis-plus.version}，让两侧同版本。改版本时这两项必须一起动。
+            -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-extension</artifactId>
                 <version>${mybatis-plus.version}</version>
             </dependency>
             <dependency>
@@ -196,6 +218,13 @@
                 <artifactId>jackson-datatype-jsr310</artifactId>
                 <version>${jackson2.version}</version>
             </dependency>
+            <!-- Jackson 2（com.fasterxml）：ES 官方客户端的 JacksonJsonpMapper 依赖它，
+                 与项目主用的 Jackson 3（tools.jackson）包名不同可共存，故单列版本不参与 Spring Boot 仲裁 -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson2.version}</version>
+            </dependency>
 
             <!-- ========== MapStruct-Plus ========== -->
             <dependency>
@@ -285,6 +314,29 @@
                 <groupId>org.dromara.easy-es</groupId>
                 <artifactId>easy-es-boot-starter</artifactId>
                 <version>${easy-es.version}</version>
+            </dependency>
+            <!-- S121：只引 easy-es-core（含 wrapper/DSL 与底层 es-java 7.17.28），
+                 刻意不引 easy-es-boot-starter —— 后者会带入 easy-es-spring（Spring Boot 2.7 基线，
+                 与本项目 Spring Boot 4.1 不兼容） -->
+            <dependency>
+                <groupId>org.dromara.easy-es</groupId>
+                <artifactId>easy-es-core</artifactId>
+                <version>${easy-es.version}</version>
+            </dependency>
+            <!-- ⚠️ co.elastic.clients:elasticsearch-java 必须在本 BOM 显式仲裁为 es-java 实现所需的版本。
+                 背景（2026-09-30 真机实测暴露）：不在 BOM 仲裁时，spring-boot-dependencies（Boot 4.1）
+                 会把该坐标仲裁到 9.4.2——由于「模块内显式声明」只在模块自身构建时优先，一旦本模块作为
+                 传递依赖被 admin-server 引入，就会被下游的 dependencyManagement 覆盖成 9.4.2，
+                 结果是「编译/单测用 8.19.18、运行用 9.4.2」，而 9.4.2 的底层已换成 rest5-client，
+                 与 EsJavaClientFactory 使用的 org.elasticsearch.client.RestClient 不是同一套。
+                 故此处钉死 8.19.18（已实测可连 ES 9.5.3 服务端：服务端 minimum_wire_compatibility_version=8.19.0）。
+                 easy-es 模块不受影响：它在自身 pom 里把 elasticsearch-java 显式声明为直接依赖 7.17.28，
+                 「直接依赖显式版本」优先于 BOM 仲裁（已用 dependency:tree 复核）。
+                 两个实现模块绝不可同时被同一应用引入。 -->
+            <dependency>
+                <groupId>co.elastic.clients</groupId>
+                <artifactId>elasticsearch-java</artifactId>
+                <version>${elasticsearch-java.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.elasticsearch</groupId>
@@ -417,6 +469,36 @@
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-starter-job</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-search-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-search</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-search-easy-es</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-search-es-java</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-datainspect-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-datainspect</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

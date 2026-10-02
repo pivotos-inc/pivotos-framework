@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import cn.dev33.satoken.annotation.SaCheckLogin;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 
 /**
@@ -111,6 +112,19 @@ public class MigrationTaskController {
     public R<Void> complete(@RequestParam("taskId") Long taskId) {
         migrationTaskService.completeTask(taskId);
         return R.ok();
+    }
+
+    // S124：本端点会删步骤/产物行，必须至少要求登录。全项目鉴权是注解驱动的
+    // （AuthAutoConfiguration 只注册 SaInterceptor，不做全局路由拦截），同类迁移端点
+    // 因为没有注解而匿名可达——那是 P1 权限码体系的既有欠账，但「删数据」的新口子
+    // 不能裸奔。这里刻意用 @SaCheckLogin 而不是 @SaCheckPermission：
+    // 权限码尚未进 sys_menu，用后者会让 super_admin 也被 403。
+    // type 必须显式给 StpSysUtil.TYPE：默认 realm 是「login」，管端 token 会被判未登录（1002）。
+    @SaCheckLogin(type = StpSysUtil.TYPE)
+    @Operation(summary = "计划复位：清除步骤与未落盘产物，任务回到已分析（L10 幂等自愈入口，需登录）")
+    @PostMapping("/reset")
+    public R<Integer> reset(@RequestParam("taskId") Long taskId) {
+        return R.ok(migrationTaskService.resetPlan(taskId));
     }
 
     @Operation(summary = "任务级回滚：删除全部已落盘文件")

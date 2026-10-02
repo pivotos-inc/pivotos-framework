@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-starters</artifactId>
+        <version>2.16.0</version>
+    </parent>
+
+    <artifactId>pivotos-starter-datainspect</artifactId>
+
+    <name>pivotos-starter-datainspect</name>
+    <description>ST-DATAINSPECT 通用数据监控主 Starter：DataSourceInspector 路由工厂 + SQL 安全闸门 + MySQL / Redis / ES 实现（只读）</description>
+
+    <dependencies>
+        <!-- 契约包（零 Spring 依赖） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-datainspect-api</artifactId>
+        </dependency>
+
+        <!-- Redis 组件（SCAN + TYPE 感知取值）：optional —— 未引入时 Bean 因 @ConditionalOnClass 缺席，
+             组件清单里以 available=false + IMPL_MISSING 出现，不污染 classpath（设计 D1 精简方案的落地形态：
+             与 P1 一样复用既有模块，避免为「复用 ColumnMasker」再拆模块导致契约与实现分离） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-redis</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ES 组件：复用 es-java 既有客户端 / 鉴权 / 兼容头 / EsRestSupport，不另建连接。
+             optional 同上：type=simple 时 Bean 缺席，组件降级并在 UI 明示原因 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search-es-java</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ES 原始 JSON 解析（Jackson 2，与项目主用的 Jackson 3 包名不同可共存；版本由 BOM 仲裁） -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- 租户上下文（TenantContext）与脱敏工具（SensitiveMasker） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-core</artifactId>
+        </dependency>
+
+        <!-- 租户内置忽略表清单唯一来源：TenantProperties.BUILTIN_IGNORE_TABLES
+             （刻意不复制一份常量，避免两边漂移） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-tenant</artifactId>
+        </dependency>
+
+        <!-- SQL AST 解析：与 DataPermissionInterceptor 同源同版本（BOM 钉 4.9） -->
+        <dependency>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+        </dependency>
+
+        <!-- Spring 能力标记 optional：下游必为 Spring Boot 应用，optional 仅避免把 Starter 传递出去 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <!-- 测试 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

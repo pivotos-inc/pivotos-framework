@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>2.15.0</version>
+        <version>2.16.0</version>
     </parent>
 
     <artifactId>pivotos-admin-server</artifactId>
@@ -51,6 +51,24 @@
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-excel</artifactId>
+        </dependency>
+        <!-- search Starter（S121）：主 Starter（含 simple 内存兜底）+ es-java 实现（ES 8.x/9.x）。
+             S121-D2 的「只引主 Starter」在真接 ES 时按约定放开这一行：dev/test 已配 ES 地址
+             （175.24.176.176 / 10.0.0.7），type=es-java 时走真 ES；未配或连不上时检索自动回退数据库查询，
+             业务不受影响。es-java 与 easy-es 两个实现模块绝不可同时引入（同一 GA 坐标版本互斥）。 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search-es-java</artifactId>
+        </dependency>
+        <!-- datainspect Starter（S130）：通用数据监控（DB/ES/Redis）+ SQL 安全闸门。
+             主 Starter 已含 MySQL 实现；Redis / ES 实现由后续 Sprint 引入对应模块（-redis / -es）。 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-datainspect</artifactId>
         </dependency>
 
         <!-- ===== 业务 Plugin（system-api/message-api 由 plugin 传递带入） ===== -->

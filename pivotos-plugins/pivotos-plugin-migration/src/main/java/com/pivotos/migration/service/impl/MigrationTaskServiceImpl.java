@@ -85,6 +85,11 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
             MigrationTaskStatus.ANALYZED.getCode());
     private static final Set<Integer> ALLOWED_PLAN_STATUSES = Set.of(
             MigrationTaskStatus.ANALYZED.getCode());
+    /** 允许「计划复位」的状态：尚未落盘 / 已回滚。执行中或已完成不允许，避免抹掉真实产物。 */
+    private static final Set<Integer> ALLOWED_RESET_STATUSES = Set.of(
+            MigrationTaskStatus.ANALYZED.getCode(),
+            MigrationTaskStatus.PLANNED.getCode(),
+            MigrationTaskStatus.ROLLED_BACK.getCode());
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -411,11 +416,17 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
         task.setStatus(MigrationTaskStatus.PLANNING.getCode());
         updateById(task);
 
+        // L10 清偿（幂等）：任何一次 plan 都先清掉上一批步骤与「未落盘」产物。
+        // 放在 AI 调用之前（而不是插入之前），AI 未装载 / AI 失败两条旁路才不会留下旧批残留——
+        // 历史上重复触发 plan 会产生两批 migration_step 并存，E2E 的计数断言因此撞车。
+        clearPlanArtifacts(taskId);
+
         IAiFacade aiFacade = aiFacadeProvider.getIfAvailable();
         if (aiFacade == null) {
             log.warn("迁移计划生成：AI 插件未装载，跳过计划生成，taskId={}", taskId);
             saveLog(taskId, MigrationLogLevel.WARN, MigrationPhase.PLAN, "AI 插件未装载，已跳过计划生成");
             task.setStatus(MigrationTaskStatus.PLANNED.getCode());
+            task.setTotalSteps(0);
             updateById(task);
             return "{}";
         }
@@ -503,9 +514,6 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
                     "AI 返回内容无法解析为 JSON，跳过步骤创建");
         }
 
-        // 清除旧步骤并批量插入新步骤
-        migrationStepMapper.delete(new LambdaQueryWrapper<MigrationStep>()
-                .eq(MigrationStep::getTaskId, taskId));
         for (MigrationStep step : steps) {
             migrationStepMapper.insert(step);
         }
@@ -526,6 +534,74 @@ public class MigrationTaskServiceImpl extends ServiceImpl<MigrationTaskMapper, M
         summary.put("typeStat", typeStat);
         summary.put("planLength", aiResponse.length());
         return JSON.toJSONString(summary);
+    }
+
+    /**
+     * 清空某任务的计划产物：步骤全清 + 未落盘产物全清。
+     *
+     * <p>「未落盘」是刻意的边界——{@code applied=true} 的产物代表磁盘上真实存在的文件，
+     * 删掉它的 DB 行会让 {@code rollback} 再也找不到该文件（孤儿文件），故只清未落盘的。
+     */
+    private void clearPlanArtifacts(Long taskId) {
+        int steps = migrationStepMapper.delete(new LambdaQueryWrapper<MigrationStep>()
+                .eq(MigrationStep::getTaskId, taskId));
+
+        // 产物走「先读后删」而不是一条 delete ... where applied = false：
+        // applied=true 的行代表磁盘上真实存在的文件，一旦把它的 DB 行删掉，rollback 就再也找不到
+        // 这个文件（变成孤儿）。显式过滤也让这条边界能被单测直接断言（按 id 批量删可见）。
+        List<Long> pendingIds = migrationArtifactMapper.selectList(new LambdaQueryWrapper<MigrationArtifact>()
+                        .eq(MigrationArtifact::getTaskId, taskId))
+                .stream()
+                .filter(a -> !Boolean.TRUE.equals(a.getApplied()))
+                .map(MigrationArtifact::getId)
+                .toList();
+        int artifacts = 0;
+        if (!pendingIds.isEmpty()) {
+            artifacts = migrationArtifactMapper.deleteBatchIds(pendingIds);
+        }
+
+        if (steps > 0 || artifacts > 0) {
+            log.info("迁移计划产物已清空（幂等），taskId={}, 清除步骤={}, 清除未落盘产物={}", taskId, steps, artifacts);
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int resetPlan(Long taskId) {
+        MigrationTask task = getById(taskId);
+        if (task == null) {
+            throw new ServiceException(MigrationErrorCode.TASK_NOT_FOUND);
+        }
+        if (!ALLOWED_RESET_STATUSES.contains(task.getStatus())) {
+            throw new ServiceException(MigrationErrorCode.TASK_STATUS_INVALID);
+        }
+
+        int cleared = countSteps(taskId) + countPendingArtifacts(taskId);
+        clearPlanArtifacts(taskId);
+
+        task.setStatus(MigrationTaskStatus.ANALYZED.getCode());
+        task.setMigrationPlan(null);
+        task.setTotalSteps(0);
+        task.setRolledBack(false);
+        updateById(task);
+
+        saveLog(taskId, MigrationLogLevel.INFO, MigrationPhase.PLAN,
+                "计划已复位，清除步骤与未落盘产物合计=" + cleared + "，任务回到 ANALYZED");
+        log.info("迁移计划已复位，taskId={}, 清除={}", taskId, cleared);
+        return cleared;
+    }
+
+    private int countSteps(Long taskId) {
+        Long n = migrationStepMapper.selectCount(new LambdaQueryWrapper<MigrationStep>()
+                .eq(MigrationStep::getTaskId, taskId));
+        return n == null ? 0 : n.intValue();
+    }
+
+    private int countPendingArtifacts(Long taskId) {
+        Long n = migrationArtifactMapper.selectCount(new LambdaQueryWrapper<MigrationArtifact>()
+                .eq(MigrationArtifact::getTaskId, taskId)
+                .eq(MigrationArtifact::getApplied, false));
+        return n == null ? 0 : n.intValue();
     }
 
     // ------------------------------------------------------------------ complete

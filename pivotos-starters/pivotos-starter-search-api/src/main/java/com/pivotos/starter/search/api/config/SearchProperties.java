@@ -1,0 +1,100 @@
+package com.pivotos.starter.search.api.config;
+
+import lombok.Data;
+
+import java.util.List;
+
+/**
+ * 搜索配置（{@code pivotos.search.*}）。
+ * <p>这里刻意写成<b>普通 POJO 不挂 @ConfigurationProperties</b>——契约包保持零 Spring 依赖，
+ * 由主 Starter 在 @Bean 方法上完成绑定（Spring Boot 支持 bean 方法级绑定）。
+ *
+ * @author PivotOS Team
+ * @since 2.16.0
+ */
+@Data
+public class SearchProperties {
+
+    /**
+     * 是否启用搜索 Starter（默认 true：simple 是纯内存实现，敞开无副作用）
+     */
+    private boolean enabled = true;
+
+    /**
+     * 实现类型：simple / easy-es / es-java。
+     * 未命中已注册 Provider 时回落到 simple 并打 WARN（保证配错也能起服）
+     */
+    private String type = "simple";
+
+    /**
+     * 索引名前缀（多环境共用一套 ES 时隔离用，为空则不加前缀）
+     */
+    private String indexPrefix = "";
+
+    /** Easy-ES 实现配置 */
+    private EasyEs easyEs = new EasyEs();
+
+    /** elasticsearch-java 实现配置 */
+    private EsJava esJava = new EsJava();
+
+    /**
+     * Easy-ES 实现（easy-es-core 3.0.2，内嵌 elasticsearch-java 7.17.28，面向 ES 7.17）
+     */
+    @Data
+    public static class EasyEs {
+
+        /** ES 节点地址 */
+        private List<String> uris = List.of("http://localhost:9200");
+
+        /** 用户名（无认证时留空） */
+        private String username;
+
+        /** 密码 */
+        private String password;
+
+        /** 连接超时（毫秒） */
+        private int connectTimeout = 3000;
+
+        /** 读取超时（毫秒） */
+        private int socketTimeout = 30000;
+    }
+
+    /**
+     * elasticsearch-java 实现（官方新客户端，面向 ES 8.x/9.x）
+     */
+    @Data
+    public static class EsJava {
+
+        /** ES 节点地址 */
+        private List<String> uris = List.of("http://localhost:9200");
+
+        /** 用户名（无认证时留空） */
+        private String username;
+
+        /** 密码 */
+        private String password;
+
+        /** 连接超时（毫秒） */
+        private int connectTimeout = 3000;
+
+        /** 读取超时（毫秒） */
+        private int socketTimeout = 30000;
+
+        /**
+         * 兼容模式：<b>用 8.19 客户端连 ES 7.x 服务端时置 true</b>。
+         * <p>置 true 时客户端在 Accept / Content-Type 上发
+         * {@code application/vnd.elasticsearch+json; compatible-with=7}（官方 compatibility header），
+         * 让 8.x 客户端的 wire 形态降到 7.x。
+         * <p><b>连 8.x / 9.x 服务端时必须保持 false</b>——实测 ES 9.5.3 会拒绝 compatible-with=7
+         * （{@code media_type_header_exception} 400），此时启动期版本探测会判为不可用并回落 simple。
+         */
+        private boolean compatibilityMode = false;
+
+        /**
+         * 写入后是否等待刷新（ES 近实时：默认写后最多 1s 才可检索）。
+         * 置 true = 写后立即可检索（refresh=wait_for），代价是每次索引写入多一次 refresh 开销，
+         * 高频写链路（如操作日志）不建议开；默认 false。
+         */
+        private boolean refreshOnWrite = false;
+    }
+}

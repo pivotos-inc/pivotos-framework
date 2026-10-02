@@ -42,7 +42,7 @@ spring:
     mcp:
       server:
         name: pivotos-mcp-server
-        version: 2.15.0
+        version: 2.16.0
 
 sa-token:
   token-name: Authorization
@@ -104,6 +104,96 @@ pivotos:
     #   enabled: true
     #   tessdata-path: /opt/homebrew/share/tessdata
     #   languages: chi_sim+eng
+  search:
+    # ST-SEARCH（S121）：搜索抽象层。type=simple 为进程内内存兜底（零中间件，重启即失），
+    # 生产接入 ES 时引入 pivotos-starter-search-easy-es（ES 7.17）或 -es-java（ES 8.x/9.x）
+    # 并把 type 改为 easy-es / es-java；未命中已注册实现时自动回落 simple 并打 WARN（配错也能起服）
+    type: ${PIVOTOS_SEARCH_TYPE:simple}
+    # 多环境共用一套 ES 时用它做索引名前缀隔离，留空表示不加前缀
+    index-prefix: ${PIVOTOS_SEARCH_INDEX_PREFIX:}
+    # es-java 实现（官方 elasticsearch-java 8.19.18，面向 ES 8.x/9.x）。
+    # 未引入 pivotos-starter-search-es-java 模块时，即便 type=es-java 也会回落到 simple 并打 WARN（配错也能起服）。
+    # 具体地址/口令写在各环境的 application-{profile}.yml（dev 用 175.24.176.176，test 用 10.0.0.7）。
+    es-java:
+      uris: ${PIVOTOS_ES_JAVA_URIS:http://localhost:9200}
+      username: ${PIVOTOS_ES_JAVA_USERNAME:}
+      password: ${PIVOTOS_ES_JAVA_PASSWORD:}
+      connect-timeout: 3000
+      socket-timeout: 30000
+      # 兼容模式：用 8.19 客户端连 ES 7.x 服务端时置 true（发 compatible-with=7 官方兼容头）。
+      # 连 8.x / 9.x 服务端必须保持 false——实测 ES 9.5.3 会拒绝 compatible-with=7
+      # （media_type_header_exception 400）；启动期版本探测会据此判不可用并回落 simple。
+      compatibility-mode: ${PIVOTOS_ES_JAVA_COMPATIBILITY_MODE:false}
+      # ES 默认近实时（写后最多 1s 才可检索）。置 true 改为 refresh=wait_for：写后立即可检索，
+      # 代价是每次索引写入多一次 refresh 开销，高频写链路（操作日志）不建议开。
+      refresh-on-write: ${PIVOTOS_ES_JAVA_REFRESH_ON_WRITE:false}
+    # S122 业务检索开关：每条链路可单独关（关闭即回到 MyBatis 查询，零数据/零迁移的一键回滚）
+    # 数据来源：写侧双写索引 + 起服时索引为空则从数据库全量回灌（simple 内存实现重启即失，靠它恢复）
+    oper-log:
+      enabled: ${PIVOTOS_SEARCH_OPER_LOG_ENABLED:true}
+      bootstrap-on-start: true
+      bootstrap-max-rows: 50000
+    kb-doc:
+      enabled: ${PIVOTOS_SEARCH_KB_DOC_ENABLED:true}
+      bootstrap-on-start: true
+      bootstrap-max-rows: 20000
+    # S128：知识库「全文召回通道」（RAG 的关键词那一路，与上面 kb-doc 的列表检索不是一回事）
+    # 走同一个 search 抽象：simple = 进程内确定性 BM25；es-java = 引擎侧 BM25（multi_match）
+    kb-chunk:
+      enabled: ${PIVOTOS_SEARCH_KB_CHUNK_ENABLED:true}
+      bootstrap-on-start: true
+      bootstrap-max-rows: 20000
+      # 参与打分的字段（须与建索引时一致；指向 keyword 字段只会整值命中，拿不到 BM25）
+      fields:
+        - content
+      # 召回分数阈值（0 = 不裁剪）
+      min-score: 0.0
+      # 候选窗口：仅「本地重打分」退化路径（如 easy-es 实现）生效，0 = 交给实现决定
+      candidate-window: 0
+      # 搜索通道不可用或为空时回退库内 BM25（召回是增强而非强依赖，默认允许回退）
+      fallback-to-db-bm25: true
+      # RRF 融合：向量通道 + 全文通道。只看名次不看分数，故两路无需归一化
+      fusion:
+        # RRF 常数 k（越大越削弱头部名次权重）
+        k: 60
+        vector-weight: 1.0
+        full-text-weight: 1.0
+        # 融合分阈值（0 = 不裁剪；调大可裁掉「只在通道尾部擦到」的弱候选）
+        min-score: 0.0
+  # ---------- ST-DATAINSPECT（S130）：通用数据监控（DB / ES / Redis） ----------
+  # 铁律：权限（monitor:data:*）只决定「能不能点按钮」；下面的安全过滤永远硬生效，二者不可互相替代。
+  # 即使超管（*:*），DROP / DELETE / UPDATE / INSERT / ALTER / TRUNCATE / GRANT / 多语句 / 注释绕过 也一律拒绝。
+  datainspect:
+    # 总开关；false 时所有组件一律降级（200 + available=false + reason）
+    enabled: ${PIVOTOS_DATA_INSPECT_ENABLED:true}
+    # 自由 SQL 开关（高危）。生产默认关闭，见 application-prod.yml
+    query-enabled: ${PIVOTOS_DATA_INSPECT_QUERY_ENABLED:true}
+    # 默认返回行数 / 硬上限（请求参数不可突破）
+    max-rows: 200
+    hard-max-rows: 1000
+    # 单条语句最大字符数
+    max-sql-length: 4000
+    # JDBC 查询超时（秒）——超时熔断，与行数上限共同防拖库
+    query-timeout-seconds: 5
+    # 慢语句阈值（毫秒）：超过打 WARN 日志（本轮不做告警持久化）
+    slow-threshold-ms: 1000
+    # 租户改写：裸 JDBC 不经过 MyBatis 租户拦截器，这里必须自己补；<b>超管不豁免，无开关</b>
+    force-tenant-scope: true
+    # 敏感列脱敏（按列名正则）
+    mask-enabled: true
+    mysql:
+      # false = 只查白名单表（安全默认）
+      allow-all-tables: ${PIVOTOS_DATA_INSPECT_ALLOW_ALL_TABLES:false}
+      table-whitelist: ${PIVOTOS_DATA_INSPECT_TABLE_WHITELIST:}
+      schema-whitelist: ${PIVOTOS_DATA_INSPECT_SCHEMA_WHITELIST:}
+      tenant-id-column: tenant_id
+    es:
+      max-rows: 100
+      max-items: 500
+    redis:
+      scan-count: 500
+      max-keys: 1000
+      value-truncate-bytes: 2048
   workflow:
     # D1（v2.14.0）：旧内置设计器（warm-flow 自带 jar，/warm-flow-ui/）入口退役。
     # false / 缺省 —— 守卫拦截旧入口（HTTP 410 + code=4100），单入口为 bpmn-js 新版设计器；

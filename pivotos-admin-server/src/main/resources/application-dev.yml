@@ -5,7 +5,9 @@ spring:
       datasource:
         master:
           # 开发库 pivotos；中间件已迁至公网服务器 175.24.176.176（2026-07-31 搬迁）
-          url: jdbc:mysql://175.24.176.176:3306/pivotos_dev?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          # allowMultiQueries=false（S130）：驱动层禁用堆叠查询，是数据监控 SQL 闸门的第二道防线
+          # （第一道是闸门的单语句校验，两道独立生效，不互相依赖）
+          url: jdbc:mysql://175.24.176.176:3306/pivotos_dev?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false
           username: root
           password: mysql_DNCi3f
           driver-class-name: com.mysql.cj.jdbc.Driver
@@ -132,6 +134,36 @@ pivotos:
         amount-variable-key: ""
         max-amount: 0
         message: "AI 预审自动通过（依据制度检索结论，审批人已授权自动预审）"
+  # 检索（S121/S122）：dev 环境真连 ES——175.24.176.176:9200。
+  # 2026-09-30 实测：服务端 ES 9.5.3 单节点、HTTP 明文 + Basic 认证（elastic/Elastic_RGRSPM）；
+  # 客户端 elasticsearch-java 8.19.18 与服务端 wire 兼容（服务端 minimum_wire_compatibility_version=8.19.0），
+  # dev 独享该集群故索引名不加前缀。
+  # 一键回退：PIVOTOS_SEARCH_TYPE=simple（回内存兜底）或 PIVOTOS_SEARCH_OPER_LOG_ENABLED=false（回数据库查询）。
+  # 多版本支持（S127）：同一份 es-java 实现可连 7.17 / 8.x / 9.x。
+  #   · 连 8.x / 9.x（本 dev 的 9200，ES 9.5.3）——compatibility-mode 保持 false；
+  #   · 连 7.x（如 175.24.176.176:9201，ES 7.17.28）——compatibility-mode 置 true 发 compatible-with=7。
+  #   二者只改这一个开关，无需换依赖（不做 shade 双客户端）。启动期会打印服务端版本，
+  #   版本不在支持区间（7.17 ~ 9.x）或兼容头与版本冲突时自动回落 simple 并打 WARN，不会让应用起不来。
+  # ST-DATAINSPECT（S130）：通用数据监控。安全默认——只查白名单表（allow-all-tables=false），
+  # 需要放开某张表就在这里加（表白名单是硬生效的安全过滤，与 monitor:data:* 权限无关）
+  datainspect:
+    mysql:
+      table-whitelist:
+        - sys_user
+        - sys_config
+        - sys_notice
+        - sys_oper_log
+        - sys_login_log
+        - sys_job
+        - sys_job_log
+  search:
+    type: ${PIVOTOS_SEARCH_TYPE:es-java}
+    es-java:
+      uris: ${PIVOTOS_ES_JAVA_URIS:http://175.24.176.176:9200}
+      username: ${PIVOTOS_ES_JAVA_USERNAME:elastic}
+      password: ${PIVOTOS_ES_JAVA_PASSWORD:Elastic_RGRSPM}
+      # 服务端是 9.5.3，必须 false；切到 7.17 服务端时改 true
+      compatibility-mode: ${PIVOTOS_ES_JAVA_COMPATIBILITY_MODE:false}
   # 微信小程序（测试号）
   wechat:
     miniapp:

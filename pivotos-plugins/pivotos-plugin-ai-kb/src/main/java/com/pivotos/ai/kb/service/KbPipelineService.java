@@ -10,8 +10,11 @@ import com.pivotos.ai.kb.extractor.OcrExtractor;
 import com.pivotos.ai.kb.extractor.PdfTableExtractor;
 import com.pivotos.ai.kb.mapper.AiKbChunkMapper;
 import com.pivotos.ai.kb.mapper.KbDocumentMapper;
-import com.pivotos.ai.kb.retriever.Bm25Retriever;
+import com.pivotos.ai.kb.search.KbChunkSearchSupport;
+import com.pivotos.ai.kb.retriever.KbFullTextRetriever;
+import com.pivotos.ai.kb.retriever.KbHybridFusion;
 import com.pivotos.ai.kb.retriever.RrfFusion;
+import com.pivotos.ai.kb.search.KbDocSearchSupport;
 import com.pivotos.ai.kb.splitter.SemanticChunkSplitter;
 import com.pivotos.ai.kb.vectorstore.KbVectorStoreFactory;
 import com.pivotos.file.api.facade.IFileFacade;
@@ -44,12 +47,18 @@ public class KbPipelineService {
     private final IFileFacade fileFacade;
     private final KbDocumentMapper documentMapper;
     private final AiKbChunkMapper chunkMapper;
-    private final Bm25Retriever bm25Retriever;
-    private final RrfFusion rrfFusion;
     private final PdfTableExtractor pdfTableExtractor;
     private final OcrExtractor ocrExtractor;
     /** 重排契约（S65）：plugin-ai 未装配或无配置时静默降级为原召回顺序 */
     private final ObjectProvider<IRerankFacade> rerankFacadeProvider;
+    /** S122：文档状态/块数变化要同步回检索索引，否则列表页会看到过期的状态 */
+    private final KbDocSearchSupport searchSupport;
+    /** S128：文本块全文索引（召回的关键词通道） */
+    private final KbChunkSearchSupport chunkSearchSupport;
+    /** S128：全文通道（search 优先，回退库内 BM25） */
+    private final KbFullTextRetriever fullTextRetriever;
+    /** S128：双通道 RRF 融合（阈值与权重可配置） */
+    private final KbHybridFusion hybridFusion;
 
     /**
      * 对指定文档执行向量化索引。
@@ -105,6 +114,16 @@ public class KbPipelineService {
             SemanticChunkSplitter splitter = new SemanticChunkSplitter(chunkSize, chunkOverlap);
             List<Document> chunks = splitter.apply(rawDocuments);
 
+            // S128：预计算内容 hash 并埋进向量元数据——<b>必须在 vectorStore.add 之前</b>，
+            // 否则向量侧没有身份标识，RRF 的「两路都命中应加分」永远触发不了（S122 遗留②的隐性病灶）
+            List<String> chunkHashes = new ArrayList<>(chunks.size());
+            for (int i = 0; i < chunks.size(); i++) {
+                String content = chunks.get(i).getText();
+                String contentHash = md5Hex(content.length() > 100 ? content.substring(0, 100) : content);
+                chunkHashes.add(contentHash);
+                chunks.get(i).getMetadata().put(RrfFusion.META_CHUNK_HASH, contentHash);
+            }
+
             VectorStore vectorStore = vectorStoreFactory.get(kb);
             // DashScope Embedding API 限制单次 batch ≤ 10，分批写入
             int batchSize = 10;
@@ -120,12 +139,13 @@ public class KbPipelineService {
             List<AiKbChunk> chunkEntities = new ArrayList<>();
             for (int i = 0; i < chunks.size(); i++) {
                 String content = chunks.get(i).getText();
+                String contentHash = chunkHashes.get(i);
                 AiKbChunk chunkEntity = new AiKbChunk();
                 chunkEntity.setKbId(kb.getId());
                 chunkEntity.setDocId(doc.getId());
                 chunkEntity.setChunkIndex(i);
                 chunkEntity.setContent(content);
-                chunkEntity.setContentHash(md5Hex(content.length() > 100 ? content.substring(0, 100) : content));
+                chunkEntity.setContentHash(contentHash);
                 chunkEntity.setTenantId(kb.getTenantId());
                 chunkEntities.add(chunkEntity);
             }
@@ -135,6 +155,8 @@ public class KbPipelineService {
                 chunkMapper.batchInsert(batch);
             }
             log.info("[PivotOS-KB] 文本块写入完成: kbId={}, docId={}, chunks={}", kb.getId(), doc.getId(), chunkEntities.size());
+            // S128：同步写全文索引（召回的关键词通道；simple 侧内存、es-java 侧引擎 BM25）
+            chunkSearchSupport.indexBatch(chunkEntities);
 
             doc.setStatus(KbDocStatusEnum.COMPLETED.getValue());
             doc.setVectorCount(chunks.size());
@@ -146,12 +168,15 @@ public class KbPipelineService {
                     .set(KbDocument::getVectorCount, chunks.size())
                     .set(KbDocument::getChunkCount, chunks.size())
                     .set(KbDocument::getErrorMsg, null));
+            // 同步检索索引：状态/块数已变，索引不跟上会导致列表页显示旧的「处理中」
+            searchSupport.index(doc);
             log.info("[PivotOS-KB] 文档向量化完成: kbId={}, docId={}, chunks={}", kb.getId(), doc.getId(), chunks.size());
         } catch (Exception e) {
             log.error("[PivotOS-KB] 文档向量化失败: kbId={}, docId={}", kb.getId(), doc.getId(), e);
             doc.setStatus(KbDocStatusEnum.FAILED.getValue());
             doc.setErrorMsg(e.getMessage());
             documentMapper.updateById(doc);
+            searchSupport.index(doc);
         }
     }
 
@@ -170,6 +195,8 @@ public class KbPipelineService {
                     kb.getId(), e.getMessage());
         }
         chunkMapper.deleteByKbId(kb.getId());
+        // S128：全文索引不跟着删，召回就会命中已删除知识库的块（比「少了召回」严重）
+        chunkSearchSupport.deleteByKbId(kb.getId());
         log.info("[PivotOS-KB] 已删除知识库文本块: kbId={}", kb.getId());
     }
 
@@ -189,6 +216,7 @@ public class KbPipelineService {
                     kb.getId(), doc.getId(), e.getMessage());
         }
         chunkMapper.deleteByDocId(doc.getId());
+        chunkSearchSupport.deleteByDocId(doc.getId());
         log.info("[PivotOS-KB] 已删除文档文本块: kbId={}, docId={}", kb.getId(), doc.getId());
     }
 
@@ -239,17 +267,19 @@ public class KbPipelineService {
                 candidates.add(new RrfFusion.FusedResult(d.getText(), d.getMetadata(), null, 0.0, i + 1, 0, null));
             }
         } else {
-            // 混合检索：向量 topK*3 + BM25 topK*3 → RRF 融合（重排开启时扩候选 topK*2）
+            // 混合检索：向量 topK*3 + 全文 topK*3 → RRF 融合（重排开启时扩候选 topK*2）
+            // S128：全文通道改走 search 抽象（simple 侧确定性 BM25 / es-java 侧引擎 BM25），
+            // 不可用时由 KbFullTextRetriever 回退库内 BM25；融合改用契约层 SearchRrf，阈值与权重可配置。
             SearchRequest request = SearchRequest.builder()
                     .query(query)
                     .topK(topK * 3)
                     .filterExpression("kb_id == '" + kb.getId() + "'")
                     .build();
             List<Document> vectorResults = vectorStore.similaritySearch(request);
-            List<Bm25Retriever.Bm25Result> bm25Results = bm25Retriever.search(kb.getId(), query, topK * 3);
-            candidates = rrfFusion.fuse(vectorResults, bm25Results, rerankEnabled ? topK * 2 : topK);
-            log.info("[PivotOS-KB] 混合检索: kbId={}, vector={}, bm25={}, fused={}",
-                    kb.getId(), vectorResults.size(), bm25Results.size(), candidates.size());
+            List<AiKbChunk> fullTextChunks = fullTextRetriever.retrieve(kb.getId(), query, topK * 3);
+            candidates = hybridFusion.fuse(vectorResults, fullTextChunks, rerankEnabled ? topK * 2 : topK);
+            log.info("[PivotOS-KB] 混合检索: kbId={}, vector={}, fulltext={}, fused={}",
+                    kb.getId(), vectorResults.size(), fullTextChunks.size(), candidates.size());
         }
 
         if (!rerankEnabled) {
@@ -305,6 +335,7 @@ public class KbPipelineService {
                 .eq(KbDocument::getId, doc.getId())
                 .set(KbDocument::getStatus, status.getValue())
                 .set(KbDocument::getErrorMsg, errorMsg));
+        searchSupport.index(doc);
     }
 
     /** 计算字符串 MD5（用于文本块 content_hash 去重） */

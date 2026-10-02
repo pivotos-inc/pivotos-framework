@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-plugins</artifactId>
-        <version>2.15.0</version>
+        <version>2.16.0</version>
     </parent>
 
     <artifactId>pivotos-plugin-monitor</artifactId>
@@ -70,6 +70,22 @@
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-plugin-ai-kb-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- ES 监控：搜索健康 SPI 契约（只引 api 包，符合 ArchUnit A1/A2——
+             monitor 不得依赖 -es-java / -easy-es 实现模块，指标经 SearchHealthProvider 获取） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-search-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- S130 通用数据监控：只引契约包（零中间件依赖），
+             MySQL / Redis / ES 实现由启动器（admin-server）引入，插件侧靠 SPI Bean 获取 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-datainspect-api</artifactId>
             <version>${project.version}</version>
         </dependency>
 
