@@ -1,0 +1,4 @@
+# S133 spike 产物：build/ 是本地构建的临时目录（fat jar 解压 + 编译输出的 jar），不入库
+build/
+# 运行期日志（JVM 起服日志体量大，重复率极高）
+evidence/*.log
