@@ -15,4 +15,10 @@ public class MybatisProperties {
 
     /** 租户字段名 */
     private String tenantColumn = "tenant_id";
+
+    /**
+     * 期望库名（L9）：配置后启动期会与「生效数据源 URL」里的库名比对，不一致直接启动失败。
+     * 留空 = 只打印溯源日志不阻断（默认，避免误伤既有环境）。
+     */
+    private String expectedDatabase;
 }
