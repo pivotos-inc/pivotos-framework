@@ -2,3 +2,5 @@
 build/
 # 运行期日志（JVM 起服日志体量大，重复率极高）
 evidence/*.log
+# V3-S2 版本矩阵探针的构建产物（pom/源码入库，编译输出不入库）
+probe/**/target/
