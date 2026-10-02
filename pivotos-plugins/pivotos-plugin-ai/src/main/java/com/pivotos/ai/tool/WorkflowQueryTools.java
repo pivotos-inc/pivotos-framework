@@ -1,7 +1,9 @@
 package com.pivotos.ai.tool;
 
+import com.pivotos.ai.api.tool.AiToolMeta;
+
 import com.alibaba.fastjson2.JSON;
-import com.pivotos.ai.enums.ToolType;
+import com.pivotos.ai.api.enums.ToolType;
 import com.pivotos.common.core.page.PageResult;
 import com.pivotos.starter.core.context.LoginContext;
 import com.pivotos.workflow.api.IWorkflowFacade;

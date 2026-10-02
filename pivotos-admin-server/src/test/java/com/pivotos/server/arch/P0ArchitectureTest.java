@@ -1,7 +1,7 @@
 package com.pivotos.server.arch;
 
-import com.pivotos.ai.enums.ToolType;
-import com.pivotos.ai.tool.AiToolMeta;
+import com.pivotos.ai.api.enums.ToolType;
+import com.pivotos.ai.api.tool.AiToolMeta;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -391,6 +391,182 @@ class P0ArchitectureTest {
         String className = parts.length > 0 ? parts[parts.length - 1].replace(".java", "") : tail;
         String module = parts.length > 1 ? parts[1] : "";
         return module + "/" + className;
+    }
+
+    // ========== C1~C4：V3「形态革命」（v3.0.0）契约门禁（S133 spike → V3-S1 落地） ==========
+    //
+    // 为什么不用 A1/A2 那套「逐插件手写对称规则」：S133 全仓扫描发现唯一一条隐性欠款边
+    // （ai-coding → ai，13 处 import / 8 个类）之所以能潜伏至今，根因就是 A1/A2 靠手工登记，
+    // 而 **ai-coding 从未登记** —— 规则对它根本不存在。登记制的失效模式是「漏登记 = 免检」，
+    // 新插件一旦忘了登记就自动获得一张免罪符。
+    // 因此 C1/C2 改为**由代码全量推导**：插件归属按最长包名匹配，契约包从 -api 模块推导，
+    // 新增插件无需任何登记即被覆盖。
+
+    /** 插件实现根包（最长匹配定归属；monitor / generator 无 -api 模块，整包视为实现区） */
+    private static final String[] PLUGIN_ROOTS = {
+        "com.pivotos.system", "com.pivotos.message", "com.pivotos.file",
+        "com.pivotos.workflow", "com.pivotos.docsync", "com.pivotos.migration",
+        "com.pivotos.mind", "com.pivotos.monitor", "com.pivotos.generator",
+        "com.pivotos.ai.coding", "com.pivotos.ai.kb", "com.pivotos.ai"
+    };
+
+    /**
+     * 契约包白名单：跨插件只允许依赖这些包。
+     *
+     * <p><b>为什么用精确包而不是前缀</b>：生成器的契约模块包名<b>不含 .api</b>
+     * （{@code IGeneratorFacade} 在 {@code com.pivotos.generator.service}），而实现模块的类
+     * 恰好在它的子包 {@code com.pivotos.generator.service.impl} 与 {@code ...service.GeneratorService}。
+     * 这是全仓唯一的「同名包跨实现与契约」形态（无同名类，非缺陷），按前缀判定会把实现类误判成契约类
+     * （首跑实测误报 263 处），因此这里按<b>精确包名</b>匹配，把 generator 的实现子包排除在外。
+     */
+    private static final java.util.Set<String> CONTRACT_PACKAGES = java.util.Set.of(
+        "com.pivotos.system.api", "com.pivotos.message.api", "com.pivotos.file.api",
+        "com.pivotos.ai.api", "com.pivotos.ai.kb.api", "com.pivotos.ai.coding.api",
+        "com.pivotos.workflow.api", "com.pivotos.docsync.api", "com.pivotos.migration.api",
+        "com.pivotos.mind.api", "com.pivotos.generator.api", "com.pivotos.generator.service");
+
+    /** 契约包的<b>实现侧排除项</b>：包名在白名单前缀内，但类其实属于实现模块（见白名单注释） */
+    private static final java.util.Set<String> CONTRACT_PACKAGE_EXCLUSIONS = java.util.Set.of(
+        "com.pivotos.generator.service.impl");
+
+    /**
+     * 同名包里唯一属于<b>契约模块</b>的类：{@code com.pivotos.generator.service} 包下同时有
+     * 实现模块的 {@code GeneratorService} 和契约模块的 {@code IGeneratorFacade}——包级判定到此为止，
+     * 只能按类名精确区分（首跑实测：包级判定把 GeneratorService 误判为契约，误报 6 处）。
+     */
+    private static final String GENERATOR_CONTRACT_CLASS = "com.pivotos.generator.service.IGeneratorFacade";
+
+    /** 最长匹配定位包所属插件根包；不属任何插件（starter / common / 第三方）返回 null */
+    private static String pluginRootOf(String packageName) {
+        String best = null;
+        for (String root : PLUGIN_ROOTS) {
+            if ((packageName + ".").startsWith(root + ".") && (best == null || root.length() > best.length())) {
+                best = root;
+            }
+        }
+        return best;
+    }
+
+    private static boolean isContractPackage(String packageName) {
+        // 排除项优先：generator.service.impl 落在契约包前缀内，但它是实现模块
+        for (String ex : CONTRACT_PACKAGE_EXCLUSIONS) {
+            if ((packageName + ".").startsWith(ex + ".")) {
+                return false;
+            }
+        }
+        return CONTRACT_PACKAGES.stream()
+            .anyMatch(p -> (packageName + ".").startsWith(p + "."));
+    }
+
+    /** 类级判定：在包级判定之上叠加同名包的类级例外（generator.service 只有 IGeneratorFacade 是契约） */
+    private static boolean isContractClass(JavaClass javaClass) {
+        if (!isContractPackage(javaClass.getPackageName())) {
+            return false;
+        }
+        return !"com.pivotos.generator.service".equals(javaClass.getPackageName())
+            || GENERATOR_CONTRACT_CLASS.equals(javaClass.getName());
+    }
+
+    // C1：插件实现层不得直接依赖<b>其它插件的实现层</b>（跨插件只能走 -api 契约）。
+    // 同插件内部、依赖 starter/common/第三方、依赖契约包，三种情况均放行。
+    @ArchTest
+    static void c1_plugin_impl_must_not_depend_on_other_plugin_impl(JavaClasses classes) {
+        List<String> violations = new ArrayList<>();
+        for (JavaClass javaClass : classes) {
+            String self = javaClass.getPackageName();
+            String selfRoot = pluginRootOf(self);
+            if (selfRoot == null || isContractClass(javaClass)) {
+                continue;
+            }
+            javaClass.getDirectDependenciesFromSelf().forEach(dep -> {
+                JavaClass target = dep.getTargetClass();
+                String targetPkg = target.getPackageName();
+                String targetRoot = pluginRootOf(targetPkg);
+                if (targetRoot == null || targetRoot.equals(selfRoot) || isContractClass(target)) {
+                    return;
+                }
+                violations.add(javaClass.getName() + " -> " + target.getName()
+                    + "（" + selfRoot + " → " + targetRoot + " 实现层）");
+            });
+        }
+        org.assertj.core.api.Assertions.assertThat(violations)
+            .as("C1：跨 Plugin 调用必须走 -api 契约，不得直接依赖其它插件实现层。违反 %d 处：%s",
+                violations.size(), violations.isEmpty() ? "无" : violations)
+            .isEmpty();
+    }
+
+    // C2：契约包（*-api，含 generator.service）不得反向依赖任何插件实现层——
+    // 反向依赖会让微服务化后出现循环依赖，且契约模块会因此被迫带上实现模块的全部传递依赖。
+    @ArchTest
+    static void c2_contract_must_not_depend_on_impl(JavaClasses classes) {
+        List<String> violations = new ArrayList<>();
+        for (JavaClass javaClass : classes) {
+            String self = javaClass.getPackageName();
+            if (!isContractClass(javaClass)) {
+                continue;
+            }
+            javaClass.getDirectDependenciesFromSelf().forEach(dep -> {
+                JavaClass target = dep.getTargetClass();
+                String targetPkg = target.getPackageName();
+                if (pluginRootOf(targetPkg) == null || isContractClass(target)) {
+                    return;
+                }
+                violations.add(javaClass.getName() + " -> " + target.getName());
+            });
+        }
+        org.assertj.core.api.Assertions.assertThat(violations)
+            .as("C2：-api 契约模块不得反向依赖插件实现层（微服务化后必然循环依赖）。违反 %d 处：%s",
+                violations.size(), violations.isEmpty() ? "无" : violations)
+            .isEmpty();
+    }
+
+    // C3：Facade 是跨进程契约，方法签名（入参 + 返回值）不得出现领域实体——
+    // 一旦出现，HTTP 通道就必须序列化整个实体图（连带懒加载代理与循环引用），且契约与实现同生共死。
+    // 现状：14 个 Facade 接口零违规，故直接落硬门禁，不设白名单。
+    @ArchTest
+    static void c3_facade_signature_must_be_serializable(JavaClasses classes) {
+        List<String> violations = new ArrayList<>();
+        for (JavaClass javaClass : classes) {
+            // 只约束<b>对外契约接口</b>：实现类（XxxLocalFacade）内部用什么类型是它自己的事，
+            // 它由本插件持有、不跨进程传输；一旦约束实现类的私有方法，规则就从「契约纯洁」
+            // 变成「禁止实现用实体」，那是另一条规则，不该混在这里（首跑实测误伤 3 处即为此）。
+            if (!javaClass.isInterface() || !javaClass.getSimpleName().endsWith("Facade")) {
+                continue;
+            }
+            for (var method : javaClass.getMethods()) {
+                var types = new ArrayList<JavaClass>();
+                types.add(method.getRawReturnType());
+                types.addAll(method.getRawParameterTypes());
+                for (JavaClass t : types) {
+                    String pkg = t.getPackageName();
+                    // .domain.. 下的任何类型（entity / vo / model）都不许进契约签名
+                    if (pkg.contains(".domain.") || pkg.endsWith(".domain")) {
+                        violations.add(javaClass.getSimpleName() + "#" + method.getName() + " 用了 " + t.getName());
+                    }
+                }
+            }
+        }
+        org.assertj.core.api.Assertions.assertThat(violations)
+            .as("C3：Facade 方法签名（含返回值）不得出现领域实体，只能用 api 包下的 DTO/VO。违反：%s",
+                violations.isEmpty() ? "无" : violations)
+            .isEmpty();
+    }
+
+    // C4：数据层零跨库 JOIN（Python 扫描，与 ArchUnit 分工：SQL 不在字节码里，ArchUnit 看不见）。
+    // 诚实口径：python3 不可用时不假装通过，直接 skip 并打印原因（CI 镜像须预装 python3）。
+    @Test
+    void c4_no_cross_schema_join() throws Exception {
+        Path script = Path.of("..", "scripts", "arch", "scan_cross_schema_sql.py");
+        org.junit.jupiter.api.Assumptions.assumeTrue(Files.exists(script), "扫描脚本缺失：" + script);
+        ProcessBuilder pb = new ProcessBuilder("python3", script.toAbsolutePath().normalize().toString());
+        pb.directory(Path.of("..").toAbsolutePath().normalize().toFile());
+        pb.redirectErrorStream(true);
+        Process proc = pb.start();
+        String output = new String(proc.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        int code = proc.waitFor();
+        org.assertj.core.api.Assertions.assertThat(code)
+            .as("C4：数据层跨库 JOIN 扫描失败（退出码 %d），输出：\n%s", code, output)
+            .isZero();
     }
 
     // ========== A8：Plugin 表前缀白名单（《03》阶段2 登记卡点） ==========

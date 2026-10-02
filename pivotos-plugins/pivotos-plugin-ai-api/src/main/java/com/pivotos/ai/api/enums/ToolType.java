@@ -1,4 +1,4 @@
-package com.pivotos.ai.enums;
+package com.pivotos.ai.api.enums;
 
 /**
  * AI 工具类型（S98 A2）

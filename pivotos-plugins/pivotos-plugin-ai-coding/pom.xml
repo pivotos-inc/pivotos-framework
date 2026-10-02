@@ -20,16 +20,24 @@
             <artifactId>pivotos-plugin-ai-coding-api</artifactId>
         </dependency>
 
-        <!-- AI 底座: LLM 调用能力 -->
+        <!-- AI 底座: LLM 调用能力（V3-S1：只依赖 -api 契约，不再依赖实现模块） -->
         <dependency>
             <groupId>com.pivotos</groupId>
-            <artifactId>pivotos-plugin-ai</artifactId>
+            <artifactId>pivotos-plugin-ai-api</artifactId>
         </dependency>
 
-        <!-- 代码生成器: 模板渲染 + 出码 -->
+        <!-- V3-S1：@Tool / @ToolParam 注解（CodingFileTools 登记 AI 工具用）。
+             原先是「靠 pivotos-plugin-ai 传递进来」的隐式依赖，改依赖 -api 后必须显式声明——
+             显式依赖优于传递依赖，断了传递才知道自己真正用了什么（版本由 spring-ai-bom 托管） -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-model</artifactId>
+        </dependency>
+
+        <!-- 代码生成器: 模板渲染 + 出码（V3-S1：只用 IGeneratorFacade，改依赖 -api） -->
         <dependency>
             <groupId>com.pivotos</groupId>
-            <artifactId>pivotos-plugin-generator</artifactId>
+            <artifactId>pivotos-plugin-generator-api</artifactId>
         </dependency>
 
         <!-- 代码索引: 迁移引擎 IR 解析器扩展（模块索引 + 符号表），只经 api 包访问（A1/A2 口径） -->

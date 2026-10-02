@@ -1,19 +1,9 @@
 package com.pivotos.ai.coding.locate;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.pivotos.ai.api.facade.IAiFacade;
 import com.pivotos.ai.api.usage.AiUsageContext;
-import com.pivotos.ai.client.AiClientRegistry;
-import com.pivotos.ai.domain.entity.AiApiKey;
-import com.pivotos.ai.domain.entity.AiProvider;
-import com.pivotos.ai.mapper.AiApiKeyMapper;
-import com.pivotos.ai.mapper.AiProviderMapper;
 import com.pivotos.common.core.exception.ServiceException;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 import static com.pivotos.ai.coding.api.constant.CodingErrorCode.CODING_LOCATE_FAILED;
 
@@ -26,54 +16,39 @@ import static com.pivotos.ai.coding.api.constant.CodingErrorCode.CODING_LOCATE_F
  *       取不到再回落到 {@code spring.ai.openai.*} 静态兜底 ChatClient。dev 库当前
  *       {@code ai_api_key} 为空，定位链路正是走静态兜底才跑得通。</li>
  *   <li>S96 K7：DashScope 兼容端对「defaultSystem + 调用方 system」双 system 形态的结构化
- *       提示词实测返回空数组，内部生成链路一律改用 {@code getInternalChatClient} 单 system 形态。</li>
+ *       提示词实测返回空数组，内部生成链路一律走契约层的单 system 形态。</li>
  *   <li>S92：AI 用量按场景计量，定位归入 SCENE_CODING。</li>
  * </ul>
  *
+ * <p><b>V3-S1 契约治理</b>：原先这里直接注入 plugin-ai 的 {@code AiClientRegistry} 与两个 Mapper，
+ * 是全仓唯一一条「Plugin 实现层跨模块直调」的欠款边（13 处 import / 8 个类）。现在改为只依赖
+ * {@link IAiFacade}——通道选择、Key 解析、模型装配全部下沉到 plugin-ai，本类只剩「场景计量 + 判空」。
+ * 拆微服务时这一处无需任何改动：契约背后是本地 Bean 还是 HTTP 调用，调用方不感知。
+ *
  * @author PivotOS
- * @since 2.14.0（S110 A4-1）
+ * @since 2.14.0（S110 A4-1）；V3-S1（v3.0.0）改为走 IAiFacade 契约
  */
 @Component
 public class DynamicLocateLlmClient implements LocateLlmClient {
 
-    private final AiClientRegistry registry;
-    private final AiProviderMapper providerMapper;
-    private final AiApiKeyMapper keyMapper;
-    private final ObjectProvider<ChatClient> staticClientProvider;
+    private final IAiFacade aiFacade;
 
-    public DynamicLocateLlmClient(AiClientRegistry registry,
-                                  AiProviderMapper providerMapper,
-                                  AiApiKeyMapper keyMapper,
-                                  ObjectProvider<ChatClient> staticClientProvider) {
-        this.registry = registry;
-        this.providerMapper = providerMapper;
-        this.keyMapper = keyMapper;
-        this.staticClientProvider = staticClientProvider;
+    public DynamicLocateLlmClient(IAiFacade aiFacade) {
+        this.aiFacade = aiFacade;
     }
 
     @Override
     public String call(String systemPrompt, String userPrompt, String model) {
-        List<AiProvider> providers = providerMapper.selectList(
-                new LambdaQueryWrapper<AiProvider>().eq(AiProvider::getStatus, 0));
-        AiProvider provider = providers.isEmpty() ? null : providers.get(0);
-        AiApiKey key = null;
-        if (provider != null) {
-            List<AiApiKey> keys = keyMapper.selectList(
-                    new LambdaQueryWrapper<AiApiKey>()
-                            .eq(AiApiKey::getProviderId, provider.getId())
-                            .eq(AiApiKey::getStatus, 0));
-            key = keys.isEmpty() ? null : keys.get(0);
-        }
-
-        boolean override = model != null && !model.isBlank();
-        var spec = (provider != null && key != null)
-                ? buildDynamic(provider, key, systemPrompt, userPrompt, override ? model : null)
-                : buildStatic(systemPrompt, userPrompt, override ? model : null);
-        if (spec == null) {
+        String content;
+        try {
+            // 场景计量留在调用方：SCENE_CODING 是 ai-coding 的场景，不该由 plugin-ai 替它决定
+            content = AiUsageContext.callWithScene(AiUsageContext.SCENE_CODING,
+                    () -> aiFacade.internalChat(systemPrompt, userPrompt, model));
+        } catch (Exception e) {
+            // 对外错误码保持 CODING_LOCATE_FAILED：契约层抛的是 AI_NOT_CONFIGURED / CHAT_FAILED，
+            // 但定位链路的调用方（评审页/定位接口）契约上只认这一个码，不能因治理而漂移
             throw new ServiceException(CODING_LOCATE_FAILED);
         }
-        var finalSpec = spec;
-        String content = AiUsageContext.callWithScene(AiUsageContext.SCENE_CODING, () -> finalSpec.call().content());
         if (content == null || content.isBlank()) {
             throw new ServiceException(CODING_LOCATE_FAILED);
         }
@@ -82,32 +57,6 @@ public class DynamicLocateLlmClient implements LocateLlmClient {
 
     @Override
     public String resolveModel(String override) {
-        if (override != null && !override.isBlank()) {
-            return override.trim();
-        }
-        List<AiProvider> providers = providerMapper.selectList(
-                new LambdaQueryWrapper<AiProvider>().eq(AiProvider::getStatus, 0));
-        return providers.isEmpty() ? "static" : providers.get(0).getDefaultModel();
-    }
-
-    /** 动态通道：供应商 + Key 装配，模型覆盖按 provider.code 分派工厂产出 options */
-    private ChatClient.ChatClientRequestSpec buildDynamic(AiProvider provider, AiApiKey key,
-                                                          String systemPrompt, String userPrompt, String model) {
-        var spec = registry.getInternalChatClient(provider, key)
-                .prompt()
-                .system(systemPrompt)
-                .user(userPrompt);
-        return model == null ? spec : spec.options(registry.buildChatOptions(provider, model));
-    }
-
-    /** 静态兜底：spring.ai.openai.* 装配的 ChatClient，模型覆盖走 OpenAI options */
-    private ChatClient.ChatClientRequestSpec buildStatic(String systemPrompt, String userPrompt, String model) {
-        ChatClient client = staticClientProvider.getIfAvailable();
-        if (client == null) {
-            return null;
-        }
-        var spec = client.prompt().system(systemPrompt).user(userPrompt);
-        // Spring AI 2.0 的 spec.options() 收 Builder 本体（内部与 client 默认 options 合并），不收 build() 结果
-        return model == null ? spec : spec.options(OpenAiChatOptions.builder().model(model));
+        return aiFacade.resolveModel(override);
     }
 }

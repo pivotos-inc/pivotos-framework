@@ -2,7 +2,7 @@ package com.pivotos.ai.orchestrator;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import com.pivotos.ai.tool.AiToolMeta;
+import com.pivotos.ai.api.tool.AiToolMeta;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 
