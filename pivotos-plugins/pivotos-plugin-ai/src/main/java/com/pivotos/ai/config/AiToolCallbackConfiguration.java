@@ -4,7 +4,7 @@ import com.pivotos.ai.service.AiToolGuardService;
 import com.pivotos.ai.service.AiToolInvokeRecorder;
 import com.pivotos.ai.tool.GuardedToolCallbackProvider;
 import com.pivotos.ai.tool.MessageTools;
-import com.pivotos.ai.tool.ToolObjectContributor;
+import com.pivotos.ai.api.tool.ToolObjectContributor;
 import com.pivotos.ai.tool.WorkflowQueryTools;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -3,7 +3,7 @@ package com.pivotos.ai.config;
 import com.pivotos.ai.service.AiToolGuardService;
 import com.pivotos.ai.service.AiToolInvokeRecorder;
 import com.pivotos.ai.tool.MessageTools;
-import com.pivotos.ai.tool.ToolObjectContributor;
+import com.pivotos.ai.api.tool.ToolObjectContributor;
 import com.pivotos.ai.tool.WorkflowQueryTools;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
