@@ -14,7 +14,12 @@ public class RouterVO {
     /** 路由地址 */
     private String path;
 
-    /** 组件路径（目录为 Layout） */
+    /**
+     * 组件路径：
+     * - 顶层目录 → {@code Layout}（套完整布局框架）
+     * - 非顶层目录（目录下挂目录）→ 空串（前端按纯路由容器渲染，不重复套布局）
+     * - 菜单（C 类型）→ views 下的组件相对路径
+     */
     private String component;
 
     /** 是否隐藏 */
