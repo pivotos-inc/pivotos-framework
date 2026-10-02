@@ -105,6 +105,26 @@
                 <artifactId>mybatis-plus-jsqlparser</artifactId>
                 <version>${mybatis-plus.version}</version>
             </dependency>
+            <!--
+              mybatis-plus-extension 必须显式钉到与 starter 同一个版本（S125 实测缺陷）。
+
+              经过：warm-flow-mybatis-plus-sb4-starter 1.8.7 直接传递依赖
+              com.baomidou:mybatis-plus-extension:3.5.15，而 mybatis-plus-spring-boot4-starter
+              3.5.17 并不传递引入 extension 模块（3.5.17 把它拆出去了），于是 classpath 上
+              extension 只有 warm-flow 带来的 3.5.15：
+                · 3.5.17 的 spring.repository.CrudRepository 继承 extension.repository.AbstractRepository，
+                  其 saveBatch 调用 executeBatch(Collection, int, BiFunction)（3.5.17 新增的重载）；
+                · 3.5.15 的 AbstractRepository 没有这个重载
+                → 运行期 NoSuchMethodError，凡走 ServiceImpl#saveBatch 的链路 100% 500
+                  （实测 POST /system/user/import 恒「系统内部错误」，用户导入整条链路不可用）。
+
+              这里显式仲裁到 ${mybatis-plus.version}，让两侧同版本。改版本时这两项必须一起动。
+            -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-extension</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.github.jsqlparser</groupId>
                 <artifactId>jsqlparser</artifactId>
