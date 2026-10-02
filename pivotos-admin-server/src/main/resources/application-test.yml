@@ -27,16 +27,23 @@ spring:
     # 优先级：环境变量 DASHSCOPE_API_KEY > 此兜底值；生产环境必须通过环境变量注入
     openai:
       api-key: ${DASHSCOPE_API_KEY:sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC}
+    # 向量库（2026-10-02）：Milvus 服务端**暂不部署**，统一走 simple（内存 + JSON 快照，零中间件）。
+    # ① spring.ai.vectorstore.type 必须显式设为 simple——Milvus 自动装配 matchIfMissing=true，
+    #    不设会按默认 localhost:19530 连 Milvus 导致**启动失败**（dev 2026-09-24 实测同因）；
+    # ② 知识库向量类型走 pivotos.kb.vector-store.type（application.yml 默认 simple，库表默认也是 simple）；
+    # ③ 快照文件位于启动工作目录下的 ./data/kb/simple/kb-store.json（停机自动保存、启动自动加载）。
+    # 将来部署 Milvus 服务端后：把 type 改回 milvus 并恢复下方 milvus 段即可，业务代码零改动。
     vectorstore:
-      milvus:
-        client:
-          host: 10.0.0.7
-          port: 19530
-        database-name: default
-        collection-name: pivotos_test_kb
-        embedding-dimension: 1024
-        initialize-schema: true
-        metric-type: COSINE
+      type: simple
+    #   milvus:
+    #     client:
+    #       host: 10.0.0.7
+    #       port: 19530
+    #     database-name: default
+    #     collection-name: pivotos_test_kb
+    #     embedding-dimension: 1024
+    #     initialize-schema: true
+    #     metric-type: COSINE
 
 mybatis-plus:
   configuration:
