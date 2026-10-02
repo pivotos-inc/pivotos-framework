@@ -69,15 +69,21 @@ pivotos:
     port: 9999
     group-id: 3   # XXL-Job admin 中 pivotos-executor 执行器组 ID
     access-token: 123456
-  # 检索（S121/S122）：生产环境 ES 尚未部署，显式保持 simple（进程内内存兜底，重启即失）。
-  # 部署 ES 后：引入 pivotos-starter-search-es-java 并把 type 改为 es-java、补 es-java.uris/username/password 即可，
-  # 业务代码零改动；检索不可用时链路自动回退数据库查询。
+  # 检索（S121/S122）：生产 ES = 10.0.4.15:9200（2026-10-02 接线，接法与 dev 完全一致：
+  # type=es-java + uris/username/password + compatibility-mode；admin-server 已引入 es-java 实现）。
+  # 启动期探测服务端版本；若生产 ES 为 7.17，启动时加 PIVOTOS_ES_JAVA_COMPATIBILITY_MODE=true
+  # （dev/test 服务端为 9.x，故默认 false）。检索不可用时链路自动回退数据库查询，业务零阻断。
+  search:
+    type: ${PIVOTOS_SEARCH_TYPE:es-java}
+    es-java:
+      uris: ${PIVOTOS_ES_JAVA_URIS:http://10.0.4.15:9200}
+      username: ${PIVOTOS_ES_JAVA_USERNAME:elastic}
+      password: ${PIVOTOS_ES_JAVA_PASSWORD:Elastic_WAwByG}
+      compatibility-mode: ${PIVOTOS_ES_JAVA_COMPATIBILITY_MODE:false}
   # ST-DATAINSPECT（S130）：通用数据监控。生产默认关闭自由 SQL（高危）——
   # 仍可浏览库表与预览，放开自由 SQL 需显式改这里并重启（权限不能替代此开关）
   datainspect:
     query-enabled: ${PIVOTOS_DATA_INSPECT_QUERY_ENABLED:false}
-  search:
-    type: ${PIVOTOS_SEARCH_TYPE:simple}
   # 微信小程序（测试号）
   wechat:
     miniapp:
