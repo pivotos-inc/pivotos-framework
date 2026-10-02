@@ -9,8 +9,55 @@ import requests, json, threading, queue, time
 
 BASE = "http://localhost:8080"
 
+# fixture 自愈（S129 补）：S129 重建 dev 库做 Flyway 全量重放后，历史累积的「请假审批」
+# 流程定义一并清零，Step6 催办实证会卡在「未找到请假流程定义」。改为脚本自建、幂等复用。
+LEAVE_FLOW_CODE = "leave_s129_selfheal"
+
+
 def log(tag, msg):
     print(f"[{tag}] {msg}", flush=True)
+
+
+def ensure_leave_definition(hdr):
+    """清场后「请假」类流程定义丢失 → save-json 自建「开始→提交申请→主管审批→结束」并发布。"""
+    def node(code, name, ntype, perm=None, coord="0,0", skips=()):
+        n = {"nodeType": ntype, "nodeCode": code, "nodeName": name, "nodeRatio": "0.000",
+             "coordinate": coord, "skipList": [dict(s) for s in skips]}
+        if perm is not None:
+            n["permissionFlag"] = perm
+        return n
+
+    def skip(now, nxt, name):
+        return {"nowNodeCode": now, "nextNodeCode": nxt, "skipName": name, "skipType": "PASS"}
+
+    def query():
+        r = requests.get(f"{BASE}/workflow/definition/page", headers=hdr, timeout=15,
+                         params={"pageNum": 1, "pageSize": 50, "flowCode": LEAVE_FLOW_CODE})
+        return [d for d in (r.json().get("data") or {}).get("list", []) if d.get("isPublish") != 9]
+
+    defs = query()
+    if not defs:
+        payload = {"flowCode": LEAVE_FLOW_CODE, "flowName": "请假审批-S129自愈",
+                   "modelValue": "CLASSICS",
+                   "nodeList": [
+                       node("start", "开始", 0, coord="80,240",
+                            skips=[skip("start", "apply", "提交")]),
+                       node("apply", "提交申请", 1, perm="1", coord="240,240",
+                            skips=[skip("apply", "leader", "提交")]),
+                       node("leader", "主管审批", 1, perm="1", coord="400,240",
+                            skips=[skip("leader", "end", "同意")]),
+                       node("end", "结束", 2, coord="560,240")]}
+        r = requests.post(f"{BASE}/warm-flow/save-json", headers={**hdr, "onlyNodeSkip": "false"},
+                          json=payload, timeout=30)
+        assert r.json().get("code") in (0, 200), f"save-json 失败: {r.text[:200]}"
+        defs = query()
+        def_id = max(defs, key=lambda d: int(d["id"]))["id"]
+        rb = requests.put(f"{BASE}/workflow/definition/{def_id}/publish",
+                          headers=hdr, timeout=30).json()
+        assert rb.get("code") == 0, f"发布失败: {json.dumps(rb, ensure_ascii=False)[:200]}"
+        log("FIXTURE", f"请假流程定义已自建并发布 id={def_id}（清场后 fixture 自愈）")
+        defs = query()
+    return defs[0]
 
 class McpSession:
     """MCP SSE 会话（字节层手工分帧，S97 K1 口径）"""
@@ -208,6 +255,8 @@ r = requests.get(f"{BASE}/workflow/definition/page",
                  params={"pageNum": 1, "pageSize": 50}, headers=HDR, timeout=15)
 defs = r.json()["data"]["list"]
 target = next((d for d in defs if "请假" in (d.get("flowName") or "")), None)
+if target is None:
+    target = ensure_leave_definition(HDR)   # fixture 自愈：清场后历史定义丢失
 assert target, f"未找到请假流程定义: {[d.get('flowName') for d in defs]}"
 r = requests.post(f"{BASE}/workflow/instance/start",
                   json={"flowCode": target["flowCode"], "businessName": "S99催办实证",
