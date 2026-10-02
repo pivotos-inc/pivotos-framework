@@ -25,6 +25,13 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
+        <!-- V3-S2 第二轮：Spring Boot 版本仲裁点（由 pivotos-dependencies 上移到这里）。
+             上移原因：spring-boot-maven-plugin 必须在 pluginManagement 里显式钉版本，
+             而父 pom 读不到子模块（pivotos-dependencies）的 property —— 若不钉，Maven 会
+             「自由取版本」把 fat jar 打成 milestone 插件产物（实测混入 jarmode-tools-4.2.0-M2）。
+             本项目全仓仅此一处声明 Boot 版本，子模块与 BOM 一律继承，勿在其他 pom 重复声明。 -->
+        <spring-boot.version>4.1.1</spring-boot.version>
+
         <!-- Lombok：JDK 25 需 >= 1.18.40；JDK 23+ 必须配合 annotationProcessorPaths 显式开启 -->
         <lombok.version>1.18.44</lombok.version>
 
@@ -71,6 +78,14 @@
                             </path>
                         </annotationProcessorPaths>
                     </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <!-- 必须显式钉版本且与 ${spring-boot.version} 一致：缺省时 Maven 会取到 milestone
+                         版本（实测 4.2.0-M2），fat jar 的 loader/jarmode 与运行态 runtime 不同源。
+                         admin-server 声明处不写 <version>，继承这里。 -->
+                    <version>${spring-boot.version}</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>

@@ -17,7 +17,8 @@
 
     <properties>
         <!-- ==================== 核心框架 ==================== -->
-        <spring-boot.version>4.1.0</spring-boot.version>
+        <!-- Boot 版本仲裁点已上移到父 pom（见 pivotos-framework/pom.xml），此处不再重复声明，
+             以免两处漂移。升级 Boot 只改父 pom 那一行（含 spring-boot-maven-plugin 联动）。 -->
 
         <!-- ==================== 持久层 ==================== -->
         <!-- SB4 专属 artifactId，勿用 SB3 旧 starter -->
