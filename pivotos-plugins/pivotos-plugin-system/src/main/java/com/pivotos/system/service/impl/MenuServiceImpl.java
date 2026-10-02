@@ -50,6 +50,12 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
     private static final String TYPE_MENU = "C";
     private static final String TYPE_BUTTON = "F";
 
+    /** 顶层目录：套完整布局框架（侧边栏 + 顶栏 + 标签页 + 内容区） */
+    private static final String COMPONENT_LAYOUT = "Layout";
+
+    /** 非顶层目录：纯路由容器（前端渲染为只含 router-view 的空壳，不重复套布局） */
+    private static final String COMPONENT_NESTED_DIR = "";
+
     private final MenuConvert menuConvert;
     private final SysRoleMenuMapper roleMenuMapper;
     private final SysUserRoleMapper userRoleMapper;
@@ -224,13 +230,17 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
         List<RouterVO> roots = new ArrayList<>();
         for (SysMenu menu : menus) {
             if (CommonConstants.TREE_ROOT_ID.equals(menu.getParentId()) || !byId.containsKey(menu.getParentId())) {
-                roots.add(toRouter(menu, byId, ""));
+                roots.add(toRouter(menu, byId, "", true));
             }
         }
         return roots;
     }
 
-    private RouterVO toRouter(SysMenu menu, Map<Long, SysMenu> byId, String parentPath) {
+    /**
+     * @param rootLevel 是否为顶层目录（parent_id=0，或父节点不在可见集合内而被提升为根）
+     * @see #COMPONENT_LAYOUT 只有顶层目录才套布局框架，非顶层目录只做路由容器
+     */
+    private RouterVO toRouter(SysMenu menu, Map<Long, SysMenu> byId, String parentPath, boolean rootLevel) {
         RouterVO router = new RouterVO();
         router.setPath(menu.getPath());
         // 全路径路由名：不同目录下的同名叶子（如 system/user 与 message/user）name 必须唯一，
@@ -239,7 +249,7 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
                 ? menu.getPath()
                 : parentPath + "/" + menu.getPath();
         router.setName(toRouteName(fullPath));
-        router.setComponent(TYPE_DIR.equals(menu.getMenuType()) ? "Layout" : menu.getComponent());
+        router.setComponent(dirComponent(menu, rootLevel));
         router.setHidden(Objects.equals(CommonStatusEnum.DISABLED.getValue(), menu.getVisible()));
         RouterVO.Meta meta = new RouterVO.Meta();
         meta.setTitle(menu.getMenuName());
@@ -249,12 +259,31 @@ public class MenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impleme
         List<RouterVO> children = byId.values().stream()
                 .filter(m -> Objects.equals(m.getParentId(), menu.getId()))
                 .sorted(Comparator.comparing(SysMenu::getSort, Comparator.nullsLast(Integer::compareTo)))
-                .map(m -> toRouter(m, byId, currentPath))
+                .map(m -> toRouter(m, byId, currentPath, false))
                 .toList();
         if (!children.isEmpty()) {
             router.setChildren(children);
         }
         return router;
+    }
+
+    /**
+     * 目录节点的组件下发口径（S131 修正）：
+     * <p>
+     * 只有**顶层目录**才发 {@code Layout}（侧边栏 + 顶栏 + 标签页 + 内容区）；
+     * 非顶层目录（即「目录下挂目录」）发**空串**，前端按「未指定组件 = 纯路由容器」渲染，
+     * 只放一层 router-view，不再渲染第二套布局。
+     * <p>
+     * 历史菜单一直是「顶层目录 → 页面」的一层结构，所以「每个 M 都发 Layout」从未出问题；
+     * S123（V1.2.52）首次造出 1100 系统工具 → 1180 前端组件演示 的两层目录结构，
+     * 于是路由变成 Layout → Layout → 页面，页面里又渲染了一遍完整布局
+     * （侧边栏/顶栏/标签页各两套，菜单看起来「重新展示了一遍」）。
+     */
+    private String dirComponent(SysMenu menu, boolean rootLevel) {
+        if (!TYPE_DIR.equals(menu.getMenuType())) {
+            return menu.getComponent();
+        }
+        return rootLevel ? COMPONENT_LAYOUT : COMPONENT_NESTED_DIR;
     }
 
     /** 路由名：全路径分段大驼峰拼接（如 /system/user → SystemUser），全局唯一 */

@@ -204,8 +204,19 @@ def main():
         if hit:
             check(f"{target} 的 component 指向 {menu[5]}", hit[0][1] == menu[5], str(hit[0]))
     demo_dir = [r for r in rows if r[0] == "//tool/demo"]
-    check("目录节点 //tool/demo 挂 Layout", demo_dir and demo_dir[0][1] == "Layout", str(demo_dir))
+    # S131 修正口径：//tool/demo 是**非顶层目录**（挂在 1100 系统工具下），下发空串
+    # —— 前端按纯路由容器（RouteView）渲染，不再套第二套侧边栏/顶栏/标签页。
+    check("非顶层目录 //tool/demo 不挂 Layout（空串 = 纯路由容器）",
+          demo_dir and demo_dir[0][1] == "", str(demo_dir))
     check("目录节点 //tool/demo 下挂 3 个子路由", len([r for r in rows if r[0].startswith("//tool/demo/")]) == 3)
+
+    # 防回归：Layout 只允许出现在顶层目录。嵌套层再出现 Layout = 页面里再套一整套布局
+    # （S123 首次造出「目录下挂目录」时踩到：侧边栏/顶栏各两套、菜单看起来重新展示一遍）。
+    nested_layout = [r for r in rows if r[1] == "Layout" and r[0].count("/") > 2]
+    check("嵌套层不出现 Layout（防页面套页面回归）", not nested_layout, str(nested_layout))
+    top_layout = [r for r in (body.get("data") or []) if r.get("component") == "Layout"]
+    check("顶层目录仍全部挂 Layout", len(top_layout) == len(body.get("data") or []),
+          f"顶层 {len(body.get('data') or [])} 个，其中 Layout {len(top_layout)} 个")
 
     section("E. 鉴权：匿名访问拿不到菜单")
     # 口径说明：本项目「未登录」在 REST 上的既有形态是 HTTP 200 + code=1002（RO 统一返回体），

@@ -15,6 +15,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -144,12 +145,39 @@ class SystemIntegrationTest {
     @Test
     @Order(8)
     void routers_superAdminGetsAll() throws Exception {
-        mockMvc.perform(get("/system/menu/routers")
+        String body = mockMvc.perform(get("/system/menu/routers")
                         .header("Authorization", adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data[0].meta.title").value("系统管理"))
-                .andExpect(jsonPath("$.data[0].children[0].meta.title").value("用户管理"));
+                .andExpect(jsonPath("$.data[0].children[0].meta.title").value("用户管理"))
+                .andReturn().getResponse().getContentAsString();
+
+        // S131：Layout 只允许出现在**顶层目录**——嵌套层再出现 Layout 会让路由变成
+        // Layout → Layout → 页面，页面里再渲染一整套侧边栏/顶栏/标签页（S123 首次造出
+        // 「目录下挂目录」结构时踩到：菜单看起来「重新展示了一遍」）。
+        List<String> nestedLayouts = new ArrayList<>();
+        com.alibaba.fastjson2.JSON.parseObject(body)
+                .getJSONArray("data")
+                .forEach(node -> collectNestedLayout((com.alibaba.fastjson2.JSONObject) node, nestedLayouts));
+        org.assertj.core.api.Assertions.assertThat(nestedLayouts)
+                .as("非顶层目录不得下发 Layout（否则前端会把布局套两遍）")
+                .isEmpty();
+    }
+
+    /** 收集非顶层（子级及其以下）节点中下发为 Layout 的路由名 */
+    private void collectNestedLayout(com.alibaba.fastjson2.JSONObject node, List<String> hits) {
+        com.alibaba.fastjson2.JSONArray children = node.getJSONArray("children");
+        if (children == null) {
+            return;
+        }
+        for (int i = 0; i < children.size(); i++) {
+            com.alibaba.fastjson2.JSONObject child = children.getJSONObject(i);
+            if ("Layout".equals(child.getString("component"))) {
+                hits.add(String.valueOf(child.getString("name")));
+            }
+            collectNestedLayout(child, hits);
+        }
     }
 
     @Test
