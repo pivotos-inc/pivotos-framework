@@ -51,9 +51,16 @@ public class LocalCloudAutoConfiguration {
      * {@code BeanDefinitionRegistryPostProcessor} 需要在容器刷新早期实例化，
      * 非 static 的 @Bean 方法会迫使宿主配置类过早初始化并触发 BFPP 警告。
      */
+    /**
+     * <b>必须是 static @Bean</b>：BFPP 需要在容器刷新早期实例化。
+     *
+     * <p>刻意<b>不接收 properties 参数</b>：BFPP 构造参数会被提前解析，导致
+     * {@code LocalCloudProperties} / {@code CloudProperties} 逃过绑定后处理器，
+     * 配置静默失效（详见 {@code PropertyBinder}）。注册器自己从 Environment 绑定。
+     */
     @Bean
-    public static FacadeRpcRegistrar facadeRpcRegistrar(LocalCloudProperties localProps, CloudProperties cloudProps) {
-        return new FacadeRpcRegistrar(localProps, cloudProps);
+    public static FacadeRpcRegistrar facadeRpcRegistrar() {
+        return new FacadeRpcRegistrar();
     }
 
     @Bean

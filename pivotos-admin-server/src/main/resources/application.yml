@@ -250,3 +250,35 @@ pivotos:
       server-enabled: ${PIVOTOS_CLOUD_LOCAL_SERVER_ENABLED:false}
       # 静态实例表：serviceId -> host:port（local 通道不连任何注册中心）
       instances: {}
+    # Spring Cloud 原生通道（-P cloud / -P alibaba 打进 fat jar 才有意义）
+    sc:
+      # 要切成 Feign 远程调用的 Facade 接口全限定名（逗号分隔）。默认空 = 不做任何替换
+      # ⚠️ 前提：该接口方法必须带 Spring MVC 注解（Feign 的 Contract 靠它解析路径）。
+      #    业务 Facade 契约（IUserFacade 等）目前没有 MVC 注解，直接填这里是建不出客户端的（已知待办）。
+      proxied: ${PIVOTOS_CLOUD_SC_PROXIED:}
+      # Feign 客户端服务名（走 LoadBalancer，需要注册中心）
+      service-id: ${PIVOTOS_CLOUD_SC_SERVICE_ID:pivotos-admin-server}
+      # 直连地址（形如 http://127.0.0.1:8080）；配了它就不走负载均衡，无注册中心也能跑
+      url: ${PIVOTOS_CLOUD_SC_URL:}
+      circuit-breaker:
+        # 熔断（Resilience4j）总开关。默认 false —— 不打开就等于 Feign 客户端一层都没多包，
+        # 与「包里有 Resilience4j 但没接线」完全一致（引入 ≠ 生效）。
+        # 打开后：状态转换与被拒绝的调用会打 [CLOUD][cloud][CB] 前缀日志。
+        enabled: ${PIVOTOS_CLOUD_SC_CB_ENABLED:false}
+        # 熔断实例粒度：interface（默认，整个 Facade 一个）/ method（每个方法一个）
+        granularity: ${PIVOTOS_CLOUD_SC_CB_GRANULARITY:interface}
+        # 降级口径：none（默认，抛 CloudCircuitBreakerOpenException，绝不静默返回 null）
+        #           local（回落到容器内 <beanName>$Local 的进程内实现；本地实现缺席照抛异常）
+        # 刻意不提供「返回 null / 空集合」：那会把「下游挂了」伪装成「业务本来就没数据」。
+        fallback-mode: ${PIVOTOS_CLOUD_SC_CB_FALLBACK_MODE:none}
+        # 滑动窗口 / 最小调用数 / 失败率阈值（%）/ OPEN 停留时长 / 半开探测数
+        sliding-window-size: ${PIVOTOS_CLOUD_SC_CB_WINDOW:100}
+        minimum-number-of-calls: ${PIVOTOS_CLOUD_SC_CB_MIN_CALLS:20}
+        failure-rate-threshold: ${PIVOTOS_CLOUD_SC_CB_FAILURE_RATE:50}
+        wait-duration-in-open-state: ${PIVOTOS_CLOUD_SC_CB_WAIT:10s}
+        permitted-number-of-calls-in-half-open-state: ${PIVOTOS_CLOUD_SC_CB_HALF_OPEN_CALLS:5}
+        # 不计入失败的异常类名（逗号分隔的全限定名）。典型用法：把业务异常排除，
+        # 让熔断只反映「通道不可用」而不是「业务拒绝了请求」。留空 = 记录所有 Throwable。
+        # ignore-exceptions: com.pivotos.common.api.exception.BizException
+        # ⚠️ 不要开 spring.cloud.openfeign.circuitbreaker.enabled：那是 Feign 内建的全局包装，
+        #    与本通道熔断叠加会造成双重包装，且它的 fallback 只能是个 Class（拿不到容器内本地实现）。

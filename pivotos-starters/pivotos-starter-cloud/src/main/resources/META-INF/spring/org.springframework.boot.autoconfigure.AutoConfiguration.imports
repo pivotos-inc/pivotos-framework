@@ -1,1 +1,2 @@
 com.pivotos.starter.cloud.sc.config.ScCloudAutoConfiguration
+com.pivotos.starter.cloud.sc.config.ScCloudCircuitBreakerAutoConfiguration

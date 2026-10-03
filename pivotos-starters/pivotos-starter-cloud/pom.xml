@@ -56,6 +56,17 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!--
+          仅测试用：Feign 的 FeignClientsConfiguration 要装配 feignHttpMessageConverters，
+          它依赖 boot 的 http-converter 模块（生产形态由 web starter 带进来，本模块刻意不引）。
+          不加它，测试里构建 Feign 客户端会抛 TypeNotPresentException。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-http-converter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>
