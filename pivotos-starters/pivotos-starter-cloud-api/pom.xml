@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-starters</artifactId>
+        <version>2.16.1</version>
+    </parent>
+
+    <artifactId>pivotos-starter-cloud-api</artifactId>
+
+    <name>pivotos-starter-cloud-api</name>
+    <description>ST-CLOUD 契约包：三通道（local / cloud / alibaba）SPI + 服务发现抽象 + 身份与租户上下文传播（零第三方中间件依赖）</description>
+
+    <dependencies>
+        <!-- 上下文载体 LoginUser（跨进程序列化的最小身份快照） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-common-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-common-core</artifactId>
+        </dependency>
+
+        <!-- LoginContext / TenantContext / TraceContext（ScopedValue 体系，项目唯一上下文入口） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-core</artifactId>
+        </dependency>
+
+        <!-- Spring 能力（@ConfigurationProperties / AutoConfiguration / FilterRegistrationBean）；
+             optional 只影响传递，下游必为 Spring Boot 应用 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- spring-web：OncePerRequestFilter 所在（spring-boot-starter 不含 web，需显式补） -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Servlet API：入站恢复 Filter 需要；provided 不进运行时 -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <!-- 测试 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

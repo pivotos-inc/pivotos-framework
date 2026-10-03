@@ -71,6 +71,20 @@
             <artifactId>pivotos-starter-datainspect</artifactId>
         </dependency>
 
+        <!-- ===== ST-CLOUD（V3-S2 L2）：契约包 + 自研 local 通道 =====
+             两者都是零第三方中间件依赖（只依赖 Spring Boot / servlet / 本项目 core），
+             因此默认 fat jar 的第三方依赖集合与引入前完全一致，
+             单体形态「零配置 fat jar 直起」的一票否决点不受影响。
+             cloud / alibaba 两个真实实现走 Maven profile（-P cloud / -P alibaba），默认不进包。 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-cloud-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-cloud-local</artifactId>
+        </dependency>
+
         <!-- ===== 业务 Plugin（system-api/message-api 由 plugin 传递带入） ===== -->
         <dependency>
             <groupId>com.pivotos</groupId>
@@ -206,4 +220,40 @@
             </plugin>
         </plugins>
     </build>
+
+    <!--
+      V3 微服务形态的**可选**通道实现（默认不激活）。
+
+      为什么用 profile 而不是直接写进 dependencies：
+      直接写会让单体形态的 fat jar 平白带上 Spring Cloud / Nacos / Sentinel 全家桶，
+      既拖慢启动也违反「单体形态零配置 fat jar 直起」的一票否决点。
+      用 profile 后默认产物与今天完全一致，需要微服务形态时：
+        mvn clean package -P cloud      （SC 原生：OpenFeign + LoadBalancer + CircuitBreaker）
+        mvn clean package -P alibaba    （SCA：Nacos 注册发现 + Sentinel + Feign）
+      两个 profile 可同时激活（alibaba 已含 cloud）。
+    -->
+    <profiles>
+        <profile>
+            <id>cloud</id>
+            <dependencies>
+                <dependency>
+                    <groupId>com.pivotos</groupId>
+                    <artifactId>pivotos-starter-cloud</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>alibaba</id>
+            <dependencies>
+                <dependency>
+                    <groupId>com.pivotos</groupId>
+                    <artifactId>pivotos-starter-cloud</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>com.pivotos</groupId>
+                    <artifactId>pivotos-starter-cloud-alibaba</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
 </project>

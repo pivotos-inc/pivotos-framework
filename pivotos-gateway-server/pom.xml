@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-framework</artifactId>
+        <version>2.16.1</version>
+    </parent>
+
+    <artifactId>pivotos-gateway-server</artifactId>
+
+    <name>pivotos-gateway-server</name>
+    <description>V3 边缘网关：Spring Cloud Gateway Server WebMVC 变体（与项目 Servlet 技术栈一致，不引入 WebFlux/Netty），独立进程、独立 jar</description>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-dependencies</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- WebMVC 变体：与 admin-server 同为 Servlet 栈，避免把 WebFlux/Netty 拖进项目 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway-server-webmvc</artifactId>
+        </dependency>
+
+        <!-- 上下文传播契约（租户/身份/链路头） -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-cloud-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>pivotos-gateway-server</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.pivotos.gateway.PivotOsGatewayApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

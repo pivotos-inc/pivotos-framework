@@ -20,6 +20,18 @@
         <!-- Boot 版本仲裁点已上移到父 pom（见 pivotos-framework/pom.xml），此处不再重复声明，
              以免两处漂移。升级 Boot 只改父 pom 那一行（含 spring-boot-maven-plugin 联动）。 -->
 
+        <!-- ==================== 微服务通道（V3-S2 L2） ==================== -->
+        <!-- Spring Cloud 2025.1.3：与 Boot 4.1.x 同日发布（2026-08-20）的官方对齐组合；
+             官方兼容矩阵口径：Boot 4.1.x 自 SC 2025.1.2 起受支持。
+             Spring Cloud Alibaba 2025.1.0.0（GA 2026-02-06）：官方绑 SC 2025.1.0 / Boot 4.0.0，
+             带 Nacos client 3.1.1 / Sentinel 1.8.9 / Seata 2.5.0。
+             ⚠️ 两个 BOM 必须**各自显式声明**：SCA 的 BOM 完全不管理 Spring Cloud 组件版本，
+             只引 SCA 会让 SC starter 报 'version is missing' 构建失败（L1 探针实测）。
+             本项目 Boot 4.1.1 > SCA 官方口径的 4.0.0，故 SC 由本项目显式钉到 2025.1.3，
+             该组合已由 spike 探针实测 COMPATIBLE（Framework 7.0.9）。 -->
+        <spring-cloud.version>2025.1.3</spring-cloud.version>
+        <spring-cloud-alibaba.version>2025.1.0.0</spring-cloud-alibaba.version>
+
         <!-- ==================== 持久层 ==================== -->
         <!-- SB4 专属 artifactId，勿用 SB3 旧 starter -->
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
@@ -91,6 +103,25 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
                 <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- ========== Spring Cloud BOM（必须显式声明，SCA 不管 SC 版本） ========== -->
+            <!-- 写在 SCA 之前：语义上表达「SC 版本由本项目决定，不被 SCA 传递的 2025.1.0 带走」 -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- ========== Spring Cloud Alibaba BOM（Nacos 3.1.1 / Sentinel 1.8.9 / Seata 2.5.0） ========== -->
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+                <version>${spring-cloud-alibaba.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -500,6 +531,34 @@
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-starter-datainspect</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- ========== ST-CLOUD（V3-S2 L2）：三通道 SPI 契约 + local/cloud/alibaba 三个实现 ========== -->
+            <!-- cloud-api 零三方中间件依赖（只依赖 Spring Boot / servlet / 本项目 core），
+                 单体形态默认只引它与 cloud-local，fat jar 与引入前完全一致 -->
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-cloud-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-cloud-local</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-cloud</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-cloud-alibaba</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-gateway-server</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

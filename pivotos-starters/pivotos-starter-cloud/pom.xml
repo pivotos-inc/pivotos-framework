@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-starters</artifactId>
+        <version>2.16.1</version>
+    </parent>
+
+    <artifactId>pivotos-starter-cloud</artifactId>
+
+    <name>pivotos-starter-cloud</name>
+    <description>ST-CLOUD Spring Cloud 原生通道：OpenFeign + LoadBalancer + CircuitBreaker(Resilience4j)，服务发现适配 SC DiscoveryClient</description>
+
+    <dependencies>
+        <!-- 契约包 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-cloud-api</artifactId>
+        </dependency>
+
+        <!-- Spring Cloud OpenFeign（版本由 spring-cloud-dependencies 2025.1.3 仲裁） -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
+        <!-- 客户端负载均衡（Feign 走服务名调用必需） -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
+        <!-- 熔断（Spring Cloud CircuitBreaker / Resilience4j） -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <!-- 测试 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

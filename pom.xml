@@ -17,6 +17,8 @@
         <module>pivotos-starters</module>
         <module>pivotos-plugins</module>
         <module>pivotos-admin-server</module>
+        <!-- V3-S2 L2：Spring Cloud Gateway（webmvc 变体）独立进程，单体形态不启动 -->
+        <module>pivotos-gateway-server</module>
     </modules>
 
     <properties>

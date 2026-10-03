@@ -43,6 +43,22 @@ spring:
       server:
         name: pivotos-mcp-server
         version: 2.16.1
+  # ===== Spring Cloud / Alibaba（V3-S2 L2）=====
+  # 这两项只在 -P cloud / -P alibaba 打进 fat jar 时才有意义；默认形态下无 spring-cloud 依赖，
+  # 配置被忽略（Spring Boot 对未知属性宽松），不会有任何副作用。
+  # ⚠️ 缩进必须是 2 空格：spring 的直接子项一律 2 空格，写成 4 空格会落进 spring.ai 子树，
+  #    属性静默失效（本次就是这么踩的：改完仍起不来，查了半天）。
+  cloud:
+    nacos:
+      discovery:
+        # 默认不注册：alibaba 形态要真的注册到 Nacos 需显式置 true（引入 ≠ 生效，V3-S2 L2 铁律）
+        enabled: ${PIVOTOS_NACOS_DISCOVERY_ENABLED:false}
+        # 注册失败绝不阻断启动：SCA 默认会让「Nacos 不可达」直接把应用带崩
+        # （实测：Tomcat 起来后 WebServerStartStopLifecycle 抛 ErrCode:-401，进程退出，
+        #  且仅设 fail-fast=false 无效——它只管「是否快速失败」，true/false 都会把异常抛穿）。
+        # 真正管「失败容忍」的是 failure-tolerance-enabled：true 时注册失败只 WARN 并继续。
+        fail-fast: false
+        failure-tolerance-enabled: true
 
 sa-token:
   token-name: Authorization
@@ -200,3 +216,30 @@ pivotos:
     # true —— 放行旧入口，回滚到并存态（仅改这一处即可，无需重新打包）
     legacy-designer:
       enabled: ${PIVOTOS_WORKFLOW_LEGACY_DESIGNER_ENABLED:false}
+  # ==================== V3 微服务通道（ST-CLOUD） ====================
+  # 三通道：local（自研零依赖，默认）/ cloud（Spring Cloud 原生）/ alibaba（Nacos + Sentinel）。
+  # 通道实现是否进 fat jar 由 Maven profile 决定（-P cloud / -P alibaba）；
+  # 这里只决定「装配哪个通道」与「跨进程传播到什么程度」。
+  cloud:
+    # 总开关：false 时所有通道 Bean 均不装配
+    enabled: ${PIVOTOS_CLOUD_ENABLED:true}
+    # 生效通道（写错回落 local 并打 WARN，不会起不来）
+    provider: ${PIVOTOS_CLOUD_PROVIDER:local}
+    context:
+      # 出站：调用下游时带上租户/身份/链路头
+      propagate: true
+      # 入站恢复过滤器是否注册
+      filter-enabled: true
+      # 入站是否允许从请求头恢复租户/登录态。默认全关 —— 凭头恢复身份是越权风险，
+      # 必须同时配置 internal-token 才可能生效（未配凭证时即便开启也拒绝恢复）。
+      restore-tenant: false
+      restore-login: false
+      # 内部调用凭证：留空 = 拒绝一切入站恢复
+      internal-token: ${PIVOTOS_CLOUD_INTERNAL_TOKEN:}
+    local:
+      # 要切成远程调用的 Facade 接口全限定名（逗号分隔）。默认空 = 不做任何替换（零网络行为）
+      proxied: ${PIVOTOS_CLOUD_LOCAL_PROXIED:}
+      # 是否暴露 /__rpc/invoke 服务端点。开启必须配 internal-token，否则启动 FAIL-FAST
+      server-enabled: ${PIVOTOS_CLOUD_LOCAL_SERVER_ENABLED:false}
+      # 静态实例表：serviceId -> host:port（local 通道不连任何注册中心）
+      instances: {}
