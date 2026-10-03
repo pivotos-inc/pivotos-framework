@@ -36,8 +36,23 @@ public class JsonAutoConfiguration {
     @ConditionalOnProperty(prefix = "pivotos.json", name = "engine", havingValue = "fastjson2", matchIfMissing = true)
     static class FastJsonMvcConfiguration implements WebMvcConfigurer {
 
+        /**
+         * 必须是 {@code extendMessageConverters} 而不是 {@code configureMessageConverters}。
+         *
+         * <p>{@code WebMvcConfigurationSupport#getMessageConverters} 的语义是：
+         * 先跑所有 {@code configureMessageConverters}，<b>若结果非空就不再补默认转换器</b>。
+         * 一旦这里只 add 了 fastjson 一个，默认转换器（String / ByteArray / Resource /
+         * AllEncompassingForm …）会整批消失 —— 实测生效转换器从十来个掉到 1 个，
+         * 任何返回 {@code String} / {@code byte[]} / {@code Resource} 的端点都会 500
+         * {@code HttpMessageNotWritableException: No converter for [class java.lang.String]}。
+         * 产品侧目前没有这类端点（全部返回 {@code R<?>}），所以这个缺陷一直潜伏。
+         *
+         * <p>改用 extend：Boot 自己的 {@code WebMvcAutoConfigurationAdapter} 已把
+         * {@code HttpMessageConverters}（含全部默认转换器）放进列表，此处只在最前面插入
+         * fastjson —— 「fastjson 优先」的语义一点没变，默认能力也不再被挤掉。
+         */
         @Override
-        public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
+        public void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
             FastJsonConfig config = new FastJsonConfig();
             config.setCharset(StandardCharsets.UTF_8);
             config.setDateFormat("yyyy-MM-dd HH:mm:ss");

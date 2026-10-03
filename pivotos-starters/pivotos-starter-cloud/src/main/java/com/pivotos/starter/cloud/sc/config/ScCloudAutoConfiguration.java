@@ -1,11 +1,9 @@
 package com.pivotos.starter.cloud.sc.config;
 
 import com.pivotos.starter.cloud.api.CloudProvider;
-import com.pivotos.starter.cloud.api.config.CloudProperties;
 import com.pivotos.starter.cloud.api.config.condition.ConditionalOnCloudProvider;
 import com.pivotos.starter.cloud.api.discovery.ServiceInstanceProvider;
 import com.pivotos.starter.cloud.sc.discovery.ScServiceInstanceProvider;
-import com.pivotos.starter.cloud.sc.feign.CloudContextFeignInterceptor;
 import com.pivotos.starter.cloud.sc.feign.FeignFacadeRegistrar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,13 +39,10 @@ public class ScCloudAutoConfiguration {
     }
 
     /**
-     * Feign 出站上下文传播拦截器：注册为全局 {@code RequestInterceptor}，
-     * 之后任何 Feign 调用都自动带上租户/身份/链路头，业务侧无感。
+     * 注：Feign 出站上下文传播拦截器不在本类装配 —— 它要同时覆盖 cloud 与 alibaba 两个形态，
+     * 已拆到 {@link com.pivotos.starter.cloud.sc.feign.CloudContextFeignAutoConfiguration}。
+     * 留在本类的后果：alibaba 形态（provider=alibaba）整份拦截器缺席，Feign 出站不带身份头。
      */
-    @Bean
-    public CloudContextFeignInterceptor cloudContextFeignInterceptor(CloudProperties properties) {
-        return new CloudContextFeignInterceptor(properties);
-    }
 
     /**
      * Facade 远程替换注册器。<b>必须是 static @Bean</b>：BFPP 需在容器刷新早期实例化。
