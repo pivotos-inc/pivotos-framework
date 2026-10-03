@@ -6,6 +6,7 @@ import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.util.ClassUtils;
 
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
@@ -63,9 +64,27 @@ public final class FacadeProxySupport {
                                   ClassLoader classLoader,
                                   Class<?> iface,
                                   Function<Class<?>, RootBeanDefinition> proxyDefinitionFactory) {
+        return replaceAndReturnLocalBeanName(registry, classLoader, iface,
+            (proxyIface, localBeanName) -> proxyDefinitionFactory.apply(proxyIface)) != null;
+    }
+
+    /**
+     * 同 {@link #replace}，但额外返回被保留下来的本地实现 Bean 名，并把它交给代理定义工厂。
+     *
+     * <p>为什么需要它：熔断降级口径 {@code fallback-mode=local} 要在熔断打开时回落到进程内实现，
+     * 而那个实现此刻只剩一个 {@code <beanName>$Local} 别名、且已关闭 autowire 候选 ——
+     * 只有拿到确切 Bean 名才取得到（按类型取会被「非候选」挡掉）。
+     *
+     * @param proxyDefinitionFactory 入参为 {@code (接口, 本地实现Bean名)}，产出代理定义
+     * @return 本地实现 Bean 名（{@code $Local} 后缀）；{@code null} 表示没找到本地实现、未做替换
+     */
+    public static String replaceAndReturnLocalBeanName(BeanDefinitionRegistry registry,
+                                                       ClassLoader classLoader,
+                                                       Class<?> iface,
+                                                       BiFunction<Class<?>, String, RootBeanDefinition> proxyDefinitionFactory) {
         String localBeanName = findLocalBeanName(registry, classLoader, iface);
         if (localBeanName == null) {
-            return false;
+            return null;
         }
         // cloneBeanDefinition() 保真复制（构造参数/属性值/作用域一并带走）。
         // 不能用 new RootBeanDefinition(BeanDefinition)：Spring 7 起该构造器非 public。
@@ -73,9 +92,10 @@ public final class FacadeProxySupport {
         localDefinition.setAutowireCandidate(false);
         registry.registerBeanDefinition(localBeanName + LOCAL_SUFFIX, localDefinition);
 
+        String retainedName = localBeanName + LOCAL_SUFFIX;
         registry.removeBeanDefinition(localBeanName);
-        registry.registerBeanDefinition(localBeanName, proxyDefinitionFactory.apply(iface));
-        return true;
+        registry.registerBeanDefinition(localBeanName, proxyDefinitionFactory.apply(iface, retainedName));
+        return retainedName;
     }
 
     /** 复制 Bean 定义；非 AbstractBeanDefinition 时退化为「只带类名」的等价定义 */

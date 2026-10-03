@@ -1,5 +1,6 @@
 package com.pivotos.starter.cloud.sc.config;
 
+import com.pivotos.starter.cloud.sc.circuitbreaker.ScCircuitBreakerProperties;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.StringUtils;
@@ -25,6 +26,12 @@ public class ScCloudProperties {
 
     /** 直连地址（形如 {@code http://127.0.0.1:8080}）；为空则按 serviceId 走负载均衡 */
     private String url = "";
+
+    /**
+     * 熔断（Resilience4j）。默认 enabled=false —— 不打开就完全不包装，
+     * 与「包里有 Resilience4j 但没接线」的现状行为一致（引入 ≠ 生效）。
+     */
+    private ScCircuitBreakerProperties circuitBreaker = new ScCircuitBreakerProperties();
 
     public Set<String> proxiedInterfaces() {
         Set<String> result = new LinkedHashSet<>();

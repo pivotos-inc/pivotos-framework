@@ -49,8 +49,15 @@ public class ScCloudAutoConfiguration {
         return new CloudContextFeignInterceptor(properties);
     }
 
+    /**
+     * Facade 远程替换注册器。<b>必须是 static @Bean</b>：BFPP 需在容器刷新早期实例化。
+     *
+     * <p>刻意<b>不接收 {@link ScCloudProperties} 参数</b>：BFPP 的构造参数会被提前解析，
+     * 会把 properties Bean 在绑定后处理器之前创建出来，导致配置静默失效（详见 {@code PropertyBinder}）。
+     * 注册器自己从 Environment 绑定。
+     */
     @Bean
-    public static FeignFacadeRegistrar feignFacadeRegistrar(ScCloudProperties properties) {
-        return new FeignFacadeRegistrar(properties);
+    public static FeignFacadeRegistrar feignFacadeRegistrar() {
+        return new FeignFacadeRegistrar();
     }
 }
