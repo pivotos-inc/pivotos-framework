@@ -24,14 +24,20 @@ public class CloudProviderCondition implements Condition {
     @Override
     public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
         Map<String, Object> attrs = metadata.getAnnotationAttributes(ConditionalOnCloudProvider.class.getName());
-        CloudProvider expected = attrs == null || attrs.get("value") == null
-            ? CloudProvider.LOCAL
-            : (CloudProvider) attrs.get("value");
+        CloudProvider[] expected = attrs == null || attrs.get("value") == null
+            ? new CloudProvider[] {CloudProvider.LOCAL}
+            : (CloudProvider[]) attrs.get("value");
         String enabled = context.getEnvironment().getProperty("pivotos.cloud.enabled", "true");
         if ("false".equalsIgnoreCase(enabled)) {
             return false;
         }
         String raw = context.getEnvironment().getProperty("pivotos.cloud.provider");
-        return CloudProvider.of(raw) == expected;
+        CloudProvider actual = CloudProvider.of(raw);
+        for (CloudProvider candidate : expected) {
+            if (candidate == actual) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -67,6 +67,17 @@
             <artifactId>spring-boot-http-converter</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!--
+          仅测试用：端到端验证「入站身份恢复」需要一个真实的下游容器（真实 Tomcat + 真实过滤器链），
+          进程内的 MockMvc 只能证明过滤器对象被调用，证明不了「请求线程里 ScopedValue 真的绑上了」。
+          生产形态的 web 由 admin-server 自己引入，本模块刻意不引（test scope 不进任何 fat jar）。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>
