@@ -15,6 +15,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
 
 /**
@@ -41,6 +42,20 @@ public class AlibabaCloudAutoConfiguration {
         log.info("[CLOUD][alibaba] 服务实例提供者已装配：DiscoveryClient {}，nacos server-addr={}",
             client == null ? "缺席" : "就绪", serverAddr);
         return new AlibabaServiceInstanceProvider(client);
+    }
+
+    /**
+     * 配置中心落地状态自检（V3-S2 L6）。
+     *
+     * <p>刻意只挂在 {@code NacosConfigDataLocationResolver} 上而不是本类的类级条件：
+     * 配置中心是 Boot 层的 {@code spring.config.import} 能力，与 {@code pivotos.cloud.provider}
+     * 选哪个通道无关；只要 jar 里带了 nacos-config，就该把「有没有真的读到配置」打出来。
+     */
+    @Bean
+    @ConditionalOnMissingBean(NacosConfigStateLogger.class)
+    @ConditionalOnClass(name = "com.alibaba.cloud.nacos.configdata.NacosConfigDataLocationResolver")
+    public NacosConfigStateLogger nacosConfigStateLogger(ConfigurableEnvironment environment) {
+        return new NacosConfigStateLogger(environment);
     }
 
     @Bean

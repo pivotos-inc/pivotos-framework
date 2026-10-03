@@ -6,6 +6,15 @@ spring:
     name: pivotos-admin-server
   profiles:
     active: dev
+  # ===== Nacos 配置中心导入（V3-S2 L6）=====
+  # ⚠️ optional: 前缀是硬要求：去掉它，「Nacos 不可达 / 鉴权失败 / dataId 不存在 /
+  #    默认形态 classpath 上没有 nacos: 解析器」四种情况都会直接把启动打断。
+  #    只有 -P alibaba 打进去的 fat jar 才真正认识 nacos: 前缀；默认形态下这两行被静默忽略。
+  # dataId 两段：公共配置 + 环境覆盖（环境由 PIVOTOS_NACOS_CONFIG_ENV 决定，默认 dev）。
+  config:
+    import:
+      - optional:nacos:pivotos-admin-server.yaml
+      - optional:nacos:pivotos-admin-server-${PIVOTOS_NACOS_CONFIG_ENV:dev}.yaml
   servlet:
     multipart:
       max-file-size: 50MB
@@ -50,6 +59,19 @@ spring:
   #    属性静默失效（本次就是这么踩的：改完仍起不来，查了半天）。
   cloud:
     nacos:
+      # ===== 配置中心（V3-S2 L6）=====
+      # 与 discovery 同源：连接信息一律环境变量占位符（yml 进 git，凭据不得落库）。
+      # namespace 为空即 public；group 与注册发现共用同一份占位符，避免「注册在 A 域、配置在 B 域」。
+      config:
+        server-addr: ${PIVOTOS_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${PIVOTOS_NACOS_USERNAME:}
+        password: ${PIVOTOS_NACOS_PASSWORD:}
+        namespace: ${PIVOTOS_NACOS_NAMESPACE:}
+        group: ${PIVOTOS_NACOS_GROUP:DEFAULT_GROUP}
+        # 只认 yaml：dataId 后缀必须与 file-extension 一致，否则内容解析不到
+        file-extension: yaml
+        # 读超时（ms）：optional: 前缀已兜住失败，这里只是别让不可达时白等 30s
+        timeout: 3000
       discovery:
         # 默认不注册：alibaba 形态要真的注册到 Nacos 需显式置 true（引入 ≠ 生效，V3-S2 L2 铁律）
         enabled: ${PIVOTOS_NACOS_DISCOVERY_ENABLED:false}
