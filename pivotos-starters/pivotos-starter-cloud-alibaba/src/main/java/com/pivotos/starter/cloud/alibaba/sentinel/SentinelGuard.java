@@ -6,6 +6,7 @@ import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.alibaba.csp.sentinel.slots.block.flow.FlowRule;
 import com.alibaba.csp.sentinel.slots.block.flow.FlowRuleManager;
 import com.pivotos.starter.cloud.alibaba.config.AlibabaCloudProperties;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.function.Supplier;
  * 不读 dashboard、不连控制台：Sentinel 的规则加载是<b>本地</b>能力，
  * 因此即便没有任何外部服务，限流也能真实验证（见 SentinelGuardTest）。
  */
+@Slf4j
 public class SentinelGuard {
 
     private final AlibabaCloudProperties properties;
@@ -33,14 +35,19 @@ public class SentinelGuard {
         List<FlowRule> rules = new ArrayList<>();
         Map<String, Integer> configured = properties.getRules();
         if (configured != null) {
-            configured.forEach((resource, qps) -> {
-                if (resource == null || resource.isBlank() || qps == null || qps <= 0) {
+            configured.forEach((raw, qps) -> {
+                if (raw == null || raw.isBlank() || qps == null || qps <= 0) {
                     return;
                 }
-                FlowRule rule = new FlowRule(resource(resource));
+                String resource = resource(raw);
+                FlowRule rule = new FlowRule(resource);
                 rule.setCount(qps.doubleValue());
                 rule.setGrade(com.alibaba.csp.sentinel.slots.block.RuleConstant.FLOW_GRADE_QPS);
                 rules.add(rule);
+                // 必须打印**实际生效的资源名**：只打「规则 N 条」看不出拼了前缀没有，
+                // 本次真机就栽在这——日志说规则 1 条，实际资源名拼成 pivotos:/system/auth/login，
+                // 与 Sentinel WebMvc 拦截器用的 URI 资源名对不上，限流静默失效。
+                log.info("[CLOUD][alibaba] Sentinel 流控规则：{} -> QPS {}", resource, qps);
             });
         }
         if (!rules.isEmpty()) {
@@ -48,10 +55,20 @@ public class SentinelGuard {
         }
     }
 
-    /** 资源名（带前缀） */
+    /**
+     * 资源名。
+     *
+     * <p><b>以 {@code /} 开头视为 Web URI，一律不拼前缀</b>：Sentinel WebMvc 拦截器
+     * （SCA 的 SentinelWebInterceptor）使用的资源名就是 URI 本身，拼上前缀后规则永远匹配不上，
+     * Web 侧限流会静默失效（真机实测：3 次连打全部 200，block 日志为空）。
+     * 非 URI 形态（业务资源名）才拼 {@code resourcePrefix}，避免与框架自带资源撞名。
+     */
     public String resource(String name) {
         String prefix = properties.getResourcePrefix();
-        return prefix == null || prefix.isBlank() ? name : prefix + ":" + name;
+        if (prefix == null || prefix.isBlank() || name.startsWith("/")) {
+            return name;
+        }
+        return prefix + ":" + name;
     }
 
     public boolean isEnabled() {
