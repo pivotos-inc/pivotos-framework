@@ -21,13 +21,24 @@
             <artifactId>pivotos-starter-cloud-api</artifactId>
         </dependency>
 
-        <!-- Nacos 注册发现（SCA 2025.1.0.0 带 nacos-client 3.1.1）。
-             刻意不引 spring-cloud-starter-alibaba-nacos-config：它要求
-             spring.config.import 必须声明 nacos dataId，是启动硬门槛，
-             与「单体形态零配置 fat jar 直起」冲突（配置中心另开一轮）。 -->
+        <!-- Nacos 注册发现（SCA 2025.1.0.0 带 nacos-client 3.1.1） -->
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+
+        <!-- Nacos 配置中心（V3-S2 L6）。
+             旧注释曾断言「nacos-config 是启动硬门槛，与单体形态零配置直起冲突」——实测不成立：
+             ① Boot 4 的 ConfigDataImporter.handle() 在 location.isOptional() || resource.isOptional()
+                时只记日志不抛；② NacosConfigDataLoader 把任何异常都包成
+                ConfigDataResourceNotFoundException；③ spring-core 7 的 SpringFactoriesLoader 仍读
+                META-INF/spring.factories（SCA 就是这么注册 nacos: 解析器的），Boot 4.1.1 下能被发现。
+             故「Nacos 不可达 / 鉴权失败 / dataId 不存在 / 默认形态 classpath 无解析器」四态都不阻断启动。
+             ⚠️ 硬要求：使用方的 spring.config.import 必须写 optional:nacos:<dataId>.yaml，
+                去掉 optional: 前缀即退化为启动硬门槛（NacosConfigOptionalImportTest 有反向自证）。 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
         </dependency>
 
         <!-- Sentinel 流量治理 -->
