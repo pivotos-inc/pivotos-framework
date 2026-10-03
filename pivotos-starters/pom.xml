@@ -34,6 +34,11 @@
         <!-- ST-DATAINSPECT（S130）：通用数据监控契约包 + 主 Starter（MySQL 实现 + SQL 安全闸门） -->
         <module>pivotos-starter-datainspect-api</module>
         <module>pivotos-starter-datainspect</module>
+        <!-- ST-CLOUD（V3-S2 L2）：契约包 + local / cloud / alibaba 三通道实现 -->
+        <module>pivotos-starter-cloud-api</module>
+        <module>pivotos-starter-cloud-local</module>
+        <module>pivotos-starter-cloud</module>
+        <module>pivotos-starter-cloud-alibaba</module>
     </modules>
 
     <dependencyManagement>
