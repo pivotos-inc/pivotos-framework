@@ -53,6 +53,13 @@ spring:
       discovery:
         # 默认不注册：alibaba 形态要真的注册到 Nacos 需显式置 true（引入 ≠ 生效，V3-S2 L2 铁律）
         enabled: ${PIVOTOS_NACOS_DISCOVERY_ENABLED:false}
+        # 连接信息一律走环境变量占位符：凭据不落库（yml 会进 git），未注入时用本机兜底地址。
+        # dev: 175.24.176.176:8848 / test: 10.0.0.7:8848 / prod: 10.0.4.15:8848（三环境均开启鉴权）
+        server-addr: ${PIVOTOS_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${PIVOTOS_NACOS_USERNAME:}
+        password: ${PIVOTOS_NACOS_PASSWORD:}
+        namespace: ${PIVOTOS_NACOS_NAMESPACE:}
+        group: ${PIVOTOS_NACOS_GROUP:DEFAULT_GROUP}
         # 注册失败绝不阻断启动：SCA 默认会让「Nacos 不可达」直接把应用带崩
         # （实测：Tomcat 起来后 WebServerStartStopLifecycle 抛 ErrCode:-401，进程退出，
         #  且仅设 fail-fast=false 无效——它只管「是否快速失败」，true/false 都会把异常抛穿）。

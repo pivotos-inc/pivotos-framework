@@ -53,6 +53,27 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- 真机 IT 需要 Feign 客户端与 LoadBalancer（alibaba 形态运行时已含这两个实现，
+             但本模块运行期不强制依赖它们 —— 仅在 test 域引入，保持可裁剪）。 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- 真机 IT 需要 web 环境：SCA 的 AutoServiceRegistration 会 introspect
+             AbstractAutoServiceRegistration，其签名引用 spring-boot web 的
+             WebServerInitializedEvent；缺了它连上下文都起不来（NoClassDefFoundError）。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>

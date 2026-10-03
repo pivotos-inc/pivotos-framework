@@ -57,6 +57,18 @@ class SentinelGuardTest {
     }
 
     @Test
+    void uri形状的资源名不拼前缀_否则Web限流静默失效() {
+        AlibabaCloudProperties properties = new AlibabaCloudProperties();
+        assertThat(properties.getResourcePrefix()).as("默认前缀应为 pivotos（业务资源名用）").isEqualTo("pivotos");
+        SentinelGuard guard = new SentinelGuard(properties);
+
+        // Sentinel WebMvc 拦截器的资源名就是 URI 本身，拼前缀会让规则永远匹配不上
+        assertThat(guard.resource("/system/auth/login")).isEqualTo("/system/auth/login");
+        // 非 URI 形态仍走前缀，避免与框架自带资源撞名
+        assertThat(guard.resource("demo-api")).isEqualTo("pivotos:demo-api");
+    }
+
+    @Test
     void no_rules_means_no_active_limiting() {
         AlibabaCloudProperties properties = new AlibabaCloudProperties();
         properties.setSentinelEnabled(true);
