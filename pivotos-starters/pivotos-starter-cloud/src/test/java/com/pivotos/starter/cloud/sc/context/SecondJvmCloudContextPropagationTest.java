@@ -7,7 +7,7 @@ import com.pivotos.starter.cloud.api.config.CloudProperties;
 import com.pivotos.starter.core.context.LoginContext;
 import com.pivotos.starter.cloud.api.context.CloudHeaders;
 import com.pivotos.starter.cloud.sc.config.ScCloudAutoConfiguration;
-import com.pivotos.starter.cloud.sc.feign.CloudContextFeignAutoConfiguration;
+import com.pivotos.starter.cloud.api.feign.CloudContextFeignAutoConfiguration;
 import com.pivotos.starter.cloud.sc.fixture.ProbedFacade;
 import com.pivotos.starter.cloud.sc.fixture.ProbedLocalFacade;
 import com.pivotos.starter.cloud.sc.probe.ContextProbeApp;

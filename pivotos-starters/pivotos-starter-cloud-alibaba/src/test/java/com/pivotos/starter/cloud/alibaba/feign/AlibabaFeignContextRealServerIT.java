@@ -129,6 +129,17 @@ class AlibabaFeignContextRealServerIT {
                 "logging.level.root=WARN",
                 "server.port=0",
                 "spring.application.name=" + SERVICE_ID,
+                // SCA 在 environmentPrepared 阶段就校验「spring.config.import 里必须有 nacos: 条目」，
+                // 缺失直接抛 No spring.config.import set —— 报错与「Nacos 连不上」长得完全不像，
+                // 本 IT 只做注册发现，用一条 optional 的空 dataId 满足校验即可（不存在也能启动）。
+                "spring.config.import[0]=optional:nacos:pivotos-alibaba-feign-it.yaml",
+                "spring.cloud.nacos.config.server-addr="
+                    + System.getenv().getOrDefault("PIVOTOS_NACOS_SERVER_ADDR", "127.0.0.1:8848"),
+                "spring.cloud.nacos.config.username="
+                    + System.getenv().getOrDefault("PIVOTOS_NACOS_USERNAME", "nacos"),
+                "spring.cloud.nacos.config.password="
+                    + System.getenv().getOrDefault("PIVOTOS_NACOS_PASSWORD", ""),
+                "spring.cloud.nacos.config.timeout=2000",
                 "spring.cloud.nacos.discovery.enabled=true",
                 "spring.cloud.nacos.discovery.server-addr="
                     + System.getenv().getOrDefault("PIVOTOS_NACOS_SERVER_ADDR", "127.0.0.1:8848"),

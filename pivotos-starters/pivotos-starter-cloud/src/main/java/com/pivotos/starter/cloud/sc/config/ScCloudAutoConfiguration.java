@@ -40,7 +40,7 @@ public class ScCloudAutoConfiguration {
 
     /**
      * 注：Feign 出站上下文传播拦截器不在本类装配 —— 它要同时覆盖 cloud 与 alibaba 两个形态，
-     * 已拆到 {@link com.pivotos.starter.cloud.sc.feign.CloudContextFeignAutoConfiguration}。
+     * 已拆到 {@link com.pivotos.starter.cloud.api.feign.CloudContextFeignAutoConfiguration}。
      * 留在本类的后果：alibaba 形态（provider=alibaba）整份拦截器缺席，Feign 出站不带身份头。
      */
 

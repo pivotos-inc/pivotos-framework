@@ -28,6 +28,7 @@ spring:
     # 优先级：环境变量 DASHSCOPE_API_KEY > 此兜底值；生产环境必须通过环境变量注入
     openai:
       api-key: ${DASHSCOPE_API_KEY:sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC}
+
     # Milvus 服务端实际未部署（2026-09-24 实测 19530 不通）：
     # ① spring.ai.vectorstore.type 显式设为 simple——该自动装配 matchIfMissing=true，不设会按默认 localhost:19530 连 Milvus 导致启动失败；
     # ② 本地 dev 向量库走 pivotos.kb.vector-store.type=simple（内存 + JSON 快照，零中间件，即 Milvus Lite 定位的落地形态）；
@@ -43,6 +44,25 @@ spring:
     #     embedding-dimension: 1024
     #     initialize-schema: true
     #     metric-type: COSINE
+
+  cloud:
+    # ===== dev Nacos（V3-S3）=====
+    # 与上方 MySQL / Redis 同款口径：dev 配置文件里本来就存明文口令，故此处直接写 dev 值；
+    # test / prod 仍走 application.yml 的 ${PIVOTOS_NACOS_*} 占位符，不落任何明文。
+    # 仍保留覆盖能力：显式注入 PIVOTOS_NACOS_* 环境变量时以环境变量为准。
+    # ⚠️ 缩进必须是 2 空格，且必须整块放在 spring 的最后一个子项之后：
+    #    插到别的子项中间会把后续配置「吸」进 cloud 子树（本轮就踩了一次——
+    #    spring.ai.vectorstore.type 被吞掉，Milvus 自动装配复活并连 19530 把启动打断）。
+    nacos:
+      config:
+        server-addr: ${PIVOTOS_NACOS_SERVER_ADDR:175.24.176.176:8848}
+        username: ${PIVOTOS_NACOS_USERNAME:nacos}
+        password: "${PIVOTOS_NACOS_PASSWORD:OdBp8FX5Bp5#*pCq}"
+      discovery:
+        # 注册开关仍沿用 application.yml 的默认 false：连得上 ≠ 该注册（V3-S2 L2 铁律）
+        server-addr: ${PIVOTOS_NACOS_SERVER_ADDR:175.24.176.176:8848}
+        username: ${PIVOTOS_NACOS_USERNAME:nacos}
+        password: "${PIVOTOS_NACOS_PASSWORD:OdBp8FX5Bp5#*pCq}"
 
 mybatis-plus:
   configuration:
