@@ -29,7 +29,20 @@ public final class FacadeHttpConstants {
     /** 参数个数超限 */
     public static final String ERROR_TOO_MANY_ARGS = "TOO_MANY_ARGS";
 
-    /** 实现体抛异常（不把业务异常原文回抛到网络上，只回形态） */
+    /** 参数无法反序列化成目标形参类型（形态错，不是业务拒绝） */
+    public static final String ERROR_BAD_ARGS = "BAD_ARGS";
+
+    /**
+     * 业务异常（{@code ServiceException}）：HTTP 仍为 200。
+     *
+     * <p><b>为什么业务异常走 200 而不是 4xx/5xx</b>：与 local 通道的
+     * {@code FacadeRpcServlet} 同口径 —— 业务拒绝是「调用成功了、对方按规则拒绝了」，
+     * 不是传输失败。把 {@code 非本人待办} 打成一个 500，调用方只能当成「下游挂了」去重试，
+     * 而重试永远也不会成功。
+     */
+    public static final String ERROR_SERVICE = "SERVICE_EXCEPTION";
+
+    /** 实现体抛非业务异常（不把业务异常原文回抛到网络上，只回形态） */
     public static final String ERROR_INVOCATION = "INVOCATION_FAILED";
 
     private FacadeHttpConstants() {
@@ -37,25 +50,46 @@ public final class FacadeHttpConstants {
 
     /** 成功响应体 */
     public static String ok(ObjectMapper mapper, Object data) {
-        return write(mapper, true, data, null);
+        return write(mapper, new Envelope(true, data, null, null, null));
     }
 
-    /** 失败响应体 */
+    /** 失败响应体（无业务码） */
     public static String fail(ObjectMapper mapper, String error) {
-        return write(mapper, false, null, error);
+        return write(mapper, new Envelope(false, null, error, null, null));
     }
 
-    private static String write(ObjectMapper mapper, boolean ok, Object data, String error) {
+    /**
+     * 业务异常响应体：{@code ok=false} + {@code error=SERVICE_EXCEPTION} + 业务码与文案。
+     *
+     * <p>回传 message 是刻意的：跨进程调用方拿不到「为什么被拒」就没法区分
+     * 「该重试」与「该放弃」。但只回 {@code ServiceException} 的码与文案，
+     * 其它异常一律不回原文（防堆栈泄漏）。
+     */
+    public static String serviceFail(ObjectMapper mapper, int code, String message) {
+        return write(mapper, new Envelope(false, null, ERROR_SERVICE, code,
+            message == null || message.isBlank() ? null : message));
+    }
+
+    private static String write(ObjectMapper mapper, Envelope envelope) {
         try {
-            return mapper.writeValueAsString(new Envelope(ok, data, error));
+            return mapper.writeValueAsString(envelope);
         } catch (Exception e) {
             // 序列化失败就别再尝试序列化异常本身：给一个固定串，避免错误被二次吞掉
-            return ok ? "{\"ok\":true,\"data\":\"<unserializable>\"}"
+            return envelope.ok()
+                ? "{\"ok\":true,\"data\":\"<unserializable>\"}"
                 : "{\"ok\":false,\"error\":\"" + ERROR_INVOCATION + "\"}";
         }
     }
 
-    /** 响应外壳：{@code {"ok":bool,"data":T,"error":String}} */
-    public record Envelope(boolean ok, Object data, String error) {
+    /**
+     * 响应外壳：{@code {"ok":bool,"data":T,"error":String,"code":Integer,"message":String}}。
+     *
+     * <p>{@code code} / {@code message} 只在业务异常分支出现（{@code @JsonInclude(NON_NULL)}），
+     * 因此 403 / 404 / 500 这些基础设施分支的响应体与 V3-S3 时期<b>逐字节一致</b>，
+     * 既有的 {@code FacadeHttpExposureTest} 断言不需要改。
+     */
+    @com.fasterxml.jackson.annotation.JsonInclude(
+        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    public record Envelope(boolean ok, Object data, String error, Integer code, String message) {
     }
 }

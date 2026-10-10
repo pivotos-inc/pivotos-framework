@@ -41,8 +41,9 @@ public class FacadeHttpMappingRegistrar implements SmartInitializingSingleton {
 
     @Override
     public void afterSingletonsInstantiated() {
+        // 签名里没有 @RequestBody String：请求体由 handler 自己从 HttpServletRequest 读（见其注释）
         Method method = ReflectionUtils.findMethod(FacadeHttpHandler.class, "invoke",
-            String.class, String.class, String.class, jakarta.servlet.http.HttpServletRequest.class);
+            String.class, String.class, jakarta.servlet.http.HttpServletRequest.class);
         if (method == null) {
             throw new IllegalStateException("[CLOUD][facade-http] 找不到 FacadeHttpHandler#invoke 方法签名，注册中止");
         }
@@ -54,6 +55,22 @@ public class FacadeHttpMappingRegistrar implements SmartInitializingSingleton {
             .build();
         handlerMapping.registerMapping(info, handler, method);
         log.info("[CLOUD][facade-http] 已注册 MVC 映射：POST {}/{{iface}}/{{method}}", normalize(basePath));
+        inspectWhitelist();
+    }
+
+    /**
+     * 启动期自检：白名单里的类名/方法名写错时，运行期的表现只有一个 404，
+     * 排障只能靠猜。这里把「找不到类 / 找不到实现 / 找不到方法 / 同名同元数重载」
+     * 四类问题在启动日志里直接点名。
+     *
+     * <p><b>放在 {@code afterSingletonsInstantiated()} 而不是 AutoConfiguration 里</b>：
+     * 只有到这里容器里的业务 Bean 才全部就位，「本进程有没有这个 Facade 的实现」
+     * 才问得准（在自动配置阶段问会得到一堆假阴性）。
+     */
+    private void inspectWhitelist() {
+        for (String warning : handler.whitelist().inspect(handlerMapping.getApplicationContext())) {
+            log.warn("[CLOUD][facade-http] 白名单自检：{}", warning);
+        }
     }
 
     private String normalize(String path) {
