@@ -51,7 +51,7 @@ spring:
     mcp:
       server:
         name: pivotos-mcp-server
-        version: 2.16.1
+        version: 3.0.0
   # ===== Spring Cloud / Alibaba（V3-S2 L2）=====
   # 这两项只在 -P cloud / -P alibaba 打进 fat jar 时才有意义；默认形态下无 spring-cloud 依赖，
   # 配置被忽略（Spring Boot 对未知属性宽松），不会有任何副作用。
