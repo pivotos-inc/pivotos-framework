@@ -88,6 +88,26 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Jackson 2 数据类型模块（V3-S4 D2）：
+             为什么必须显式声明而不能靠 findAndRegisterModules() 撞运气：
+             ① Boot 4 世代主用的是 Jackson 3（tools.jackson），Jackson 2 的 datatype 模块
+                很可能根本不在运行时 classpath 上；而 findAndRegisterModules() 是 ServiceLoader
+                静默发现，缺模块不报错，只在遇到 LocalDateTime / Optional 时才炸
+                （实测预判：IMessageFacade#pageByUser 的 MessageDTO.readTime 会直接 500）。
+             ② 「依赖碰巧在 classpath」不是契约：显式声明 + 单测钉死序列化形态，
+                才不会在某个 profile（-P alibaba / -P cloud）的包里悄悄退化。 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jdk8</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

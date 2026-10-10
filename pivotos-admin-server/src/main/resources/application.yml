@@ -304,3 +304,37 @@ pivotos:
         # ignore-exceptions: com.pivotos.common.api.exception.BizException
         # ⚠️ 不要开 spring.cloud.openfeign.circuitbreaker.enabled：那是 Feign 内建的全局包装，
         #    与本通道熔断叠加会造成双重包装，且它的 fallback 只能是个 Class（拿不到容器内本地实现）。
+    # ==================== Facade 契约 HTTP 化（V3-S4） ====================
+    # 把 *-api 的 Facade 契约按「接口名 + 方法名」反射暴露成 HTTP 端点（POST /__facade/{iface}/{method}），
+    # 契约层零改动（不在契约接口上加 @PostMapping —— 参数注解取的是实现类方法，复杂 DTO 会退化成表单绑定）。
+    facade-http:
+      # 默认不开：这是「默认形态零行为」边界的一部分。开启会强制校验 context.internal-token，
+      # 未配凭证启动 FAIL-FAST（与 local 通道的 /__rpc/invoke 同口径）。
+      enabled: ${PIVOTOS_CLOUD_FACADE_HTTP_ENABLED:false}
+      # 白名单刻意不在 yml 里写默认值：
+      # 一旦写了 interfaces: ${X:} 且 X 为空，Spring 会把空串绑成空 List，
+      # 把代码默认值（只有 ContextFacade）顶掉 —— 「默认值」会被配置静默改写。
+      # 因此业务接口一律由部署方显式传（命令行 --pivotos.cloud.facade-http.interfaces=... 或环境变量）。
+      #
+      # 语法：条目之间逗号，方法之间分号（分号不是 Spring 的 List 分隔符，逗号是）
+      #   com.pivotos.system.api.facade.IUserFacade                      整个接口可调用
+      #   com.pivotos.generator.service.IGeneratorFacade:previewCode     只开列出的方法
+      #
+      # 只读业务预置组（见 FacadeHttpPresets.READ_ONLY_BUSINESS，12 个接口 / 33 个只读方法）：
+      #   com.pivotos.system.api.facade.IDeptFacade,com.pivotos.system.api.facade.IDictFacade,
+      #   com.pivotos.system.api.facade.IRoleFacade,com.pivotos.system.api.facade.IStatsFacade,
+      #   com.pivotos.system.api.facade.IUserFacade,com.pivotos.ai.kb.api.facade.IKnowledgeBaseFacade,
+      #   com.pivotos.file.api.facade.IFileFacade:buildFileUrl;storageStats,
+      #   com.pivotos.ai.api.facade.IAiFacade:chatStats;resolveModel,
+      #   com.pivotos.generator.service.IGeneratorFacade:previewCode;previewPluginSkeleton,
+      #   com.pivotos.migration.api.codeindex.ICodeIndexFacade:symbolTable;readFile;stats,
+      #   com.pivotos.workflow.api.IWorkflowFacade:countPending;instanceStats;pagePendingTasks;pageMyInstances;getApprovalTaskContext,
+      #   com.pivotos.message.api.facade.IMessageFacade:pageByUser;countUnread
+      #
+      # ⚠️ 依赖登录态的成员（IWorkflowFacade 的 5 个方法、IMessageFacade 的 2 个读方法）
+      #    必须同时开 context.restore-login=true，否则一律按「未登录」返回空页 ——
+      #    HTTP 200 + ok=true，但结果是错的（这是本轮最难取证的点）。
+      #
+      # ⚠️ 写方法（send / approveTask / generateToProject / presignDownload / chat* / rebuildIndex 等）
+      #    能力已具备但刻意不进任何默认配置：这个端点的唯一闸门是内部凭证，
+      #    开放即等于「凭一张凭证就能远程落库 / 审批 / 写文件」，须自行评估后显式开启。

@@ -250,6 +250,13 @@
                 <artifactId>jackson-datatype-jsr310</artifactId>
                 <version>${jackson2.version}</version>
             </dependency>
+            <!-- V3-S4：Optional 序列化模块（ICodeIndexFacade 的 Optional<...> 返回值需要）。
+                 与 jsr310 同款：Jackson 2 模块不受 Spring Boot 仲裁，必须自己钉版本。 -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.datatype</groupId>
+                <artifactId>jackson-datatype-jdk8</artifactId>
+                <version>${jackson2.version}</version>
+            </dependency>
             <!-- Jackson 2（com.fasterxml）：ES 官方客户端的 JacksonJsonpMapper 依赖它，
                  与项目主用的 Jackson 3（tools.jackson）包名不同可共存，故单列版本不参与 Spring Boot 仲裁 -->
             <dependency>
