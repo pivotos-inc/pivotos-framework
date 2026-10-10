@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-starters</artifactId>
+        <version>3.0.0</version>
+    </parent>
+
+    <artifactId>pivotos-starter-cloud-alibaba</artifactId>
+
+    <name>pivotos-starter-cloud-alibaba</name>
+    <description>ST-CLOUD Spring Cloud Alibaba 通道：Nacos 注册发现（官方 SDK）+ Sentinel 流量治理</description>
+
+    <dependencies>
+        <!-- 契约包 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-cloud-api</artifactId>
+        </dependency>
+
+        <!-- Nacos 注册发现（SCA 2025.1.0.0 带 nacos-client 3.1.1） -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+
+        <!-- Nacos 配置中心（V3-S2 L6）。
+             旧注释曾断言「nacos-config 是启动硬门槛，与单体形态零配置直起冲突」——实测不成立：
+             ① Boot 4 的 ConfigDataImporter.handle() 在 location.isOptional() || resource.isOptional()
+                时只记日志不抛；② NacosConfigDataLoader 把任何异常都包成
+                ConfigDataResourceNotFoundException；③ spring-core 7 的 SpringFactoriesLoader 仍读
+                META-INF/spring.factories（SCA 就是这么注册 nacos: 解析器的），Boot 4.1.1 下能被发现。
+             故「Nacos 不可达 / 鉴权失败 / dataId 不存在 / 默认形态 classpath 无解析器」四态都不阻断启动。
+             ⚠️ 硬要求：使用方的 spring.config.import 必须写 optional:nacos:<dataId>.yaml，
+                去掉 optional: 前缀即退化为启动硬门槛（NacosConfigOptionalImportTest 有反向自证）。 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
+
+        <!-- Sentinel 流量治理 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <!-- 测试 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- 真机 IT 需要 Feign 客户端与 LoadBalancer（alibaba 形态运行时已含这两个实现，
+             但本模块运行期不强制依赖它们 —— 仅在 test 域引入，保持可裁剪）。 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- 真机 IT 需要 web 环境：SCA 的 AutoServiceRegistration 会 introspect
+             AbstractAutoServiceRegistration，其签名引用 spring-boot web 的
+             WebServerInitializedEvent；缺了它连上下文都起不来（NoClassDefFoundError）。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

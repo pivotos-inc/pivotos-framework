@@ -1,0 +1,27 @@
+====================================================================================================
+S133 · 数据层跨模块耦合扫描（同一条 SQL 触碰 >=2 个业务 Plugin 的表）
+====================================================================================================
+扫描根      : /Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-framework
+@TableName 索引表数 : 56
+    pivotos-plugin-system: 18 张表
+    pivotos-plugin-ai: 11 张表
+    pivotos-plugin-migration: 7 张表
+    pivotos-plugin-ai-kb: 6 张表
+    pivotos-plugin-message: 4 张表
+    pivotos-plugin-docsync: 2 张表
+    pivotos-plugin-generator: 2 张表
+    pivotos-plugin-mind: 2 张表
+    pivotos-plugin-file: 1 张表
+    pivotos-plugin-workflow: 1 张表
+    pivotos-plugin-ai-coding: 1 张表
+    pivotos-plugin-monitor: 1 张表
+扫描 SQL 语句总数   : 22
+跨模块 SQL 命中     : 0
+
+----------------------------------------------------------------------------------------------------
+  （无）没有任何一条 SQL 同时触碰两个业务 Plugin 的表 —— 数据层天然可拆库
+
+====================================================================================================
+判定口径：命中项 = 拆库后必须改写成『应用层聚合 / 数据冗余 / 跨库视图』的工作量单位；
+          未索引到的表（如第三方组件自建表 warm-flow_*）不计入。
+====================================================================================================

@@ -1,6 +1,6 @@
-package com.pivotos.ai.tool;
+package com.pivotos.ai.api.tool;
 
-import com.pivotos.ai.enums.ToolType;
+import com.pivotos.ai.api.enums.ToolType;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;

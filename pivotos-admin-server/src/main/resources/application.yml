@@ -6,6 +6,15 @@ spring:
     name: pivotos-admin-server
   profiles:
     active: dev
+  # ===== Nacos 配置中心导入（V3-S2 L6）=====
+  # ⚠️ optional: 前缀是硬要求：去掉它，「Nacos 不可达 / 鉴权失败 / dataId 不存在 /
+  #    默认形态 classpath 上没有 nacos: 解析器」四种情况都会直接把启动打断。
+  #    只有 -P alibaba 打进去的 fat jar 才真正认识 nacos: 前缀；默认形态下这两行被静默忽略。
+  # dataId 两段：公共配置 + 环境覆盖（环境由 PIVOTOS_NACOS_CONFIG_ENV 决定，默认 dev）。
+  config:
+    import:
+      - optional:nacos:pivotos-admin-server.yaml
+      - optional:nacos:pivotos-admin-server-${PIVOTOS_NACOS_CONFIG_ENV:dev}.yaml
   servlet:
     multipart:
       max-file-size: 50MB
@@ -42,7 +51,43 @@ spring:
     mcp:
       server:
         name: pivotos-mcp-server
-        version: 2.16.1
+        version: 3.0.0
+  # ===== Spring Cloud / Alibaba（V3-S2 L2）=====
+  # 这两项只在 -P cloud / -P alibaba 打进 fat jar 时才有意义；默认形态下无 spring-cloud 依赖，
+  # 配置被忽略（Spring Boot 对未知属性宽松），不会有任何副作用。
+  # ⚠️ 缩进必须是 2 空格：spring 的直接子项一律 2 空格，写成 4 空格会落进 spring.ai 子树，
+  #    属性静默失效（本次就是这么踩的：改完仍起不来，查了半天）。
+  cloud:
+    nacos:
+      # ===== 配置中心（V3-S2 L6）=====
+      # 与 discovery 同源：连接信息一律环境变量占位符（yml 进 git，凭据不得落库）。
+      # namespace 为空即 public；group 与注册发现共用同一份占位符，避免「注册在 A 域、配置在 B 域」。
+      config:
+        server-addr: ${PIVOTOS_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${PIVOTOS_NACOS_USERNAME:}
+        password: ${PIVOTOS_NACOS_PASSWORD:}
+        namespace: ${PIVOTOS_NACOS_NAMESPACE:}
+        group: ${PIVOTOS_NACOS_GROUP:DEFAULT_GROUP}
+        # 只认 yaml：dataId 后缀必须与 file-extension 一致，否则内容解析不到
+        file-extension: yaml
+        # 读超时（ms）：optional: 前缀已兜住失败，这里只是别让不可达时白等 30s
+        timeout: 3000
+      discovery:
+        # 默认不注册：alibaba 形态要真的注册到 Nacos 需显式置 true（引入 ≠ 生效，V3-S2 L2 铁律）
+        enabled: ${PIVOTOS_NACOS_DISCOVERY_ENABLED:false}
+        # 连接信息一律走环境变量占位符：凭据不落库（yml 会进 git），未注入时用本机兜底地址。
+        # dev: 175.24.176.176:8848 / test: 10.0.0.7:8848 / prod: 10.0.4.15:8848（三环境均开启鉴权）
+        server-addr: ${PIVOTOS_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${PIVOTOS_NACOS_USERNAME:}
+        password: ${PIVOTOS_NACOS_PASSWORD:}
+        namespace: ${PIVOTOS_NACOS_NAMESPACE:}
+        group: ${PIVOTOS_NACOS_GROUP:DEFAULT_GROUP}
+        # 注册失败绝不阻断启动：SCA 默认会让「Nacos 不可达」直接把应用带崩
+        # （实测：Tomcat 起来后 WebServerStartStopLifecycle 抛 ErrCode:-401，进程退出，
+        #  且仅设 fail-fast=false 无效——它只管「是否快速失败」，true/false 都会把异常抛穿）。
+        # 真正管「失败容忍」的是 failure-tolerance-enabled：true 时注册失败只 WARN 并继续。
+        fail-fast: false
+        failure-tolerance-enabled: true
 
 sa-token:
   token-name: Authorization
@@ -200,3 +245,62 @@ pivotos:
     # true —— 放行旧入口，回滚到并存态（仅改这一处即可，无需重新打包）
     legacy-designer:
       enabled: ${PIVOTOS_WORKFLOW_LEGACY_DESIGNER_ENABLED:false}
+  # ==================== V3 微服务通道（ST-CLOUD） ====================
+  # 三通道：local（自研零依赖，默认）/ cloud（Spring Cloud 原生）/ alibaba（Nacos + Sentinel）。
+  # 通道实现是否进 fat jar 由 Maven profile 决定（-P cloud / -P alibaba）；
+  # 这里只决定「装配哪个通道」与「跨进程传播到什么程度」。
+  cloud:
+    # 总开关：false 时所有通道 Bean 均不装配
+    enabled: ${PIVOTOS_CLOUD_ENABLED:true}
+    # 生效通道（写错回落 local 并打 WARN，不会起不来）
+    provider: ${PIVOTOS_CLOUD_PROVIDER:local}
+    context:
+      # 出站：调用下游时带上租户/身份/链路头
+      propagate: true
+      # 入站恢复过滤器是否注册
+      filter-enabled: true
+      # 入站是否允许从请求头恢复租户/登录态。默认全关 —— 凭头恢复身份是越权风险，
+      # 必须同时配置 internal-token 才可能生效（未配凭证时即便开启也拒绝恢复）。
+      restore-tenant: false
+      restore-login: false
+      # 内部调用凭证：留空 = 拒绝一切入站恢复
+      internal-token: ${PIVOTOS_CLOUD_INTERNAL_TOKEN:}
+    local:
+      # 要切成远程调用的 Facade 接口全限定名（逗号分隔）。默认空 = 不做任何替换（零网络行为）
+      proxied: ${PIVOTOS_CLOUD_LOCAL_PROXIED:}
+      # 是否暴露 /__rpc/invoke 服务端点。开启必须配 internal-token，否则启动 FAIL-FAST
+      server-enabled: ${PIVOTOS_CLOUD_LOCAL_SERVER_ENABLED:false}
+      # 静态实例表：serviceId -> host:port（local 通道不连任何注册中心）
+      instances: {}
+    # Spring Cloud 原生通道（-P cloud / -P alibaba 打进 fat jar 才有意义）
+    sc:
+      # 要切成 Feign 远程调用的 Facade 接口全限定名（逗号分隔）。默认空 = 不做任何替换
+      # ⚠️ 前提：该接口方法必须带 Spring MVC 注解（Feign 的 Contract 靠它解析路径）。
+      #    业务 Facade 契约（IUserFacade 等）目前没有 MVC 注解，直接填这里是建不出客户端的（已知待办）。
+      proxied: ${PIVOTOS_CLOUD_SC_PROXIED:}
+      # Feign 客户端服务名（走 LoadBalancer，需要注册中心）
+      service-id: ${PIVOTOS_CLOUD_SC_SERVICE_ID:pivotos-admin-server}
+      # 直连地址（形如 http://127.0.0.1:8080）；配了它就不走负载均衡，无注册中心也能跑
+      url: ${PIVOTOS_CLOUD_SC_URL:}
+      circuit-breaker:
+        # 熔断（Resilience4j）总开关。默认 false —— 不打开就等于 Feign 客户端一层都没多包，
+        # 与「包里有 Resilience4j 但没接线」完全一致（引入 ≠ 生效）。
+        # 打开后：状态转换与被拒绝的调用会打 [CLOUD][cloud][CB] 前缀日志。
+        enabled: ${PIVOTOS_CLOUD_SC_CB_ENABLED:false}
+        # 熔断实例粒度：interface（默认，整个 Facade 一个）/ method（每个方法一个）
+        granularity: ${PIVOTOS_CLOUD_SC_CB_GRANULARITY:interface}
+        # 降级口径：none（默认，抛 CloudCircuitBreakerOpenException，绝不静默返回 null）
+        #           local（回落到容器内 <beanName>$Local 的进程内实现；本地实现缺席照抛异常）
+        # 刻意不提供「返回 null / 空集合」：那会把「下游挂了」伪装成「业务本来就没数据」。
+        fallback-mode: ${PIVOTOS_CLOUD_SC_CB_FALLBACK_MODE:none}
+        # 滑动窗口 / 最小调用数 / 失败率阈值（%）/ OPEN 停留时长 / 半开探测数
+        sliding-window-size: ${PIVOTOS_CLOUD_SC_CB_WINDOW:100}
+        minimum-number-of-calls: ${PIVOTOS_CLOUD_SC_CB_MIN_CALLS:20}
+        failure-rate-threshold: ${PIVOTOS_CLOUD_SC_CB_FAILURE_RATE:50}
+        wait-duration-in-open-state: ${PIVOTOS_CLOUD_SC_CB_WAIT:10s}
+        permitted-number-of-calls-in-half-open-state: ${PIVOTOS_CLOUD_SC_CB_HALF_OPEN_CALLS:5}
+        # 不计入失败的异常类名（逗号分隔的全限定名）。典型用法：把业务异常排除，
+        # 让熔断只反映「通道不可用」而不是「业务拒绝了请求」。留空 = 记录所有 Throwable。
+        # ignore-exceptions: com.pivotos.common.api.exception.BizException
+        # ⚠️ 不要开 spring.cloud.openfeign.circuitbreaker.enabled：那是 Feign 内建的全局包装，
+        #    与本通道熔断叠加会造成双重包装，且它的 fallback 只能是个 Class（拿不到容器内本地实现）。

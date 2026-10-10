@@ -20,7 +20,7 @@ import com.pivotos.ai.orchestrator.ToolPlan;
 import com.pivotos.ai.orchestrator.ToolPlanValidator;
 import com.pivotos.ai.orchestrator.ToolSpec;
 import com.pivotos.ai.service.AiOrchestratorService;
-import com.pivotos.ai.tool.AiToolMeta;
+import com.pivotos.ai.api.tool.AiToolMeta;
 import com.pivotos.common.api.context.LoginUser;
 import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.common.core.page.PageResult;

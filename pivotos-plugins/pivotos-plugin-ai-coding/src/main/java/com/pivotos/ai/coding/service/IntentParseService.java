@@ -1,31 +1,28 @@
 package com.pivotos.ai.coding.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.pivotos.common.core.exception.ServiceException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
+import com.pivotos.ai.api.facade.IAiFacade;
 import com.pivotos.ai.api.usage.AiUsageContext;
-import com.pivotos.ai.client.AiClientRegistry;
-import com.pivotos.ai.domain.entity.AiApiKey;
-import com.pivotos.ai.domain.entity.AiProvider;
-import com.pivotos.ai.mapper.AiApiKeyMapper;
-import com.pivotos.ai.mapper.AiProviderMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 import java.util.Map;
 
 /**
  * LLM intent parsing: natural language -&gt; table schema JSON.
  * <p>
- * Gets first enabled provider + first active key, builds a ChatClient via
- * AiClientRegistry, sends a structured prompt to the LLM and parses the
- * JSON response.
+ * Sends a structured prompt to the LLM and parses the JSON response.
+ *
+ * <p><b>V3-S1 契约治理</b>：原先本类直接注入 plugin-ai 的 {@code AiClientRegistry} 与两个 Mapper
+ * 自行挑选供应商/Key（全仓唯一一条 Plugin 实现层跨模块直调欠款边的一部分）。现在改为只依赖
+ * {@link IAiFacade} 的 {@code dynamicChat}——「取启用供应商 + 启用 Key」是实现侧的事，
+ * 契约只承诺「走动态通道、没配置就失败」。
  *
  * @author PivotOS
- * @since 2.2.0
+ * @since 2.2.0；V3-S1（v3.0.0）改为走 IAiFacade 契约
  */
 @Service
 public class IntentParseService {
@@ -33,9 +30,7 @@ public class IntentParseService {
     private static final Logger log = LoggerFactory.getLogger(IntentParseService.class);
 
     private final ObjectMapper objectMapper;
-    private final AiClientRegistry registry;
-    private final AiProviderMapper providerMapper;
-    private final AiApiKeyMapper keyMapper;
+    private final IAiFacade aiFacade;
 
     private static final String SYSTEM_PROMPT = """
             You are a database designer. Given a business description, output a table schema in JSON.
@@ -135,12 +130,9 @@ public class IntentParseService {
              "columns":[...]}
             """;
 
-    public IntentParseService(ObjectMapper objectMapper, AiClientRegistry registry,
-                              AiProviderMapper providerMapper, AiApiKeyMapper keyMapper) {
+    public IntentParseService(ObjectMapper objectMapper, IAiFacade aiFacade) {
         this.objectMapper = objectMapper;
-        this.registry = registry;
-        this.providerMapper = providerMapper;
-        this.keyMapper = keyMapper;
+        this.aiFacade = aiFacade;
     }
 
     public Map<String, Object> parse(String description) {
@@ -166,35 +158,18 @@ public class IntentParseService {
         return callLlm(TREE_SYSTEM_PROMPT, "Tree/hierarchical business description: " + description + "\n\nOutput JSON schema:");
     }
 
-    /** 共用：取首个启用供应商 + 首个启用 Key → LLM 调用 → JSON 解析 */
+    /**
+     * 共用：动态通道 LLM 调用 → JSON 解析。
+     *
+     * <p>用 {@code dynamicChat} 而非 {@code internalChat}：意图解析<b>不接受静态兜底</b>——
+     * 拿不到 Key 时模型输出必然是臆造的表结构，宁可失败也不要假结果。
+     * 供应商/Key 的选取由 plugin-ai 负责（V3-S1 契约治理）。
+     */
     private Map<String, Object> callLlm(String systemPrompt, String userPrompt) {
 
-        // Get first enabled provider
-        List<AiProvider> providers = providerMapper.selectList(
-                new LambdaQueryWrapper<AiProvider>().eq(AiProvider::getStatus, 0));
-        if (providers.isEmpty()) {
-            throw new ServiceException("No enabled AI provider found. Please configure one in AI management.");
-        }
-        AiProvider provider = providers.get(0);
-
-        // Get first active key for this provider
-        List<AiApiKey> keys = keyMapper.selectList(
-                new LambdaQueryWrapper<AiApiKey>()
-                        .eq(AiApiKey::getProviderId, provider.getId())
-                        .eq(AiApiKey::getStatus, 0));
-        if (keys.isEmpty()) {
-            throw new ServiceException("No active API key for provider: " + provider.getName());
-        }
-        AiApiKey key = keys.get(0);
-
         // Intent parse via LLM（S92：coding 场景计量）
-        String response = AiUsageContext.callWithScene(AiUsageContext.SCENE_CODING, () ->
-                registry.getChatClient(provider, key)
-                        .prompt()
-                        .system(systemPrompt)
-                        .user(userPrompt)
-                        .call()
-                        .content());
+        String response = AiUsageContext.callWithScene(AiUsageContext.SCENE_CODING,
+                () -> aiFacade.dynamicChat(systemPrompt, userPrompt));
 
         log.info("[AI Coding] LLM response length={}", response != null ? response.length() : 0);
         if (response == null || response.isBlank()) {

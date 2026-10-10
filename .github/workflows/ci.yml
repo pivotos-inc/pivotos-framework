@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         jdk: ['21', '25']
-        sb: ['4.0.0', '4.1.0']
+        sb: ['4.0.0', '4.1.1']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4

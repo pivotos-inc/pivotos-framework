@@ -1,0 +1,71 @@
+====================================================================================================
+S133 · V3「形态革命」spike —— 形态切换与一票否决点实测
+====================================================================================================
+执行时间  : 2026-10-02 19:59:14
+形态数量  : 8
+
+----------------------------------------------------------------------------------------------------
+[F1-monolith] V1 · 单体形态零配置（原封不动的 fat jar，不引任何 Cloud Starter）   expect=up   => PASS
+    ✅ 登录 /system/auth/login :: HTTP 200, code=0
+    ✅ 跨 Plugin 调用 summary（file/ai/kb 三区块） :: HTTP 200, code=0, blocks={'system': True, 'file': True, 'ai': True, 'kb': True, 'workflow': True}
+    ✅ Flyway 校验通过且未用 validate-on-migrate=false :: 2026-10-02T19:57:10.098+08:00  INFO 59336 --- [pivotos-admin-server] [           main] o.f.core.internal.command.DbValid
+    ✅ JVM 存活（跑完断言仍然活着） :: exit=None
+    ✅ 收口：8080 已释放 :: clean
+
+----------------------------------------------------------------------------------------------------
+[F2-microservice] V2 · 微服务形态（+openfeign +nacos，同一调用改走 HTTP，业务代码零改动）   expect=up   => PASS
+    ✅ 登录 /system/auth/login :: HTTP 200, code=0
+    ✅ 跨 Plugin 调用 summary（file/ai/kb 三区块） :: HTTP 200, code=0, blocks={'system': True, 'file': True, 'ai': True, 'kb': True, 'workflow': True}
+    ✅ Facade 调用确实走了 HTTP（CLIENT+SERVER 日志成对） :: client=3 条, server=3 条；样例=2026-10-02T19:57:40.725+08:00  INFO 59624 --- [pivotos-admin-server] [nio-8080-exec-4] nFeignAutoConfiguration
+    ✅ nacos 注册/发现链路打通（替身 Open API） :: 2026-10-02T19:57:36.005+08:00  INFO 59624 --- [pivotos-admin-server] [           main] c.p.cloud.nacos.NacosAutoConfigur
+    ✅ JVM 存活（跑完断言仍然活着） :: exit=None
+    ✅ 收口：8080 已释放 :: clean
+
+----------------------------------------------------------------------------------------------------
+[F3-all-cloud] V3 · 五个 Cloud Starter 全引全启用   expect=up   => PASS
+    ✅ 登录 /system/auth/login :: HTTP 200, code=0
+    ✅ 跨 Plugin 调用 summary（file/ai/kb 三区块） :: HTTP 200, code=0, blocks={'system': True, 'file': True, 'ai': True, 'kb': True, 'workflow': True}
+    ✅ Facade 调用确实走了 HTTP（CLIENT+SERVER 日志成对） :: client=3 条, server=3 条；样例=2026-10-02T19:57:59.290+08:00  INFO 59903 --- [pivotos-admin-server] [nio-8080-exec-4] nFeignAutoConfiguration
+    ✅ gateway 边缘头已注入 :: X-Edge-Gateway=pivotos-edge-1, X-Edge-Request-Id=71fa25ea
+    ✅ JVM 存活（跑完断言仍然活着） :: exit=None
+    ✅ 收口：8080 已释放 :: clean
+
+----------------------------------------------------------------------------------------------------
+[F4-only-seata] V3 · 单独引 seata（配 openfeign 使其真实装配；无注册中心）   expect=up   => PASS
+    ✅ 登录 /system/auth/login :: HTTP 200, code=0
+    ✅ 跨 Plugin 调用 summary（file/ai/kb 三区块） :: HTTP 200, code=0, blocks={'system': True, 'file': True, 'ai': True, 'kb': True, 'workflow': True}
+    ✅ seata 事务边界已装配并随 RPC 传播 XID :: ain] c.p.cloud.seata.SeataAutoConfiguration   : [CLOUD][seata] 事务边界已装配：group=PIVOTOS_TX_GROUP, timeout=30000ms
+    ✅ Facade 调用确实走了 HTTP（CLIENT+SERVER 日志成对） :: client=3 条, server=3 条；样例=2026-10-02T19:58:16.700+08:00  INFO 60153 --- [pivotos-admin-server] [nio-8080-exec-4] nFeignAutoConfiguration
+    ✅ JVM 存活（跑完断言仍然活着） :: exit=None
+    ✅ 收口：8080 已释放 :: clean
+
+----------------------------------------------------------------------------------------------------
+[F5-only-gateway] V3 · 单独引 gateway   expect=up   => PASS
+    ✅ 登录 /system/auth/login :: HTTP 200, code=0
+    ✅ 跨 Plugin 调用 summary（file/ai/kb 三区块） :: HTTP 200, code=0, blocks={'system': True, 'file': True, 'ai': True, 'kb': True, 'workflow': True}
+    ✅ gateway 边缘头已注入 :: X-Edge-Gateway=pivotos-edge-1, X-Edge-Request-Id=d1fb599d
+    ✅ JVM 存活（跑完断言仍然活着） :: exit=None
+    ✅ 收口：8080 已释放 :: clean
+
+----------------------------------------------------------------------------------------------------
+[F6-only-sentinel] V3 · 单独引 sentinel（qps=1，验证限流确实生效）   expect=up   => PASS
+    ✅ 登录 /system/auth/login :: HTTP 200, code=0
+    ✅ sentinel qps=1 触发限流（429 与 200 同时出现） :: status codes=[200, 429, 429, 429, 429, 429]
+    ✅ JVM 存活（跑完断言仍然活着） :: exit=None
+    ✅ 收口：8080 已释放 :: clean
+
+----------------------------------------------------------------------------------------------------
+[F7-openfeign-hmac-nosecret] V3 · fail-fast：HMAC 已启用但未配密钥 → 必须起不来   expect=fail   => PASS
+    ✅ JVM 非 0 退出且日志含 FAIL-FAST :: exit=1; 2026-10-02T19:59:01.537+08:00  WARN 61289 --- [pivotos-admin-server] [           main] ConfigServletWebServerApplicationContext : Exception 
+    ✅ 收口：8080 已释放 :: clean
+
+----------------------------------------------------------------------------------------------------
+[F8-nacos-noaddr] V3 · fail-fast：nacos 已启用但未配地址 → 必须起不来（配 openfeign 使其装配）   expect=fail   => PASS
+    ✅ JVM 非 0 退出且日志含 FAIL-FAST :: exit=1; 2026-10-02T19:59:12.424+08:00  WARN 61441 --- [pivotos-admin-server] [           main] ConfigServletWebServerApplicationContext : Exception 
+    ✅ 收口：8080 已释放 :: clean
+
+====================================================================================================
+断言汇总：36/36 PASS
+V2 业务模块零改动校验（git diff --numstat 业务目录）：
+    （空）零行改动 —— 形态切换未触碰任何业务代码
+====================================================================================================

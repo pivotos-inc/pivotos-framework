@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-starters</artifactId>
+        <version>3.0.0</version>
+    </parent>
+
+    <artifactId>pivotos-starter-cloud</artifactId>
+
+    <name>pivotos-starter-cloud</name>
+    <description>ST-CLOUD Spring Cloud 原生通道：OpenFeign + LoadBalancer + CircuitBreaker(Resilience4j)，服务发现适配 SC DiscoveryClient</description>
+
+    <dependencies>
+        <!-- 契约包 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-cloud-api</artifactId>
+        </dependency>
+
+        <!-- Spring Cloud OpenFeign（版本由 spring-cloud-dependencies 2025.1.3 仲裁） -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
+        <!-- 客户端负载均衡（Feign 走服务名调用必需） -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
+        <!-- 熔断（Spring Cloud CircuitBreaker / Resilience4j） -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <!-- 测试 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          仅测试用：Feign 的 FeignClientsConfiguration 要装配 feignHttpMessageConverters，
+          它依赖 boot 的 http-converter 模块（生产形态由 web starter 带进来，本模块刻意不引）。
+          不加它，测试里构建 Feign 客户端会抛 TypeNotPresentException。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-http-converter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          仅测试用：端到端验证「入站身份恢复」需要一个真实的下游容器（真实 Tomcat + 真实过滤器链），
+          进程内的 MockMvc 只能证明过滤器对象被调用，证明不了「请求线程里 ScopedValue 真的绑上了」。
+          生产形态的 web 由 admin-server 自己引入，本模块刻意不引（test scope 不进任何 fat jar）。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

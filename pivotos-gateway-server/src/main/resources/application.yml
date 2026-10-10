@@ -1,0 +1,30 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: pivotos-gateway
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            # 单体形态：网关把 /api/** 转发到本机 admin-server（8080）。
+            # 微服务形态下把 uri 换成 lb://pivotos-admin-server 即可走注册中心。
+            - id: admin-server
+              uri: http://127.0.0.1:8080
+              order: 0
+              predicates:
+                # 单体形态下后端路由没有 /api 前缀（直连是 /system/auth/login），
+                # 两个前缀都要放行，否则网关转发 404——这个坑只有真穿透一次才会暴露。
+                - Path=/api/**,/system/**
+
+pivotos:
+  cloud:
+    # 网关自身不持有业务上下文，传播走 local 通道的同一套编解码器
+    provider: local
+
+logging:
+  level:
+    com.pivotos: INFO
+    org.springframework.cloud.gateway: INFO

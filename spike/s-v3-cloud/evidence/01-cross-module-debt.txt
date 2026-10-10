@@ -1,0 +1,119 @@
+====================================================================================================
+S133 · 隐性跨模块调用扫描（-api Facade 之外的跨 Plugin / Starter 实现模块引用）
+====================================================================================================
+扫描根        : /Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-framework
+Maven 模块数  : 45
+包索引条目    : 254
+包冲突        : 1 -> ['com.pivotos.generator.service: pivotos-plugin-generator <-> pivotos-plugin-generator-api']
+
+【总计】
+  欠款边 DEBT      : 1 条 / import 13 次
+  违规边 REVERSE   : 0 条
+  契约边 CONTRACT  : 38 条 / import 494 次
+  基础设施边 INFRA : 34 条（Plugin → Starter，非跨服务边界）
+  基座边 BASE      : 54 条
+  pom 实现依赖     : 2 条（直接依赖 Plugin 实现模块而非 -api）
+
+----------------------------------------------------------------------------------------------------
+【欠款】隐性跨实现模块调用：1 条边
+----------------------------------------------------------------------------------------------------
+  pivotos-plugin-ai-coding  ->  pivotos-plugin-ai   (import 13 次 / 涉及 8 个类)
+        · pivotos-plugins/pivotos-plugin-ai-coding/src/main/java/com/pivotos/ai/coding/locate/DynamicLocateLlmClient.java:5 -> com.pivotos.ai.client.AiClientRegistry
+        · pivotos-plugins/pivotos-plugin-ai-coding/src/main/java/com/pivotos/ai/coding/locate/DynamicLocateLlmClient.java:6 -> com.pivotos.ai.domain.entity.AiApiKey
+        · pivotos-plugins/pivotos-plugin-ai-coding/src/main/java/com/pivotos/ai/coding/locate/DynamicLocateLlmClient.java:7 -> com.pivotos.ai.domain.entity.AiProvider
+
+----------------------------------------------------------------------------------------------------
+【违规】api 模块反向依赖实现模块：0 条边
+----------------------------------------------------------------------------------------------------
+  （无）
+
+----------------------------------------------------------------------------------------------------
+【合规】走 -api 契约通道的跨模块调用：38 条边
+----------------------------------------------------------------------------------------------------
+  pivotos-starter-datainspect  ->  pivotos-starter-datainspect-api   (import 50 次 / 涉及 18 个类)
+  pivotos-plugin-docsync  ->  pivotos-plugin-docsync-api   (import 48 次 / 涉及 9 个类)
+  pivotos-plugin-ai-coding  ->  pivotos-plugin-ai-coding-api   (import 46 次 / 涉及 23 个类)
+  pivotos-plugin-system  ->  pivotos-plugin-system-api   (import 38 次 / 涉及 14 个类)
+  pivotos-starter-search  ->  pivotos-starter-search-api   (import 36 次 / 涉及 20 个类)
+  pivotos-plugin-mind  ->  pivotos-plugin-mind-api   (import 24 次 / 涉及 9 个类)
+  pivotos-starter-search-es-java  ->  pivotos-starter-search-api   (import 23 次 / 涉及 16 个类)
+  pivotos-plugin-ai  ->  pivotos-plugin-ai-api   (import 22 次 / 涉及 6 个类)
+  pivotos-plugin-migration  ->  pivotos-plugin-migration-api   (import 21 次 / 涉及 7 个类)
+  pivotos-plugin-message  ->  pivotos-plugin-message-api   (import 20 次 / 涉及 7 个类)
+  pivotos-plugin-monitor  ->  pivotos-starter-datainspect-api   (import 20 次 / 涉及 13 个类)
+  pivotos-starter-search-easy-es  ->  pivotos-starter-search-api   (import 17 次 / 涉及 11 个类)
+  pivotos-plugin-ai-coding  ->  pivotos-plugin-migration-api   (import 14 次 / 涉及 5 个类)
+  pivotos-plugin-ai-kb  ->  pivotos-starter-search-api   (import 14 次 / 涉及 7 个类)
+  pivotos-plugin-ai  ->  pivotos-plugin-ai-kb-api   (import 9 次 / 涉及 4 个类)
+  pivotos-plugin-file  ->  pivotos-plugin-file-api   (import 9 次 / 涉及 4 个类)
+  pivotos-plugin-ai-kb  ->  pivotos-plugin-ai-kb-api   (import 8 次 / 涉及 5 个类)
+  pivotos-plugin-ai  ->  pivotos-plugin-message-api   (import 7 次 / 涉及 5 个类)
+  pivotos-plugin-message  ->  pivotos-plugin-system-api   (import 7 次 / 涉及 2 个类)
+  pivotos-plugin-monitor  ->  pivotos-starter-search-api   (import 6 次 / 涉及 5 个类)
+  pivotos-plugin-workflow  ->  pivotos-plugin-workflow-api   (import 6 次 / 涉及 5 个类)
+  pivotos-plugin-ai  ->  pivotos-plugin-workflow-api   (import 5 次 / 涉及 4 个类)
+  pivotos-plugin-generator  ->  pivotos-plugin-generator-api   (import 5 次 / 涉及 3 个类)
+  pivotos-plugin-monitor  ->  pivotos-plugin-system-api   (import 5 次 / 涉及 5 个类)
+  pivotos-plugin-monitor  ->  pivotos-plugin-ai-api   (import 5 次 / 涉及 4 个类)
+  pivotos-plugin-system  ->  pivotos-starter-search-api   (import 5 次 / 涉及 4 个类)
+  pivotos-plugin-workflow  ->  pivotos-plugin-system-api   (import 5 次 / 涉及 2 个类)
+  pivotos-plugin-ai  ->  pivotos-plugin-system-api   (import 2 次 / 涉及 2 个类)
+  pivotos-plugin-ai-coding  ->  pivotos-plugin-ai-api   (import 2 次 / 涉及 1 个类)
+  pivotos-plugin-migration  ->  pivotos-plugin-ai-api   (import 2 次 / 涉及 1 个类)
+  pivotos-plugin-monitor  ->  pivotos-plugin-ai-kb-api   (import 2 次 / 涉及 2 个类)
+  pivotos-plugin-monitor  ->  pivotos-plugin-file-api   (import 2 次 / 涉及 2 个类)
+  pivotos-plugin-monitor  ->  pivotos-plugin-workflow-api   (import 2 次 / 涉及 2 个类)
+  pivotos-plugin-workflow  ->  pivotos-plugin-message-api   (import 2 次 / 涉及 2 个类)
+  pivotos-starter-datainspect  ->  pivotos-starter-search-api   (import 2 次 / 涉及 2 个类)
+  pivotos-plugin-ai-coding  ->  pivotos-plugin-generator-api   (import 1 次 / 涉及 1 个类)
+  pivotos-plugin-ai-kb  ->  pivotos-plugin-ai-api   (import 1 次 / 涉及 1 个类)
+  pivotos-plugin-ai-kb  ->  pivotos-plugin-file-api   (import 1 次 / 涉及 1 个类)
+
+----------------------------------------------------------------------------------------------------
+【依赖声明】直接依赖 Plugin 实现模块（而非 -api 契约）：2 条
+----------------------------------------------------------------------------------------------------
+  pivotos-plugin-ai-coding  ->  pivotos-plugin-ai   (scope=compile, pivotos-plugin-ai-coding/pom.xml)
+  pivotos-plugin-ai-coding  ->  pivotos-plugin-generator   (scope=compile, pivotos-plugin-ai-coding/pom.xml)
+
+----------------------------------------------------------------------------------------------------
+【参考】Plugin → 基础设施 Starter：34 条边（不跨服务边界，非欠款）
+----------------------------------------------------------------------------------------------------
+  pivotos-plugin-system  ->  pivotos-starter-auth   (import 28 次 / 涉及 6 个类)
+  pivotos-plugin-system  ->  pivotos-starter-mybatis   (import 16 次 / 涉及 1 个类)
+  pivotos-plugin-ai  ->  pivotos-starter-mybatis   (import 14 次 / 涉及 4 个类)
+  pivotos-plugin-system  ->  pivotos-starter-job   (import 13 次 / 涉及 8 个类)
+  pivotos-plugin-ai  ->  pivotos-starter-auth   (import 7 次 / 涉及 3 个类)
+  pivotos-plugin-migration  ->  pivotos-starter-mybatis   (import 7 次 / 涉及 1 个类)
+  pivotos-plugin-system  ->  pivotos-starter-excel   (import 7 次 / 涉及 5 个类)
+  pivotos-plugin-monitor  ->  pivotos-starter-auth   (import 6 次 / 涉及 1 个类)
+  pivotos-plugin-ai-kb  ->  pivotos-starter-mybatis   (import 5 次 / 涉及 1 个类)
+  pivotos-plugin-message  ->  pivotos-starter-mybatis   (import 4 次 / 涉及 1 个类)
+  pivotos-starter-datainspect  ->  pivotos-starter-search-es-java   (import 4 次 / 涉及 4 个类)
+  pivotos-plugin-ai  ->  pivotos-starter-job   (import 3 次 / 涉及 3 个类)
+  pivotos-plugin-ai  ->  pivotos-starter-ai   (import 3 次 / 涉及 1 个类)
+  pivotos-plugin-ai-coding  ->  pivotos-starter-auth   (import 3 次 / 涉及 1 个类)
+  pivotos-plugin-ai-kb  ->  pivotos-starter-auth   (import 3 次 / 涉及 1 个类)
+  pivotos-plugin-system  ->  pivotos-starter-datascope   (import 3 次 / 涉及 2 个类)
+  pivotos-starter-tenant  ->  pivotos-starter-mybatis   (import 3 次 / 涉及 2 个类)
+  pivotos-plugin-docsync  ->  pivotos-starter-mybatis   (import 2 次 / 涉及 1 个类)
+  pivotos-plugin-generator  ->  pivotos-starter-mybatis   (import 2 次 / 涉及 1 个类)
+  pivotos-plugin-message  ->  pivotos-starter-auth   (import 2 次 / 涉及 1 个类)
+  pivotos-plugin-message  ->  pivotos-starter-web   (import 2 次 / 涉及 1 个类)
+  pivotos-plugin-migration  ->  pivotos-starter-auth   (import 2 次 / 涉及 1 个类)
+  pivotos-plugin-mind  ->  pivotos-starter-auth   (import 2 次 / 涉及 1 个类)
+  pivotos-plugin-mind  ->  pivotos-starter-mybatis   (import 2 次 / 涉及 1 个类)
+  pivotos-plugin-workflow  ->  pivotos-starter-auth   (import 2 次 / 涉及 1 个类)
+  pivotos-starter-redis  ->  pivotos-starter-web   (import 2 次 / 涉及 1 个类)
+  pivotos-plugin-ai-coding  ->  pivotos-starter-mybatis   (import 1 次 / 涉及 1 个类)
+  pivotos-plugin-docsync  ->  pivotos-starter-auth   (import 1 次 / 涉及 1 个类)
+  pivotos-plugin-file  ->  pivotos-starter-auth   (import 1 次 / 涉及 1 个类)
+  pivotos-plugin-file  ->  pivotos-starter-mybatis   (import 1 次 / 涉及 1 个类)
+  pivotos-plugin-generator  ->  pivotos-starter-auth   (import 1 次 / 涉及 1 个类)
+  pivotos-plugin-monitor  ->  pivotos-starter-mybatis   (import 1 次 / 涉及 1 个类)
+  pivotos-plugin-workflow  ->  pivotos-starter-mybatis   (import 1 次 / 涉及 1 个类)
+  pivotos-starter-datainspect  ->  pivotos-starter-tenant   (import 1 次 / 涉及 1 个类)
+
+====================================================================================================
+判定口径：DEBT 边 = 一旦拆微服务必须改成「Facade + HTTP 通道」的真实工作量单位；
+          REVERSE 边 = 契约模块反向依赖实现，属于必须先治理的架构违规。
+====================================================================================================

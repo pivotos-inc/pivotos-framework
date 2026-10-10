@@ -1,4 +1,4 @@
-package com.pivotos.ai.tool;
+package com.pivotos.ai.api.tool;
 
 /**
  * AI 工具对象扩展点（A4-3 / S112）。

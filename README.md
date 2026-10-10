@@ -110,7 +110,7 @@ source .env.dev && java -jar pivotos-admin-server/target/pivotos-admin-server.ja
 | [pivotos-app](https://github.com/pivotos-inc/pivotos-app) | 移动端（uni-app 一码三端：H5 / App / 小程序） |
 | [pivotos-mind](https://github.com/pivotos-inc/pivotos-mind) | PivotOS·智域个人端（C 端 AI 助手开源样板间，对接本仓 plugin-mind） |
 | [pivotos-docs](https://github.com/pivotos-inc/pivotos-docs) | 项目文档库（PRD / 架构 / 规范 / 流程 / 踩坑记录） |
-| pivotos-docsite | 在线文档站源码（VitePress，部署于 pivotos-doc.293242.com） |
+| [pivotos-docsite](https://github.com/pivotos-inc/pivotos-docsite) | 在线文档站源码（VitePress，部署于 pivotos-doc.293242.com） |
 
 ## 维护约定
 
