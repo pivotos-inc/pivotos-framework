@@ -58,6 +58,18 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Feign：出站身份/租户传播拦截器（V3-S3 由 starter-cloud 下沉而来）。
+             为什么要下沉到本模块：cloud 与 alibaba 是互斥的两个 Maven profile，
+             -P alibaba 的包里没有 starter-cloud 的任何类 —— 拦截器放在实现模块里，
+             等于 alibaba 形态永远装配不到（真机症状：Feign 全调通，但身份头一个都没发）。
+             optional + @ConditionalOnClass(name="feign.Feign") 与 spring-webmvc 同款口径：
+             编译期可见、不传递给消费方、默认形态无 feign 时自动跳过。 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Servlet API：入站恢复 Filter 需要；provided 不进运行时 -->
         <dependency>
             <groupId>jakarta.servlet</groupId>
