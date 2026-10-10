@@ -6,9 +6,9 @@ spring:
         master:
           # 开发库 pivotos；中间件已迁至公网服务器 175.24.176.176（2026-07-31 搬迁）
           # allowMultiQueries=false（S130）：驱动层禁用堆叠查询
-          url: jdbc:mysql://10.0.0.7:3306/pivotos_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false
-          username: root
-          password: mysql_DNCi3f
+          url: ${PIVOTOS_MYSQL_URL:jdbc:mysql://10.0.0.7:3306/pivotos_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false}
+          username: ${PIVOTOS_MYSQL_USERNAME:root}
+          password: ${PIVOTOS_MYSQL_PASSWORD:mysql_DNCi3f}
           driver-class-name: com.mysql.cj.jdbc.Driver
       druid:
         initial-size: 5
@@ -16,17 +16,17 @@ spring:
         max-active: 20
   data:
     redis:
-      host: 10.0.0.7
+      host: ${PIVOTOS_REDIS_HOST:10.0.0.7}
       port: 6379
-      password: redis_Q6aiiX
+      password: ${PIVOTOS_REDIS_PASSWORD:redis_Q6aiiX}
       timeout: 5s
       database: 1
 
   ai:
-    # dev 兜底：IDEA 直接启动（不 source .env.dev）时用此值
-    # 优先级：环境变量 DASHSCOPE_API_KEY > 此兜底值；生产环境必须通过环境变量注入
+    # test 兜底：自动化测试未注入环境变量时保持既有行为
+    # 优先级：环境变量 PIVOTOS_LLM_API_KEY > 此兜底值；生产环境必须通过环境变量注入
     openai:
-      api-key: ${DASHSCOPE_API_KEY:sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC}
+      api-key: ${PIVOTOS_LLM_API_KEY:sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC}
     # 向量库（2026-10-02）：Milvus 服务端**暂不部署**，统一走 simple（内存 + JSON 快照，零中间件）。
     # ① spring.ai.vectorstore.type 必须显式设为 simple——Milvus 自动装配 matchIfMissing=true，
     #    不设会按默认 localhost:19530 连 Milvus 导致**启动失败**（dev 2026-09-24 实测同因）；
@@ -64,18 +64,18 @@ pivotos:
     storage-type: s3
     vendor: cos
     endpoint: https://cos.ap-shanghai.myqcloud.com
-    access-key: AKIDKhrqb9UbVCg3D9B9AA4qPuENXUJvJUSC
-    secret-key: ayBIG1aw51jEVlqiNtDKOL7i5HJ8k9LO
+    access-key: ${PIVOTOS_COS_ACCESS_KEY:AKIDKhrqb9UbVCg3D9B9AA4qPuENXUJvJUSC}
+    secret-key: ${PIVOTOS_COS_SECRET_KEY:ayBIG1aw51jEVlqiNtDKOL7i5HJ8k9LO}
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
-  # XXL-Job 调度中心（测试环境本地）
+  # XXL-Job 调度中心（测试环境）
   job:
     admin-addresses: http://10.0.0.7:8101
     app-name: pivotos-test-executor
     port: 9999
     group-id: 3   # XXL-Job admin 中 pivotos-executor 执行器组 ID
-    access-token: 123456
+    access-token: ${PIVOTOS_XXL_JOB_ACCESS_TOKEN:123456}
   # 检索（S121/S122）：test 环境 ES——10.0.0.7:9200（内网，与 test 库同机；口令与 dev 一致）
   # 注意：10.0.0.7 属内网网段，非该 VPC 内（如开发机）访问不通——检索会自动回退数据库查询，不影响业务。
   search:

@@ -26,7 +26,7 @@ spring:
     validate-on-migrate: true
     out-of-order: true
   # AI 模型接入（阿里云百炼 DashScope · OpenAI 兼容模式）
-  # API Key 优先级：环境变量 DASHSCOPE_API_KEY > profile 配置兜底值（见 application-dev.yml）
+  # API Key 优先级：环境变量 PIVOTOS_LLM_API_KEY > profile 配置兜底值（见 application-dev.yml）
   # 程序运行时可从数据库动态覆盖（ChatModelFactory 按 provider.code 装配）；此处为静态兜底
   ai:
     # S46：anthropic/gemini starter 的自动装配以 spring.ai.model.chat 为开关且 matchIfMissing=true，
@@ -35,7 +35,7 @@ spring:
     model:
       chat: openai
     openai:
-      api-key: ${DASHSCOPE_API_KEY:}
+      api-key: ${PIVOTOS_LLM_API_KEY:}
       # Spring AI 2.0 底层为官方 openai-java SDK，base-url 须含 /v1（SDK 直接追加 /chat/completions）
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       chat:
@@ -116,11 +116,12 @@ mybatis-plus:
 # API 文档（Knife4j Next 增强 UI，底层复用 SpringDoc OpenAPI 3）
 springdoc:
   api-docs:
+    enabled: ${PIVOTOS_API_DOCS_ENABLED:true}
     path: /v3/api-docs
   default-flat-param-object: true
 
 knife4j:
-  enable: true
+  enable: ${PIVOTOS_API_DOCS_ENABLED:true}
   setting:
     language: zh_cn
 

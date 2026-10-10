@@ -4,11 +4,10 @@ spring:
       primary: master
       datasource:
         master:
-          # 开发库 pivotos；中间件已迁至公网服务器 175.24.176.176（2026-07-31 搬迁）
-          # allowMultiQueries=false（S130）：驱动层禁用堆叠查询
-          url: jdbc:mysql://10.0.4.15:3306/pivotos?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false
-          username: root
-          password: CBafpG8yDPJHVHiSPE8DDUBU
+          # 生产连接与凭据必须由环境变量注入；空默认用于 fail-fast，禁止回填真实值
+          url: ${PIVOTOS_MYSQL_URL:}
+          username: ${PIVOTOS_MYSQL_USERNAME:}
+          password: ${PIVOTOS_MYSQL_PASSWORD:}
           driver-class-name: com.mysql.cj.jdbc.Driver
       druid:
         initial-size: 5
@@ -16,17 +15,16 @@ spring:
         max-active: 20
   data:
     redis:
-      host: 10.0.4.15
+      host: ${PIVOTOS_REDIS_HOST:}
       port: 6379
-      password: W8vh8yGwyXV89Fnl3Czy0V8A
+      password: ${PIVOTOS_REDIS_PASSWORD:}
       timeout: 5s
       database: 0
 
   ai:
-    # dev 兜底：IDEA 直接启动（不 source .env.dev）时用此值
-    # 优先级：环境变量 DASHSCOPE_API_KEY > 此兜底值；生产环境必须通过环境变量注入
+    # 生产禁止凭据兜底，未注入时 AI 能力不可用
     openai:
-      api-key: ${DASHSCOPE_API_KEY:sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC}
+      api-key: ${PIVOTOS_LLM_API_KEY:}
     # 向量库（2026-10-02）：Milvus 服务端**暂不部署**，统一走 simple（内存 + JSON 快照，零中间件）。
     # ① spring.ai.vectorstore.type 必须显式设为 simple——Milvus 自动装配 matchIfMissing=true，
     #    不设会按默认 localhost:19530 连 Milvus 导致**启动失败**（dev 2026-09-24 实测同因）；
@@ -55,27 +53,37 @@ logging:
     org.dromara.warm.flow: debug
     org.springframework.web.servlet.mvc.method.annotation: trace
 
+# Knife4j 生产过滤器统一封禁 API 文档面；SpringDoc 必须保持装配，否则 Knife4j 控制器缺 Bean 导致启动失败
+springdoc:
+  api-docs:
+    enabled: true
+
+knife4j:
+  # enable 必须为 true 才会注册 production 安全过滤器；设 false 反而会让静态 UI 继续暴露
+  enable: true
+  production: true
+
 pivotos:
   tenant:
     enabled: true        # 默认 false，不写=单租户
     mode: column         # column / schema / datasource
-  # 文件存储：腾讯云 COS（测试环境）
+  # 文件存储：腾讯云 COS（生产环境凭据必须外置）
   file:
     storage-type: s3
     vendor: cos
     endpoint: https://cos.ap-shanghai.myqcloud.com
-    access-key: AKIDKhrqb9UbVCg3D9B9AA4qPuENXUJvJUSC
-    secret-key: ayBIG1aw51jEVlqiNtDKOL7i5HJ8k9LO
+    access-key: ${PIVOTOS_COS_ACCESS_KEY:}
+    secret-key: ${PIVOTOS_COS_SECRET_KEY:}
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
-  # XXL-Job 调度中心（测试环境本地）
+  # XXL-Job 调度中心（生产环境）
   job:
     admin-addresses: http://10.0.4.15:8101
     app-name: pivotos-executor
     port: 9999
     group-id: 3   # XXL-Job admin 中 pivotos-executor 执行器组 ID
-    access-token: 123456
+    access-token: ${PIVOTOS_XXL_JOB_ACCESS_TOKEN:}
   # 检索（S121/S122）：生产 ES = 10.0.4.15:9200（2026-10-02 接线，接法与 dev 完全一致：
   # type=es-java + uris/username/password + compatibility-mode；admin-server 已引入 es-java 实现）。
   # 启动期探测服务端版本；若生产 ES 为 7.17，启动时加 PIVOTOS_ES_JAVA_COMPATIBILITY_MODE=true
@@ -85,7 +93,7 @@ pivotos:
     es-java:
       uris: ${PIVOTOS_ES_JAVA_URIS:http://10.0.4.15:9200}
       username: ${PIVOTOS_ES_JAVA_USERNAME:elastic}
-      password: ${PIVOTOS_ES_JAVA_PASSWORD:Elastic_WAwByG}
+      password: ${PIVOTOS_ES_JAVA_PASSWORD:}
       compatibility-mode: ${PIVOTOS_ES_JAVA_COMPATIBILITY_MODE:false}
   # ST-DATAINSPECT（S130）：通用数据监控。生产默认关闭自由 SQL（高危）——
   # 仍可浏览库表与预览，放开自由 SQL 需显式改这里并重启（权限不能替代此开关）
