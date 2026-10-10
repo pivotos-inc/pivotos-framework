@@ -59,6 +59,14 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- 测试期才需要完整 Web 栈（Tomcat + MVC）：用于「真起端口验证 /__rpc/invoke 的入站恢复链路」。
+             Mock 注入能证明过滤器对象被调用，证明不了请求线程里 ScopedValue 真的绑上了。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>

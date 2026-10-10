@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pivotos.starter.cloud.api.config.CloudProperties;
 import com.pivotos.starter.cloud.api.context.CloudContextCodec;
 import com.pivotos.starter.cloud.api.context.CloudHeaders;
-import com.pivotos.starter.cloud.api.support.FacadeProxySupport;
+import com.pivotos.starter.cloud.api.support.FacadeInvocationSupport;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -101,30 +101,20 @@ public class FacadeRpcServlet extends HttpServlet {
             actual.getBytes(StandardCharsets.UTF_8), expected.getBytes(StandardCharsets.UTF_8));
     }
 
+    /**
+     * 定位本地实现：委托 {@link FacadeInvocationSupport}（V3-S3）。
+     *
+     * <p>为什么抽走：此前这里自写了一份「先找 {@code $Local}」，facade-http 端点也需要同一份语义。
+     * 两份实现必然漂移，而漂移的形态是<b>反射打到远程代理上形成自调用死循环</b>——
+     * 编译期与常规单测全绿，只有真跨进程跑才会炸。
+     */
     private Object findLocalBean(ApplicationContext context, Class<?> iface) {
-        for (String name : context.getBeanNamesForType(iface)) {
-            if (name.endsWith(FacadeProxySupport.LOCAL_SUFFIX)) {
-                return context.getBean(name);
-            }
-        }
-        return null;
+        return FacadeInvocationSupport.resolveTarget(context, iface);
     }
 
+    /** 定位方法：同样委托公共实现，保证「按名+元数收敛」在两条通道上完全一致 */
     private Method findMethod(Class<?> iface, String methodName, int argCount) {
-        Method fallback = null;
-        for (Method method : iface.getMethods()) {
-            if (!method.getName().equals(methodName) || method.getParameterCount() != argCount) {
-                continue;
-            }
-            if (fallback == null) {
-                fallback = method;
-            }
-            // 同元数的重载：按形参可赋值进一步收敛（客户端传的就是实参运行类型）
-            if (argCount == 0) {
-                return method;
-            }
-        }
-        return fallback;
+        return FacadeInvocationSupport.resolveMethod(iface, methodName, argCount);
     }
 
     private Object[] convertArgs(Method method, JsonNode argsNode) {
