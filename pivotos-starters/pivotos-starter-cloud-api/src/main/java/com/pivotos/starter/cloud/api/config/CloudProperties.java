@@ -2,6 +2,7 @@ package com.pivotos.starter.cloud.api.config;
 
 import com.pivotos.starter.cloud.api.CloudProvider;
 import com.pivotos.starter.cloud.api.context.CloudContextProperties;
+import com.pivotos.starter.cloud.api.facade.FacadeHttpProperties;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -29,6 +30,9 @@ public class CloudProperties {
 
     /** 上下文传播（三通道共用） */
     private CloudContextProperties context = new CloudContextProperties();
+
+    /** Facade 契约的 HTTP 暴露（V3-S3 方案 C：运行时适配，契约层零改动，默认不注册） */
+    private FacadeHttpProperties facadeHttp = new FacadeHttpProperties();
 
     /** 解析后的通道枚举（宽松解析，未知值回落 local） */
     public CloudProvider provider() {

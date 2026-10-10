@@ -39,6 +39,19 @@ import java.util.List;
 @RestController
 public class ContextProbeApp {
 
+    /**
+     * V3-S3 新增 main：给「第二个 JVM」用例用。
+     *
+     * <p>之前只有 {@code @SpringBootApplication} 注解、没有 main——同 JVM 内可以用
+     * {@code SpringApplicationBuilder} 拉起来，<b>独立进程则因为没有 main 方法直接失败</b>
+     * （报错是「找不到 main 方法」，与 classpath 问题长得一样，容易查错方向）。
+     */
+    public static void main(String[] args) {
+        new org.springframework.boot.builder.SpringApplicationBuilder(ContextProbeApp.class)
+            .web(org.springframework.boot.WebApplicationType.SERVLET)
+            .run(args);
+    }
+
     /** 与 {@code ProbedFacade} 契约一致：GET /__probe/echo */
     @GetMapping(value = "/__probe/echo", produces = MediaType.TEXT_PLAIN_VALUE)
     public String echo(HttpServletRequest request) {
@@ -52,6 +65,9 @@ public class ContextProbeApp {
         body.put("accountType", user == null ? null : user.getAccountType());
         body.put("traceId", TraceContext.get());
         body.put("thread", Thread.currentThread().getName());
+        // V3-S3 新增：进程号。用于「第二个 JVM」这项取证——线程名在极端情况下会同名，
+        // PID 不会；两者的组合才能把「同进程 ScopedValue 泄漏」这类假阳性彻底排除。
+        body.put("pid", ProcessHandle.current().pid());
 
         JSONObject headers = new JSONObject();
         for (String name : List.of(CloudHeaders.TENANT_ID, CloudHeaders.USER_ID, CloudHeaders.USERNAME,

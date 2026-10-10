@@ -47,11 +47,33 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- spring-webmvc：Facade HTTP 端点的编程式 MVC 映射注册（RequestMappingHandlerMapping）需要。
+             optional + @ConditionalOnClass(name=...) 双保险：非 MVC 应用即便引了本模块也不会被拖累，
+             与 starter-datainspect 里 optional Redisson 的做法同款。
+             注意：正因为这是「可选能力」，端点类才刻意不标 @RestController——
+             那样就变成组件扫描说了算，开关会失效（详见 FacadeHttpHandler 注释）。 -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Servlet API：入站恢复 Filter 需要；provided 不进运行时 -->
         <dependency>
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>
             <scope>provided</scope>
+        </dependency>
+
+        <!-- JSON：Facade HTTP 端点的参数/返回值 marshalling。
+             刻意用 Jackson 2（com.fasterxml）而非容器主用的 Jackson 3（tools.jackson）：
+             反射调用的动态类型反序列化在 Jackson 2 上最稳，且两者包名不同可共存
+             （版本由 BOM 钉，与 starter-cloud-local 的 JsonSupport 同款做法）。
+             optional：本模块契约层不强制把 JSON 栈带给消费方。 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <optional>true</optional>
         </dependency>
 
         <dependency>
@@ -63,6 +85,14 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- 测试期才需要完整 Web 栈（Tomcat + MVC），用于「真起端口跑一次 HTTP 往返」。
+             test scope 不进发布的 jar、不进 fat jar，因此不影响「契约层零框架依赖」的交付口径。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

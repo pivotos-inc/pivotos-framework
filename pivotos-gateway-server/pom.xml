@@ -71,4 +71,18 @@
         </plugins>
     </build>
 
+    <profiles>
+        <!-- 与 admin-server 同一口径：真实 Spring Cloud / Alibaba 实现默认不进包。
+             网关要连 Nacos 配置中心靠 -P alibaba 打进去，默认形态依旧是「零配置独立 jar 直起」。 -->
+        <profile>
+            <id>alibaba</id>
+            <dependencies>
+                <dependency>
+                    <groupId>com.pivotos</groupId>
+                    <artifactId>pivotos-starter-cloud-alibaba</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+
 </project>
