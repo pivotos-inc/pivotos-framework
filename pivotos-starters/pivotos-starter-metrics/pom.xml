@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-starters</artifactId>
+        <version>3.0.0</version>
+    </parent>
+
+    <artifactId>pivotos-starter-metrics</artifactId>
+
+    <name>pivotos-starter-metrics</name>
+    <description>ST-METRICS 指标基础设施（V3.1-F · P1-B8-1）：Micrometer + Prometheus 抓取端点 + 检索/AI/慢接口业务埋点</description>
+
+    <dependencies>
+        <!-- ========== Boot 4 的指标底座 ========== -->
+        <!-- 只引 spring-boot-starter-micrometer-metrics（248KB），**刻意不引** spring-boot-starter-actuator
+             （498KB）：Boot 4.1 已把两者拆开，PrometheusScrapeEndpoint 归 micrometer-metrics，
+             actuator 只剩「端点 HTTP 暴露基础设施」+ health/env/beans/heapdump/threaddump/loggers 一整套。
+             本项目只需要把指标吐出去，不需要那一整套端点面（V3.1-B 定过「探活端点自研、不引 actuator」，
+             本模块沿用同一口径：抓取端点同样自研，匿名面只新增 1 个端点）。
+             本 starter 自动带来的指标：jvm.* / system.* / process.* / logback.* / hikaricp.* / http.server.requests。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-micrometer-metrics</artifactId>
+        </dependency>
+
+        <!-- ========== Observation 基础设施（http.server.requests / lettuce 观测的必需品） ========== -->
+        <!-- 坑（2026-10-11 取证）：spring-boot-starter-micrometer-metrics **不含** observation 模块，
+             而 WebMvcObservationAutoConfiguration（在 spring-boot-webmvc 里，早已在本仓 classpath 上）
+             是 @ConditionalOnClass(ObservationRegistry) 的 —— 不引这一块，
+             http.server.requests 一条都不会出（且完全不报错，只是没有指标）。仅 28KB。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-micrometer-observation</artifactId>
+        </dependency>
+
+        <!-- ========== Prometheus 格式导出 ========== -->
+        <!-- 版本由 pivotos-dependencies 显式仲裁（见该 pom 的注释：不在 Boot BOM 直接条目里） -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+        <!-- 抓取端点与慢接口 Filter 需要 servlet/web 抽象；运行时由 starter-web 提供实现 -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+        <!-- HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE 在 spring-webmvc 里（不在 spring-web）。
+             用 provided：编译期需要它拿 URI 模板，运行期由宿主应用（必有 webmvc）提供，
+             本模块不把 webmvc 作为传递依赖强加出去。 -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Druid 连接池指标：optional + 嵌套 @ConditionalOnClass（与 S130-P2 的 Redisson/es-java 同款姿势）。
+             本项目的连接池实际是 Druid（dynamic-datasource + druid），Boot 自带的 hikaricp.* 覆盖不到，
+             故自研一个 MeterBinder；但本模块不能把 druid 强加给所有使用方，故 optional。 -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>druid</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!-- 测试：需要 ApplicationContextRunner（spring-boot-test）与 MockHttpServletRequest（spring-test），
+             才能在不开容器的前提下断言「开关关掉后端点不注册」这类自动配置行为 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>
