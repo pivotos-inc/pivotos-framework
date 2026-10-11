@@ -9,10 +9,19 @@ spring:
           username: ${PIVOTOS_MYSQL_USERNAME:}
           password: ${PIVOTOS_MYSQL_PASSWORD:}
           driver-class-name: com.mysql.cj.jdbc.Driver
+      # ===== 连接池（V3.1-G · P1-B2）=====
+      # 与容量无关的生产参数（获取等待/有效性检测/驱逐/保活/泄漏回收/慢SQL）
+      # 统一放在 application.yml 的 spring.datasource.dynamic.druid；
+      # 这里只覆盖**容量三件套**，prod 按线上并发上调。
+      #
+      # ⚠️ 容量口径：max-active × 应用实例数 + 运维/定时任务余量 必须 < MySQL max_connections
+      #    （MySQL 默认 151）。若将来扩到多实例，这里要同步下调，否则表现为
+      #    「Too many connections」而不是连接池报错，极难归因。
+      # ⚠️ 再次提醒：本项目是 **Druid**，不是 HikariCP，别写 hikari.*。
       druid:
         initial-size: 5
-        min-idle: 5
-        max-active: 20
+        min-idle: 10
+        max-active: 50
   data:
     redis:
       host: ${PIVOTOS_REDIS_HOST:}

@@ -10,6 +10,8 @@ spring:
           username: ${PIVOTOS_MYSQL_USERNAME:root}
           password: ${PIVOTOS_MYSQL_PASSWORD:mysql_DNCi3f}
           driver-class-name: com.mysql.cj.jdbc.Driver
+      # 连接池（V3.1-G · P1-B2）：与容量无关的生产参数在 application.yml，
+      # 这里只给容量三件套。test 保持 20/5/5，与全量 IT 的既有基线一致。
       druid:
         initial-size: 5
         min-idle: 5

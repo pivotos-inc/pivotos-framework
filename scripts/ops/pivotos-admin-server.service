@@ -1,0 +1,95 @@
+# PivotOS Admin Server · systemd unit 模板（V3.1-G · P1-B3 进程托管）
+#
+# 安装（目标机，需 root）：
+#   sudo groupadd --system pivotos && sudo useradd --system -g pivotos -d /opt/pivotos -s /usr/sbin/nologin pivotos
+#   sudo mkdir -p /opt/pivotos /etc/pivotos /var/log/pivotos
+#   sudo cp scripts/ops/{run.sh,start-prod.sh,stop-prod.sh,preflight.py,jvm-opts.sh} /opt/pivotos/
+#   sudo chmod +x /opt/pivotos/*.sh /opt/pivotos/preflight.py
+#   sudo cp pivotos-admin-server/target/pivotos-admin-server.jar /opt/pivotos/
+#   sudo cp scripts/ops/admin-server.env.example /etc/pivotos/admin-server.env   # 填真实值，**不要入库**
+#   sudo chmod 600 /etc/pivotos/admin-server.env
+#   sudo cp scripts/ops/pivotos-admin-server.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now pivotos-admin-server
+#
+# 运维：
+#   systemctl status pivotos-admin-server    journalctl -u pivotos-admin-server -f
+#   systemctl restart pivotos-admin-server   # 走 SIGTERM → 等宽限期 → SIGKILL
+#
+# ⚠️ 凭据口径（V3.1-A · A1）：口令**只**放在 /etc/pivotos/admin-server.env，
+#    由部署流程注入；任何 yml、本 unit、仓库里都不写字面口令。
+#    已进入 Git 历史的历史口令必须另行轮换。
+#
+# ⚠️ 停机链路三处超时必须成链（改一处要同步另外两处）：
+#     ① 应用侧 spring.lifecycle.timeout-per-shutdown-phase = 30s（application.yml）
+#     ② 本 unit 的 TimeoutStopSec = 45s（= ① + 15s 缓冲）
+#     ③ stop-prod.sh 的 TERM_TIMEOUT_SECONDS = 30（裸机场景，与 ① 一致）
+#    ① > ② 会被 systemd 提前 SIGKILL，在途请求直接断；② >> ① 只是多等。
+
+[Unit]
+Description=PivotOS Admin Server
+Documentation=https://pivotos.com
+# 依赖：等网络真正起来再拉；MySQL/Redis 若由本机 systemd 托管就写上，
+# 若是外部服务（本项目 dev/test/prod 均为外部）请删掉对应行，否则会一直卡在等待。
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pivotos
+Group=pivotos
+WorkingDirectory=/opt/pivotos
+
+# 环境变量文件：只存 KEY=VALUE，不要在这里写注释式口令。
+# 前缀 '-' 表示文件缺失也能启动（缺失时会由下面的 ExecStartPre 给出清晰报错）。
+EnvironmentFile=-/etc/pivotos/admin-server.env
+
+# 启动前置检查：端口占用 / 必需环境变量 / jar 存在性 / JDK 版本。
+# 数据源连通只告警不阻断（--skip-db 是刻意保留的：离线环境仍可起服排查）。
+ExecStartPre=/opt/pivotos/preflight.py --profile=prod --skip-db
+ExecStart=/opt/pivotos/run.sh
+
+# ---- 优雅停机 ----
+# SIGTERM 让 Spring 走 graceful：停止接收新请求、等在途请求完成（上限 ① 的 30s）。
+KillSignal=SIGTERM
+# 主进程退出后，残余子进程（如 XXL-Job 起的线程所在的进程组）再清一遍。
+KillMode=mixed
+TimeoutStopSec=45s
+# 若 45s 还没停干净，才最终 SIGKILL（SendSIGKILL=yes 是默认值，写出来是为了明示）。
+SendSIGKILL=yes
+
+# ---- 拉起策略 ----
+# on-failure：**不**配 always —— 手工 stop 时不该被 systemd 重新拉起。
+Restart=on-failure
+RestartSec=10s
+# 崩溃循环保护：5 分钟内失败 5 次即停止重试，避免把数据库/Redis 打垮。
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+# ---- 启动预算 ----
+# Boot 4 冷启动 + Flyway 全量迁移实测 10~12s；给 180s 是给「新库全量迁移」留余量。
+TimeoutStartSec=180s
+
+# ---- 资源与句柄 ----
+LimitNOFILE=65536
+LimitNPROC=4096
+# 容器/物理机内存上限（按需打开，与 -Xmx 二选一，别同时给）：
+# MemoryMax=3G
+
+# ---- 日志：交给 journald，不自己落文件（应用日志由 logback 按 100MB/30 天/5GB 滚动）----
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pivotos-admin-server
+
+# ---- 安全加固 ----
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+# strict 下整个 /usr /boot /etc 只读；必须显式放行要写的目录，否则启动即失败。
+ProtectSystem=strict
+ReadWritePaths=/opt/pivotos/logs /opt/pivotos/data
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
