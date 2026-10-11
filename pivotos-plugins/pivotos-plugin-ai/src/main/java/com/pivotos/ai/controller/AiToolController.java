@@ -1,5 +1,6 @@
 package com.pivotos.ai.controller;
 
+import cn.dev33.satoken.annotation.SaCheckLogin;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.alibaba.fastjson2.JSON;
 import com.pivotos.ai.domain.dto.AiToolInvokeQuery;
@@ -48,6 +49,19 @@ import java.util.concurrent.ExecutorService;
 @RestController
 @RequestMapping("/ai/tool")
 @RequiredArgsConstructor
+/**
+ * <p><b>类级 {@code @SaCheckLogin}（v3.1.0 生产化 · A4）</b>：{@code /ai/tool/call} 与
+ * {@code /ai/tool/call/stream} 此前既无 {@code @SaCheckPermission}、也不读登录上下文，
+ * 是本控制器唯二的零信号端点——匿名请求会一路投递到 {@code ContextExecutor} 的 worker 线程，
+ * 由工具守卫在里面判未登录。SSE 场景下那只能变成流内的 error 帧，
+ * 调用方（含 E2E）无法把它与「工具执行失败」区分开，且白白占用一次异步执行。
+ * 补在入口层：未登录直接在 MVC 阶段拿 1002，不进异步。
+ *
+ * <p>刻意用 {@code @SaCheckLogin} 而不是再引一个新权限码：本控制器其余端点已用
+ * {@code @SaCheckPermission}（{@code ai:tool:*}），两类注解叠加生效；
+ * 最小化惊扰，权限码粒度精细化排 P1。
+ */
+@SaCheckLogin(type = StpSysUtil.TYPE)
 public class AiToolController {
 
     private static final Logger log = LoggerFactory.getLogger(AiToolController.class);

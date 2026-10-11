@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.pivotos.common.core.result.R;
 import com.pivotos.migration.domain.entity.MigrationStep;
 import com.pivotos.migration.service.MigrationStepService;
+import com.pivotos.starter.auth.account.StpSysUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import cn.dev33.satoken.annotation.SaCheckLogin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,11 +19,16 @@ import java.util.List;
 
 /**
  * 迁移步骤管理端点。
+ *
+ * <p><b>类级 {@code @SaCheckLogin}（v3.1.0 生产化 · A4）</b>：与 {@code MigrationTaskController}
+ * 同源同因——实证 {@code GET /migration/step/list?taskId=1} 匿名即 {@code code=0}。
+ * 原 §10-K 扫描只打了无参 GET，把带必填 query 参数的这类端点整个漏掉了。
  */
 @Tag(name = "迁移步骤管理")
 @RestController
 @RequestMapping("/migration/step")
 @RequiredArgsConstructor
+@SaCheckLogin(type = StpSysUtil.TYPE)
 public class MigrationStepController {
 
     private final MigrationStepService migrationStepService;
