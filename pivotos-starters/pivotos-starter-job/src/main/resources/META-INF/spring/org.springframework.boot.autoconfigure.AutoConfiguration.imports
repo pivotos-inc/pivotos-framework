@@ -1,2 +1,4 @@
 com.pivotos.starter.job.config.JobAutoConfiguration
 com.pivotos.starter.job.config.JobSupportAutoConfiguration
+com.pivotos.starter.job.retention.RetentionAutoConfiguration
+com.pivotos.starter.job.retention.LocalRetentionScheduler
