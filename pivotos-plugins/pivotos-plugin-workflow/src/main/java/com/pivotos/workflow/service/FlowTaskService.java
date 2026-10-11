@@ -58,7 +58,8 @@ public class FlowTaskService {
     /**
      * 我的待办分页。
      * <p>
-     * 归属过滤（S93 修正）：warm-flow 1.8.7 的 taskService.page 是纯实体条件分页，
+     * 归属过滤（S93 修正）：warm-flow 的 taskService.page 是纯实体条件分页
+     * （1.8.7 实测，V3.1-E 升 1.8.9 后复核仍成立——TaskService 实现逐字节未变），
      * 不做 PermissionHandler.permissions() 过滤（早期注释有误），任何登录用户会看到全部待办。
      * 改走 WorkflowPendingMapper 按 flow_user 归属（审批/转办/委派）子查询分页。
      */
@@ -126,7 +127,7 @@ public class FlowTaskService {
      * <p>
      * 引擎事实（S113 开工简报真库实证）：驳回后 {@code flow_task} 记录保留且
      * {@code flow_status=9}（node_code 回到发起节点）、{@code flow_user} 归属仍为发起人；
-     * warm-flow 1.8.7 无 restart 原语（{@code RE_START} 枚举为死代码），
+     * warm-flow 无 restart 原语（{@code RE_START} 枚举为死代码；1.8.7 实测，1.8.9 复核仍成立），
      * 但对退回态任务调用 {@code taskService.pass} **原生接受**——实例 {@code 9 → 1}、
      * 推进下一节点、实例 ID 不变、审批历史连续（驳回留痕 + 重新提交留痕同链）。
      * 故本动作不动引擎、不重置状态，只做前置校验后复用 pass。

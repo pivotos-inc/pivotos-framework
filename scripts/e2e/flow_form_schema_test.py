@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V3.1-D · flow_form 漂移修复的实证断言（自起自停 fat jar，只 kill 本轮 PID）。
+"""V3.1-D/E · flow_form 漂移修复 + warm-flow 升级的实证断言（自起自停 fat jar，只 kill 本轮 PID）。
 
 背景：warm-flow 的 `warm-flow-plugin-ui-sb-web` 自带表单端点，`GET /warm-flow/published-form`
 → `FlowEngine.formService().list()` → `flow_form` 表；而 V1.2.21 只建了 8 张引擎表，缺表单表，
@@ -9,9 +9,13 @@
 断言（逐条，全部实打）：
   F-1 匿名 GET /warm-flow/published-form 仍被闸门拦（code=1002）——证明不是靠放开端点换来的
   F-2 登录 GET /warm-flow/published-form 不再 500/1500（表存在，查询能走完）
-  F-3 flow_form 表存在且列与 FlowForm 实体（1.8.7 javap 实测 15 列）逐一对齐
+  F-3 flow_form 表存在且列与 FlowForm 实体（1.8.7/1.8.9 javap 实测均为 15 列）逐一对齐
   F-4 V1.2.53 迁移已被应用且 success=1
   F-5 相邻链路未被误伤：登录 GET /warm-flow/query-def 仍可用
+  F-6 dev 形态不落滚动文件（C4-1 只把 test 纳入，dev 必须仍是纯控制台）
+  F-7（V3.1-E 新增）fat jar 内 warm-flow 构件**全部是 1.8.9、零 1.8.7 残留**
+      ——防「改了 pivotos-dependencies 但 fat jar 里还是旧版」的假升级
+      （fat jar 的 mtime 不可信，必须解包看内层构件名）
 
 用法：
     python3 scripts/e2e/flow_form_schema_test.py
@@ -37,7 +41,7 @@ JAR = os.path.join(ROOT, "pivotos-admin-server", "target", "pivotos-admin-server
 DEV_YML = os.path.join(ROOT, "pivotos-admin-server", "src", "main", "resources", "application-dev.yml")
 WORK_ROOT = "/tmp/pivotos-v31d-flowform"
 
-# FlowForm 实体（warm-flow-mybatis-plus-core 1.8.7，javap 实测）的全部字段 → 列名
+# FlowForm 实体（warm-flow-mybatis-plus-core，javap 实测 1.8.7 与 1.8.9 均为这 15 个字段）→ 列名
 EXPECTED_COLUMNS = [
     "id", "create_time", "update_time", "create_by", "update_by", "del_flag",
     "form_code", "form_name", "version", "is_publish", "form_type", "form_path",
@@ -179,10 +183,29 @@ def query_flow_form():
         conn.close()
 
 
+def check_fat_jar_warmflow_version(expected="1.8.9"):
+    """解包 fat jar 看内层 warm-flow 构件版本（fat jar 的 mtime 不可信，必须看内层）。"""
+    import zipfile
+    with zipfile.ZipFile(JAR) as z:
+        names = [n for n in z.namelist() if "/warm-flow" in n and n.endswith(".jar")]
+    hits = [n.rsplit("/", 1)[-1] for n in names]
+    on_expected = [n for n in hits if f"-{expected}.jar" in n]
+    stale = sorted({n for n in hits if "-1.8.7.jar" in n})
+    return hits, on_expected, stale
+
+
 def main():
     if os.path.exists(WORK_ROOT):
         shutil.rmtree(WORK_ROOT)
     os.makedirs(WORK_ROOT, exist_ok=True)
+
+    # F-7 先做：不依赖起服，且能最早暴露「版本没升上去」
+    hits, on_expected, stale = check_fat_jar_warmflow_version()
+    check("F-7a", os.path.exists(JAR) and len(hits) > 0,
+          f"fat jar 内 warm-flow 构件数={len(hits)}（{sorted(hits)[:4]}…）")
+    check("F-7b", len(on_expected) == len(hits),
+          f"全部 warm-flow 构件均为 1.8.9（命中 {len(on_expected)}/{len(hits)}）")
+    check("F-7c", not stale, f"零 1.8.7 残留（残留={stale}）")
 
     proc, fh, cwd = start_server()
     try:

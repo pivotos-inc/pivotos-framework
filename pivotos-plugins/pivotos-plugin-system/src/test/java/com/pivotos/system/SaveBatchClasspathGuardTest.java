@@ -14,7 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * saveBatch 真落库守卫（S125 回归批实测缺陷的回归门禁）。
  *
- * <p>经过：{@code warm-flow-mybatis-plus-sb4-starter 1.8.7} 直接传递依赖
+ * <p>经过：{@code warm-flow-mybatis-plus-sb4-starter}（1.8.7；V3.1-E 升 1.8.9 后复核：
+ * sb4-starter 的 pom 一字未改，**仍**直引 3.5.15，仲裁依然必要）直接传递依赖
  * {@code com.baomidou:mybatis-plus-extension:3.5.15}，而
  * {@code mybatis-plus-spring-boot4-starter 3.5.17} 不传递引入 extension 模块，
  * 于是 classpath 上 extension 只剩 3.5.15。3.5.17 的

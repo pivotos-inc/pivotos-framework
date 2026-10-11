@@ -88,7 +88,19 @@
         <freemarker.version>2.3.34</freemarker.version>
 
         <!-- ==================== 工作流引擎（WarmFlow：Dromara 社区，轻量国产，BPMN 2.0 子集） ==================== -->
-        <warm-flow.version>1.8.7</warm-flow.version>
+        <!--
+          V3.1-E：1.8.7 → 1.8.9。升级前已逐项取证（结论见《V3.1-E-收口报告.md》）：
+            · FlowForm 实体 javap 反射字段 15 个，与 1.8.7 **diff 空** → V1.2.53 建的 flow_form
+              15 列仍然对齐，**无需新增迁移**（1.8.9 不引入新列）；
+            · warm-flow-plugin-ui-sb-web / -core / warm-flow-core / warm-flow-mybatis-plus-core
+              五个构件逐条目 CRC 对比，唯一变化的类是 warm-flow-core 的
+              InsServiceImpl#saveFlowInfo（私有方法，hisTask 落库顺序提前），
+              **端点清单与 controller 前缀（/warm-flow）一字未变** → 匿名闸门前缀无需调整；
+            · sb4-starter 1.8.9 的 pom 与 1.8.7 完全一致，仍直引
+              com.baomidou:mybatis-plus-extension:3.5.15 → **下面的 extension 仲裁仍然必要**。
+          升级后必须重跑 scripts/e2e/anonymous_endpoint_audit.py（闸门是前缀级）。
+        -->
+        <warm-flow.version>1.8.9</warm-flow.version>
 
         <!-- ==================== 测试 ==================== -->
         <testcontainers.version>2.0.5</testcontainers.version>
@@ -140,8 +152,11 @@
             <!--
               mybatis-plus-extension 必须显式钉到与 starter 同一个版本（S125 实测缺陷）。
 
-              经过：warm-flow-mybatis-plus-sb4-starter 1.8.7 直接传递依赖
+              经过：warm-flow-mybatis-plus-sb4-starter 直接传递依赖
               com.baomidou:mybatis-plus-extension:3.5.15，而 mybatis-plus-spring-boot4-starter
+              （V3.1-E 复核：1.8.9 的 sb4-starter pom 与 1.8.7 完全相同，仍是 3.5.15，仲裁仍必要；
+               守卫见 plugin-workflow 的 WarmFlowVersionGuardTest，用反射断言 AbstractRepository
+               存在 executeBatch(Collection,int,BiFunction) 这个 3.5.17 才有的重载）
               3.5.17 并不传递引入 extension 模块（3.5.17 把它拆出去了），于是 classpath 上
               extension 只有 warm-flow 带来的 3.5.15：
                 · 3.5.17 的 spring.repository.CrudRepository 继承 extension.repository.AbstractRepository，
