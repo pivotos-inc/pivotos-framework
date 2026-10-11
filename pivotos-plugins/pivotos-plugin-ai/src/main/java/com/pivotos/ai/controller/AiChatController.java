@@ -54,10 +54,23 @@ public class AiChatController {
         return aiChatService.stream(requireUserId(), request);
     }
 
-    /** 知识库下拉选项（对话页 RAG 选择用，登录即可访问；kb 插件未部署时返回空列表） */
+    /**
+     * 知识库下拉选项（对话页 RAG 选择用，登录即可访问；kb 插件未部署时返回空列表）。
+     *
+     * <p><b>v3.1.0 生产化 · A4：补上注释里写了、代码里没做的登录校验</b>。
+     * 原实现方法体只读可选依赖、不碰登录上下文，而全项目鉴权是「注解驱动
+     * + 业务代码取 {@code LoginContext} 兜底」的双轨制——不读登录上下文就自动匿名，
+     * 实证匿名 {@code GET /ai/chat/kb-options} 直接 {@code code=0}。
+     *
+     * <p>刻意复用本控制器的 {@code requireUserId()} 而不是 {@code @SaCheckLogin}：
+     * AI 对话是三体系能力（管端 / App / 智域），{@code @SaCheckLogin} 必须指定单一 realm，
+     * 会把其余体系挡在外面；{@code requireUserId()} 与同控制器的 send / stream 完全同款，
+     * 未登录抛 {@code 1002}，与 Sa-Token 未登录同码。
+     */
     @Operation(summary = "知识库下拉选项（对话页 RAG 选择用，登录即可访问；kb 插件未部署时返回空列表）")
     @GetMapping("/kb-options")
     public R<List<KbOptionDTO>> kbOptions() {
+        requireUserId();
         IKnowledgeBaseFacade facade = kbFacadeProvider.getIfAvailable();
         if (facade == null) {
             return R.ok(Collections.emptyList());

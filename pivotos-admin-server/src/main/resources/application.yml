@@ -128,6 +128,17 @@ knife4j:
 # PivotOS 自定义配置
 pivotos:
   deploy-mode: monolith
+  # 匿名访问闸门（v3.1.0 生产化 · A4）：路由层兜底，专门守「第三方 jar 自带端点」——
+  # 那些控制器源码不在本仓内，加不上 @SaCheckLogin（实证：warm-flow 的 7 个 GET 端点匿名可取
+  # 流程定义结构 / 处理器字典 / 监听器清单）。命中前缀且未登录 → HTTP 200 + code=1002。
+  # 只守显式登记的前缀，不动 PivotOS 自有端点（自有端点仍是注解 + 业务代码取 LoginContext 的口径）。
+  # 回滚：PIVOTOS_AUTH_GUARD_ENABLED=false 即不注册过滤器。
+  auth:
+    guard:
+      enabled: ${PIVOTOS_AUTH_GUARD_ENABLED:true}
+      paths: ${PIVOTOS_AUTH_GUARD_PATHS:/warm-flow/**}
+      exclude-paths: ${PIVOTOS_AUTH_GUARD_EXCLUDE_PATHS:}
+      message: ${PIVOTOS_AUTH_GUARD_MESSAGE:该端点要求登录后访问}
   # 日志落盘（v3.1.0 生产化 · A3）。实际由 logback-spring.xml 消费，这里只定义可覆盖项：
   # prod 按「单文件 100MB + 按天切分 + 保留 30 天 + 总量 5GB 封顶 + 归档 gzip」滚动；
   # dev/test 不写文件（只写控制台，保持开发期可读性）。全部可环境变量覆盖。
