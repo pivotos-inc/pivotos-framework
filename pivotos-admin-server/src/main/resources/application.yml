@@ -128,6 +128,15 @@ knife4j:
 # PivotOS 自定义配置
 pivotos:
   deploy-mode: monolith
+  # 日志落盘（v3.1.0 生产化 · A3）。实际由 logback-spring.xml 消费，这里只定义可覆盖项：
+  # prod 按「单文件 100MB + 按天切分 + 保留 30 天 + 总量 5GB 封顶 + 归档 gzip」滚动；
+  # dev/test 不写文件（只写控制台，保持开发期可读性）。全部可环境变量覆盖。
+  log:
+    dir: ${PIVOTOS_LOG_DIR:logs}
+    file-name: ${PIVOTOS_LOG_FILE_NAME:pivotos-admin-server}
+    max-file-size: ${PIVOTOS_LOG_MAX_FILE_SIZE:100MB}
+    max-history: ${PIVOTOS_LOG_MAX_HISTORY:30}
+    total-size-cap: ${PIVOTOS_LOG_TOTAL_SIZE_CAP:5GB}
   migration:
     # 迁移工作区使用绝对路径，避免因启动目录不同（mvn spring-boot:run vs java -jar）导致路径漂移
     workspace: ${PIVOTOS_MIGRATION_WORKSPACE:/Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-framework/pivotos-admin-server/data/migration}

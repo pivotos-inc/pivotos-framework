@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PivotOS 日志体系（v3.1.0 生产化 · A3）
+
+  【为什么现在才有一份 logback 配置】
+  此前全仓零 logback-spring.xml（详见《03-技术方案/v3.1.0-生产化评估》O3/O4），
+  落盘靠 start-prod.sh 的「nohup > 单文件」——无按天切分、无大小封顶、无保留天数、无压缩，
+  生产上就是「磁盘被日志写满」的定时炸弹，出事后还要 grep 一个几十 GB 的单文件。
+
+  【口径】
+  1. prod：只写滚动文件（ROLLING_FILE），不写控制台——否则 nohup 重定向会再存一份同样的
+     日志，磁盘双写。控制台噪声改由 start-prod.sh 里的「每次启动归档一份 console log + 30 天清理」承担。
+  2. dev / test：只写控制台，与改动前逐字一致的行为（保持开发期可读性与 IT 956 零影响）。
+  3. 日志级别一律写在 application-{profile}.yml 的 logging.level.*，本文件不重复定义
+     ——Spring Boot 在加载 logback 配置之后仍会应用 logging.level，两套同写会以 yml 为准，
+     那样反而出现「改了 xml 没效果」的假象。
+
+  【默认保留策略】单文件 100MB + 按天切分 + 保留 30 天 + 总量 5GB 封顶 + 归档 gzip。
+  全部可用环境变量覆盖：PIVOTOS_LOG_DIR / _FILE_NAME / _MAX_FILE_SIZE / _MAX_HISTORY / _TOTAL_SIZE_CAP。
+
+  【安全】pattern 里刻意带上 MDC 的 traceId（排障必需），但不含账密、请求体、SQL 参数。
+-->
+<configuration>
+
+    <!-- 这些 <springProperty> 由 yml 的 pivotos.log.* 供值，环境变量见 application.yml -->
+    <springProperty scope="context" name="LOG_DIR" source="pivotos.log.dir" defaultValue="logs"/>
+    <springProperty scope="context" name="LOG_FILE_NAME" source="pivotos.log.file-name" defaultValue="pivotos-admin-server"/>
+    <springProperty scope="context" name="MAX_FILE_SIZE" source="pivotos.log.max-file-size" defaultValue="100MB"/>
+    <springProperty scope="context" name="MAX_HISTORY" source="pivotos.log.max-history" defaultValue="30"/>
+    <springProperty scope="context" name="TOTAL_SIZE_CAP" source="pivotos.log.total-size-cap" defaultValue="5GB"/>
+
+    <!-- pattern 统一字段：时间 级别 线程 logger traceId 消息；traceId 缺省时留空占位 -->
+    <property name="PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} [%X{traceId:-}] - %msg%n"/>
+
+    <!-- ============ prod：滚动文件（不重复写控制台） ============ -->
+    <springProfile name="prod">
+        <appender name="ROLLING_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${LOG_DIR}/${LOG_FILE_NAME}.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <!-- %i 为当天切片序号：同一天超过 100MB 再切，不丢日志 -->
+                <fileNamePattern>${LOG_DIR}/${LOG_FILE_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+                <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+                <maxHistory>${MAX_HISTORY}</maxHistory>
+                <totalSizeCap>${TOTAL_SIZE_CAP}</totalSizeCap>
+            </rollingPolicy>
+            <encoder>
+                <pattern>${PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="ROLLING_FILE"/>
+        </root>
+
+        <!-- 第三方噪声默认收敛：
+             mybatis-plus 的 SQL 日志量大且含参数，生产只让 WARN 以上出来。
+             业务侧需要排查 SQL 时用 PIVOTOS_LOG_LEVEL_COM_PIVOTOS=debug 覆盖即可。 -->
+        <logger name="org.mybatis" level="WARN"/>
+        <logger name="com.baomidou" level="WARN"/>
+    </springProfile>
+
+    <!-- ============ 非 prod（dev / test / 其他）：控制台，与改动前一致 ============ -->
+    <springProfile name="!prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>${PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+</configuration>

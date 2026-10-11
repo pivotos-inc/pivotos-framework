@@ -47,11 +47,13 @@ mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
+# v3.1.0 生产化 · A3：生产默认 info（此前是 debug + Spring MVC trace——磁盘/IO 放大一个数量级，
+# 且 trace 级会把参数处理器细节带进日志）。落盘路径与滚动见 logback-spring.xml。
+# 排障临时开 debug 时用环境变量覆盖：LOGGING_LEVEL_COM_PIVOTOS=debug
 logging:
   level:
-    com.pivotos: debug
-    org.dromara.warm.flow: debug
-    org.springframework.web.servlet.mvc.method.annotation: trace
+    com.pivotos: info
+    org.dromara.warm.flow: info
 
 # Knife4j 生产过滤器统一封禁 API 文档面；SpringDoc 必须保持装配，否则 Knife4j 控制器缺 Bean 导致启动失败
 springdoc:
