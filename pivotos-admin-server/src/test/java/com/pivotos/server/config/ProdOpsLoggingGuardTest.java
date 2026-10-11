@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -113,6 +114,78 @@ class ProdOpsLoggingGuardTest {
                     "application.yml 的 pivotos.log 下必须暴露 %s（运维要能在不改代码的前提下调整）".formatted(key));
         }
         assertTrue(yml.contains("PIVOTOS_LOG_DIR"), "日志目录必须可由环境变量覆盖");
+    }
+
+    /**
+     * V3.1-H · B1：WARN 及以上必须走独立的错误文件，且主文件不得保留副本。
+     *
+     * <p>为什么值得单独立一条守卫：这条配置的三处必须<b>成对</b>维护——错误文件的
+     * {@code ThresholdFilter}（收 WARN 及以上）与主文件的两条 {@code LevelFilter}
+     * （挡 WARN、挡 ERROR）。漏掉主文件里的任意一条，就会变成「错误文件与主文件各存一份同样的
+     * WARN」，而 biz 异常是 WARN 级别且故障期数量最多，双倍落盘恰好落在最贵的那一段；
+     * 反过来若只写了主文件的 DENY 却忘了错误文件，WARN/ERROR 就是<b>直接丢盘且毫无报错</b>。
+     * 这两种形态应用都起得来、日志看着也在写，只能靠静态断言钉死。
+     */
+    @Test
+    void errorLogIsSplitIntoOwnFileWithoutDuplication() throws IOException {
+        String xml = Files.readString(LOGBACK, StandardCharsets.UTF_8);
+        int prodStart = xml.indexOf("<springProfile name=\"prod | test\">");
+        assertTrue(prodStart > 0, "缺少滚动分支");
+        String prodBlock = xml.substring(prodStart, xml.indexOf("</springProfile>", prodStart));
+
+        assertTrue(prodBlock.contains("appender-ref ref=\"ERROR_FILE\""),
+                "prod/test 必须挂错误文件 appender（WARN 及以上单独落盘）");
+        assertTrue(prodBlock.contains("-error.log"), "错误文件名必须带 -error 后缀，避免与主文件混淆");
+
+        int errorAppender = prodBlock.indexOf("<appender name=\"ERROR_FILE\"");
+        assertTrue(errorAppender > 0, "缺少 ERROR_FILE appender 定义");
+        String errorBlock = prodBlock.substring(errorAppender,
+                prodBlock.indexOf("</appender>", errorAppender));
+        assertTrue(errorBlock.contains("ThresholdFilter"),
+                "错误文件必须用 ThresholdFilter 收窄级别（否则与主文件完全一致，分文件没有意义）");
+        assertTrue(errorBlock.contains("<level>WARN</level>"),
+                "错误文件应收敛 WARN 及以上；改成只收 ERROR 会让业务异常（WARN）无处可查");
+        assertTrue(errorBlock.contains("${ERROR_MAX_HISTORY}") && errorBlock.contains("${ERROR_TOTAL_SIZE_CAP}"),
+                "错误文件的保留天数和总量封顶必须走独立变量（默认 60 天 / 1GB，比主文件保留更久）");
+
+        // 反向：主文件必须把 WARN/ERROR 挡掉，否则磁盘上就是双份
+        int rollingAppender = prodBlock.indexOf("<appender name=\"ROLLING_FILE\"");
+        assertTrue(rollingAppender > 0, "缺少 ROLLING_FILE appender 定义");
+        String rollingBlock = prodBlock.substring(rollingAppender,
+                prodBlock.indexOf("</appender>", rollingAppender));
+        for (String level : List.of("WARN", "ERROR")) {
+            assertTrue(rollingBlock.contains("<level>" + level + "</level>"),
+                    "主文件缺少对 " + level + " 的 LevelFilter：会导致该级别在主文件与错误文件双份落盘");
+        }
+        assertEquals(2, countMatches(rollingBlock, "<onMatch>DENY</onMatch>"),
+                "主文件应恰好挡两个级别（WARN/ERROR）；多挡会丢日志，少挡会双写");
+        assertTrue(rollingBlock.contains("LevelFilter"),
+                "主文件必须用 LevelFilter 精确挡级别；ThresholdFilter 只能表达「>=」语义，做不到「低于某级别才收」");
+    }
+
+    @Test
+    void errorLogRetentionIsExposedForOverride() throws IOException {
+        String yml = Files.readString(APP_YML, StandardCharsets.UTF_8);
+        for (String key : List.of("error-max-history", "error-total-size-cap")) {
+            assertTrue(yml.contains(key),
+                    "application.yml 的 pivotos.log 下必须暴露 %s".formatted(key));
+        }
+        assertTrue(yml.contains("PIVOTOS_LOG_ERROR_MAX_HISTORY")
+                        && yml.contains("PIVOTOS_LOG_ERROR_TOTAL_SIZE_CAP"),
+                "错误文件的保留策略必须可由环境变量覆盖（不同环境磁盘预算不同）");
+    }
+
+    private static int countMatches(String text, String token) {
+        int count = 0;
+        int from = 0;
+        while (true) {
+            int at = text.indexOf(token, from);
+            if (at < 0) {
+                return count;
+            }
+            count++;
+            from = at + token.length();
+        }
     }
 
     /**

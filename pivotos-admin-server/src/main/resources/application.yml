@@ -223,15 +223,19 @@ pivotos:
       paths: ${PIVOTOS_AUTH_GUARD_PATHS:/warm-flow/**}
       exclude-paths: ${PIVOTOS_AUTH_GUARD_EXCLUDE_PATHS:}
       message: ${PIVOTOS_AUTH_GUARD_MESSAGE:该端点要求登录后访问}
-  # 日志落盘（v3.1.0 生产化 · A3）。实际由 logback-spring.xml 消费，这里只定义可覆盖项：
-  # prod 按「单文件 100MB + 按天切分 + 保留 30 天 + 总量 5GB 封顶 + 归档 gzip」滚动；
-  # dev/test 不写文件（只写控制台，保持开发期可读性）。全部可环境变量覆盖。
+  # 日志落盘（v3.1.0 生产化 · A3，V3.1-H · B1 追加按级别分文件）。实际由 logback-spring.xml 消费，
+  # 这里只定义可覆盖项：prod/test 按「单文件 100MB + 按天切分 + 归档 gzip」滚动写两个文件——
+  #   主文件  ：INFO 及以下（保留 ${PIVOTOS_LOG_MAX_HISTORY} 天 / 总量 ${PIVOTOS_LOG_TOTAL_SIZE_CAP}）
+  #   错误文件：WARN 及以上，文件名前缀带 -error（保留 60 天 / 总量 1GB，事故常隔周复盘）
+  # 两者零重叠，不存双份 WARN/ERROR。dev 只写控制台（保持开发期可读性）。全部可环境变量覆盖。
   log:
     dir: ${PIVOTOS_LOG_DIR:logs}
     file-name: ${PIVOTOS_LOG_FILE_NAME:pivotos-admin-server}
     max-file-size: ${PIVOTOS_LOG_MAX_FILE_SIZE:100MB}
     max-history: ${PIVOTOS_LOG_MAX_HISTORY:30}
     total-size-cap: ${PIVOTOS_LOG_TOTAL_SIZE_CAP:5GB}
+    error-max-history: ${PIVOTOS_LOG_ERROR_MAX_HISTORY:60}
+    error-total-size-cap: ${PIVOTOS_LOG_ERROR_TOTAL_SIZE_CAP:1GB}
   migration:
     # 迁移工作区使用绝对路径，避免因启动目录不同（mvn spring-boot:run vs java -jar）导致路径漂移
     workspace: ${PIVOTOS_MIGRATION_WORKSPACE:/Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-framework/pivotos-admin-server/data/migration}

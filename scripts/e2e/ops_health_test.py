@@ -12,12 +12,16 @@
   ┃                    日志目录与 cwd 都在 /tmp 下，跑完自清。
   ┃ 场景 5（test·日志）：V3.1-D 遗留④ / C4-1 —— test profile 与 prod 共用同一份滚动策略
   ┃                    （长期跑的测试环境同样会被单文件日志写满磁盘），而 dev 仍只写控制台。
+  ┃ 场景 6（prod·按级别分文件）：V3.1-H · B1 —— WARN 及以上只落 <name>-error.log，
+  ┃                    主文件刻意不再含 WARN/ERROR 行（零重叠，不存双份）；且证明错误文件
+  ┃                    跟随 PIVOTOS_LOG_FILE_NAME 前缀、按自己的 maxFileSize 独立滚动。
 
 用法：
     python3 scripts/e2e/ops_health_test.py                 # 全跑
     python3 scripts/e2e/ops_health_test.py --only=probe    # 只跑场景 1
     python3 scripts/e2e/ops_health_test.py --only=log      # 只跑场景 4
     python3 scripts/e2e/ops_health_test.py --only=testlog  # 只跑场景 5
+    python3 scripts/e2e/ops_health_test.py --only=errlog   # 只跑场景 6
 """
 import argparse
 import glob
@@ -74,7 +78,14 @@ def clean_env(extra=None):
     return env
 
 
-def start_server(env_extra=None, profile="dev", cwd=None, log_path=None, timeout=240):
+def start_server(env_extra=None, profile="dev", cwd=None, log_path=None, timeout=240,
+                 expect_ready=True):
+    """起 fat jar。
+
+    `expect_ready=False` 用于**故意起不来**的场景（例如验证致命 ERROR 落在哪个文件）：
+    此时不等探活，直接返回句柄，由调用方自己等进程退出——因为这类场景的判据本身就
+    是「它没有起来」。
+    """
     if port_busy():
         raise RuntimeError("8080 已被占用（可能是你自有的进程）。请先确认归属："
                            "lsof -Pan -i:8080 -sTCP:LISTEN；本脚本只启停自己拉起的进程。")
@@ -89,6 +100,9 @@ def start_server(env_extra=None, profile="dev", cwd=None, log_path=None, timeout
     fh = open(log_path, "wb")
     proc = subprocess.Popen(cmd, stdout=fh, stderr=subprocess.STDOUT,
                             env=clean_env(env_extra), cwd=cwd or "/")
+    if not expect_ready:
+        log("START", f"{profile} 形态起服（不等待就绪）PID={proc.pid}，日志={log_path}")
+        return proc, fh
     deadline = time.time() + timeout
     while time.time() < deadline:
         if proc.poll() is not None:
@@ -134,6 +148,17 @@ def http_get(path, headers=None, timeout=8):
         return e.code, e.read()
 
 
+def delete(path, headers=None):
+    """场景 6 需要一个「稳定产出 ERROR 行」的请求：/health/live 只支持 GET，
+    用 DELETE 打它一定触发 HttpRequestMethodNotSupportedException → log.error。"""
+    req = urllib.request.Request(BASE + path, headers=headers or {}, method="DELETE")
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+
+
 def get_json(path, headers=None):
     status, raw = http_get(path, headers)
     try:
@@ -165,7 +190,7 @@ def post_json(path, payload, headers=None):
 
 def scenario_probe():
     """场景 1：探活语义 + 匿名裁剪 + 明细登录门槛"""
-    log("SCENARIO", "1/4 dev 默认形态：探活语义")
+    log("SCENARIO", "1/6 dev 默认形态：探活语义")
     cwd = os.path.join(WORK_ROOT, "dev-cwd")
     proc, fh = start_server(cwd=cwd, log_path=os.path.join(WORK_ROOT, "probe.log"))
     try:
@@ -225,7 +250,7 @@ def scenario_probe():
 
 def scenario_disabled():
     """场景 2：总开关关闭 → 端点不注册"""
-    log("SCENARIO", "2/4 dev + PIVOTOS_OPS_HEALTH_ENABLED=false")
+    log("SCENARIO", "2/6 dev + PIVOTOS_OPS_HEALTH_ENABLED=false")
     proc, fh = start_server(env_extra={"PIVOTOS_OPS_HEALTH_ENABLED": "false"},
                             log_path=os.path.join(WORK_ROOT, "disabled.log"))
     try:
@@ -238,7 +263,7 @@ def scenario_disabled():
 
 def scenario_anonymous_details():
     """场景 3：显式开明细 → 匿名可见（同时证明配置可外部覆盖）"""
-    log("SCENARIO", "3/4 dev + PIVOTOS_OPS_HEALTH_SHOWDETAILSANONYMOUSLY=true")
+    log("SCENARIO", "3/6 dev + PIVOTOS_OPS_HEALTH_SHOWDETAILSANONYMOUSLY=true")
     proc, fh = start_server(
         env_extra={"PIVOTOS_OPS_HEALTH_SHOWDETAILSANONYMOUSLY": "true"},
         log_path=os.path.join(WORK_ROOT, "anon-details.log"))
@@ -273,7 +298,7 @@ def read_dev_db_env():
 
 def scenario_prod_logging():
     """场景 4：prod profile 的滚动日志（100KB 上限以便快速观察到切片）"""
-    log("SCENARIO", "4/4 prod 形态日志滚动（指向 dev 中间件，只读，不写业务数据）")
+    log("SCENARIO", "4/6 prod 形态日志滚动（指向 dev 中间件，只读，不写业务数据）")
     db_env = read_dev_db_env()
     missing = [k for k, v in db_env.items() if not v]
     if missing:
@@ -356,7 +381,7 @@ def scenario_test_logging():
     与场景 4 同一套断言，用来证明两件事：① test 真的落滚动文件；② 落的是「只写文件不写控制台」，
     没有因为表达式改成「prod | test」而变成两块 appender 同时命中（双写）。
     """
-    log("SCENARIO", "5/5 test 形态日志滚动（C4-1：test 与 prod 共用滚动策略）")
+    log("SCENARIO", "5/6 test 形态日志滚动（C4-1：test 与 prod 共用滚动策略）")
     db_env = read_dev_db_env()
     missing = [k for k, v in db_env.items() if not v]
     if missing:
@@ -415,9 +440,163 @@ def scenario_test_logging():
         stop_server(proc, fh)
 
 
+def scenario_error_file_splitting():
+    """场景 6：按级别分文件（V3.1-H · B1）
+
+    三条 MUST：
+      · WARN/ERROR 真的只进 error 文件（log.warn 正是 GlobalExceptionHandler 记录业务异常的级别，
+        漏到这里 = 故障期最有用的一段日志没地方看）；
+      · 主文件里一条 WARN/ERROR 都没有（零重叠，否则磁盘双倍计费）；
+      · error 文件自己会滚动（它的 maxHistory/totalSizeCap 是独立的，不跟着主文件走）。
+
+    顺带断言 error 文件跟随 PIVOTOS_LOG_FILE_NAME 前缀 —— 这条能证明两条 appender 用的是同一份
+    springProperty，而不是把文件名在两个地方复制了两遍（复制是最容易漂移的形态）。
+    """
+    log("SCENARIO", "6/6 prod 形态按级别分文件（WARN 及以上独立落盘）")
+    db_env = read_dev_db_env()
+    missing = [k for k, v in db_env.items() if not v]
+    if missing:
+        raise RuntimeError(f"application-dev.yml 里没读到 {missing}，无法构造隔离的起服环境")
+
+    # 单独一套 LOG_DIR 与文件名前缀：证明 error 文件的命名由同一份配置推导而来
+    err_log_dir = os.path.join(WORK_ROOT, "errlogs")
+    file_prefix = "v31h-probe"
+    if os.path.exists(err_log_dir):
+        shutil.rmtree(err_log_dir)
+    cwd = os.path.join(WORK_ROOT, "errlog-cwd")
+    if os.path.exists(cwd):
+        shutil.rmtree(cwd)
+    os.makedirs(cwd, exist_ok=True)
+
+    proc, fh = start_server(
+        profile="prod",
+        cwd=cwd,
+        env_extra={
+            "PIVOTOS_MYSQL_URL": db_env["url"],
+            "PIVOTOS_MYSQL_USERNAME": db_env["username"],
+            "PIVOTOS_MYSQL_PASSWORD": db_env["password"],
+            "PIVOTOS_REDIS_HOST": db_env["redis_host"],
+            "PIVOTOS_REDIS_PASSWORD": db_env["redis_password"],
+            "PIVOTOS_LOG_DIR": err_log_dir,
+            "PIVOTOS_LOG_FILE_NAME": file_prefix,
+            # 为了在 E2E 时间预算里真的观察到两个文件各自滚动
+            "PIVOTOS_LOG_MAX_FILE_SIZE": "20KB",
+            "PIVOTOS_FIELD_ENCRYPT_KEY": "abcdefghijklmnopqrstuvwxyz012345",
+            "PIVOTOS_COS_ACCESS_KEY": "v31h-e2e-placeholder",
+            "PIVOTOS_COS_SECRET_KEY": "v31h-e2e-placeholder",
+            "PIVOTOS_LLM_API_KEY": "v31h-e2e-placeholder",
+            "PIVOTOS_XXL_JOB_ACCESS_TOKEN": "v31h-e2e-placeholder",
+            "PIVOTOS_SEARCH_TYPE": "simple",
+        },
+        log_path=os.path.join(WORK_ROOT, "errlog-console.log"), timeout=300)
+    try:
+        main_log = os.path.join(err_log_dir, f"{file_prefix}.log")
+        err_log = os.path.join(err_log_dir, f"{file_prefix}-error.log")
+        for _ in range(60):
+            if os.path.exists(err_log):
+                break
+            time.sleep(1)
+        check("B1-1", os.path.exists(err_log),
+              f"错误文件按 <PIVOTOS_LOG_FILE_NAME>-error.log 命名并落盘：{err_log}")
+        check("B1-2", os.path.exists(main_log), f"主文件同时存在：{main_log}")
+
+        # 日志量：不存在路径 → GlobalExceptionHandler.log.warn
+        for _ in range(400):
+            http_get("/health/not-exists")
+        time.sleep(3)
+
+        err_text = open(err_log, encoding="utf-8", errors="replace").read()
+        main_text = open(main_log, encoding="utf-8", errors="replace").read()
+        level_re = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} (WARN|ERROR) ", re.M)
+
+        check("B1-3", re.search(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} WARN ", err_text, re.M) is not None,
+              "WARN 已进错误文件（不存在路径 → GlobalExceptionHandler 的 log.warn）")
+        # 注：没有 B1-4——原本打算用「错误 HTTP 方法」造 ERROR，实测被 GlobalExceptionHandler
+        #     当成 WARN 处理（本项目所有异常都是 HTTP 200 + 业务码），故改由 6b 段用致命失败验证。
+        leaked = level_re.findall(main_text)
+        check("B1-5", not leaked,
+              f"主文件零重叠：不含任何 WARN/ERROR 行（实测泄漏 {len(leaked)} 行）")
+        check("B1-6", re.search(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} INFO ", main_text, re.M) is not None,
+              "主文件仍在正常记录 INFO（分文件没把主文件掏空）")
+
+        main_archives = sorted(glob.glob(os.path.join(err_log_dir, f"{file_prefix}.[0-9]*")))
+        err_archives = sorted(glob.glob(os.path.join(err_log_dir, f"{file_prefix}-error.[0-9]*")))
+        check("B1-7", len(err_archives) >= 1,
+              f"错误文件按自己的 maxFileSize 独立切片并 gzip：共 {len(err_archives)} 份归档")
+        log("INFO", f"主文件归档 {len(main_archives)} 份（20KB 上限下）")
+
+        status, body = get_json("/health/live")
+        check("B1-8", status == 200 and (body or {}).get("status") == "UP",
+              f"按级别分文件后探活仍可用：HTTP {status} {body}")
+    finally:
+        stop_server(proc, fh)
+
+    _scenario_error_file_splitting_fatal_case(db_env, err_log_dir, file_prefix)
+
+
+def _scenario_error_file_splitting_fatal_case(db_env, err_log_dir, file_prefix):
+    """场景 6 的第二段：**故意**造一次致命启动失败，看 ERROR 到底落在哪个文件。
+
+    为什么非要这么别扭：本系统所有 HTTP 异常都被 GlobalExceptionHandler 转成了
+    HTTP 200 + 业务码（`NoResourceFoundException`、`HttpRequestMethodNotSupportedException`
+    都是 `log.warn`，实测连打 DELETE/PUT/PATCH 都只有 WARN），业务路径上找不到一个
+    稳定产出 ERROR 的请求。而「ERROR 会不会被漏掉」恰恰是这个改造最该验证的一半，
+    所以改用一个**必然致命**的输入：prod 形态缺少 COS 凭据会在刷新期急切建 S3 客户端
+    时抛异常（V3.1-G 已取证），于是 `SpringApplication: Application run failed`
+    这条 ERROR 一定会出现。
+
+    用「故意失败」换来的好处是可复现：每次跑都会红或绿在同一处，不依赖任何运气。
+    """
+    log("SCENARIO", "6b/6 故意致命启动失败：ERROR 必须只落错误文件")
+    cwd = os.path.join(WORK_ROOT, "errlog-fatal-cwd")
+    if os.path.exists(cwd):
+        shutil.rmtree(cwd)
+    os.makedirs(cwd, exist_ok=True)
+
+    # 刻意不给 COS 凭据：prod 形态必崩（PIVOTOS_COS_ACCESS_KEY 为空 → S3 客户端构建抛异常）
+    proc, fh = start_server(
+        profile="prod",
+        cwd=cwd,
+        env_extra={
+            "PIVOTOS_MYSQL_URL": db_env["url"],
+            "PIVOTOS_MYSQL_USERNAME": db_env["username"],
+            "PIVOTOS_MYSQL_PASSWORD": db_env["password"],
+            "PIVOTOS_REDIS_HOST": db_env["redis_host"],
+            "PIVOTOS_REDIS_PASSWORD": db_env["redis_password"],
+            "PIVOTOS_LOG_DIR": err_log_dir,
+            "PIVOTOS_LOG_FILE_NAME": file_prefix,
+            "PIVOTOS_FIELD_ENCRYPT_KEY": "abcdefghijklmnopqrstuvwxyz012345",
+            "PIVOTOS_SEARCH_TYPE": "simple",
+        },
+        log_path=os.path.join(WORK_ROOT, "errlog-fatal-console.log"),
+        timeout=180,
+        expect_ready=False)
+    try:
+        deadline = time.time() + 180
+        while time.time() < deadline and proc.poll() is None:
+            time.sleep(2)
+    finally:
+        stop_server(proc, fh)
+
+    err_log = os.path.join(err_log_dir, f"{file_prefix}-error.log")
+    main_log = os.path.join(err_log_dir, f"{file_prefix}.log")
+    check("B1-9", os.path.exists(err_log), "致命失败场景下错误文件仍存在（两次启动共用同一目录）")
+    err_text = open(err_log, encoding="utf-8", errors="replace").read()
+    check("B1-10", re.search(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} ERROR ", err_text, re.M) is not None,
+          "ERROR 级别日志确实进了错误文件（致命失败往往是唯一能稳定产出 ERROR 的路径）")
+    if os.path.exists(main_log):
+        main_text = open(main_log, encoding="utf-8", errors="replace").read()
+        check("B1-11", re.search(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} ERROR ", main_text, re.M) is None,
+              "主文件即使在这种场景下也不含 ERROR（分割是级别级的，不因失败而退化）")
+    else:
+        check("B1-11", True, "致命失败过早时主文件可能尚未建立，本项跳过（错误文件已覆盖判据）")
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only", choices=["probe", "disabled", "anon", "log", "testlog", "all"], default="all")
+    parser.add_argument("--only",
+                        choices=["probe", "disabled", "anon", "log", "testlog", "errlog", "all"],
+                        default="all")
     args = parser.parse_args()
 
     if os.path.exists(WORK_ROOT):
@@ -430,6 +609,7 @@ def main():
         "anon": scenario_anonymous_details,
         "log": scenario_prod_logging,
         "testlog": scenario_test_logging,
+        "errlog": scenario_error_file_splitting,
     }
     todo = list(scenarios.values()) if args.only == "all" else [scenarios[args.only]]
 

@@ -51,11 +51,19 @@ jobs:
           java-version: '25'
           cache: maven
       - name: 全量测试（ArchUnit A1-A7 随 verify 一并执行）
+        # ⚠️ 这里的变量名必须与测试配置里真正消费的名字一致，否则注入毫无效果且不报错。
+        # （2026-10-11 修复：此前注入的是 MYSQL_HOST / MYSQL_DB / REDIS_* 一组名字，
+        #   而各模块测试 yml 全部硬编码了 dev 主机 IP —— 结果 CI 的 test job 从未真正
+        #   连上过它自己起的 MySQL/Redis 容器。现在两侧统一为 PIVOTOS_TEST_* 系列，
+        #   并由 `python3 scripts/ops/check_ci_wiring.py` 守着不再漂移。）
+        # 数据库名不需要注入：每个模块用各自的独立测试库（system 用 test、message 用
+        # test_message、tenant 用 test_tenant*），且连接串带 createDatabaseIfNotExist=true。
         env:
-          MYSQL_HOST: 127.0.0.1
-          MYSQL_DB: pivotos_test
-          MYSQL_USER: root
-          MYSQL_PASSWORD: root_ci
-          REDIS_HOST: 127.0.0.1
-          REDIS_PASSWORD: ''
+          PIVOTOS_TEST_MYSQL_HOST: 127.0.0.1
+          PIVOTOS_TEST_MYSQL_PORT: '3306'
+          PIVOTOS_TEST_MYSQL_USERNAME: root
+          PIVOTOS_TEST_MYSQL_PASSWORD: root_ci
+          PIVOTOS_TEST_REDIS_HOST: 127.0.0.1
+          PIVOTOS_TEST_REDIS_PORT: '6379'
+          PIVOTOS_TEST_REDIS_PASSWORD: ''
         run: mvn -B clean verify
