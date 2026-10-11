@@ -59,6 +59,12 @@
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-mybatis</artifactId>
         </dependency>
+        <!-- ST-METRICS（V3.1-F · P1-B8-1）：AI 调用量 / token 用量埋点。
+             MeteredChatModel 是四条 AI 链路的唯一计量收敛点，指标挂在这里而不是散落各处。 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-metrics</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-auth</artifactId>

@@ -5,11 +5,13 @@ import com.pivotos.ai.domain.entity.AiApiKey;
 import com.pivotos.ai.domain.entity.AiProvider;
 import com.pivotos.common.core.exception.ServiceException;
 import com.pivotos.starter.ai.config.AiProperties;
+import com.pivotos.starter.metrics.support.BusinessMetrics;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -42,6 +44,13 @@ public class AiClientRegistry {
 
     /** Token 用量记录器（S92：构建 client 时包装 ChatModel 统一计量） */
     private final AiUsageRecorder usageRecorder;
+
+    /**
+     * 指标门面（V3.1-F · P1-B8-1）。用 {@link ObjectProvider} 而非直接注入：
+     * starter-metrics 是可选增强，某些裁剪形态下没有该 Bean，此时取到 null，
+     * {@link MeteredChatModel} 内部降级为 no-op —— 不能因为「没接指标」就让 AI 链路起不来。
+     */
+    private final ObjectProvider<BusinessMetrics> businessMetricsProvider;
 
     /** ChatClient 缓存：providerId:keyId → client */
     private final Map<String, ChatClient> clientCache = new ConcurrentHashMap<>();
@@ -146,8 +155,10 @@ public class AiClientRegistry {
         log.info("[PivotOS] 动态 ChatClient 构建：providerId={} keyId={} code={} factory={} internal={}",
                 provider.getId(), key.getId(), provider.getCode(), factory.getClass().getSimpleName(), !withDefaultSystem);
         // S92：MeteredChatModel 包装——四条 AI 链路凡走动态 Key 体系的调用在此统一计量
+        // V3.1-F：同一个收敛点同时挂指标（落库与指标是两件事，但出口必须是同一个）
         var meteredModel = new MeteredChatModel(factory.buildChatModel(provider, key),
-                provider.getId(), provider.getCode(), key.getId(), usageRecorder);
+                provider.getId(), provider.getCode(), key.getId(), usageRecorder,
+                businessMetricsProvider == null ? null : businessMetricsProvider.getIfAvailable());
         ChatClient.Builder builder = ChatClient.builder(meteredModel);
         if (withDefaultSystem) {
             builder.defaultSystem(aiProperties.getSystemPrompt());

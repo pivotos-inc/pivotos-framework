@@ -74,6 +74,14 @@
         <!-- ==================== 监控（S48 2.3-F6 服务监控 oshi 采集） ==================== -->
         <oshi.version>6.9.1</oshi.version>
 
+        <!-- ==================== 可观测（V3.1-F · P1-B8-1 指标基础设施） ==================== -->
+        <!-- ⚠️ micrometer 版本必须与当前 Boot 的 spring-boot-dependencies 内部
+             <micrometer.version> 对齐（Boot 4.1.1 实测为 1.17.1）。升 Boot 时必须回来核对这一行：
+             `grep -n "micrometer.version" ~/.m2/repository/org/springframework/boot/spring-boot-dependencies/<boot.version>/spring-boot-dependencies-<boot.version>.pom`
+             不对齐的后果是 micrometer-core（Boot 仲裁）与 micrometer-registry-prometheus（本仓仲裁）
+             混用两个大版本，症状是 PrometheusMeterRegistry 构造期 NoSuchMethodError。 -->
+        <micrometer.version>1.17.1</micrometer.version>
+
         <!-- ==================== 搜索（Easy-ES 锁定 ES 7.17.28） ==================== -->
         <easy-es.version>3.0.2</easy-es.version>
         <elasticsearch.version>7.17.28</elasticsearch.version>
@@ -392,6 +400,20 @@
                 <artifactId>elasticsearch-java</artifactId>
                 <version>${elasticsearch-java.version}</version>
             </dependency>
+            <!-- ⚠️ io.micrometer:micrometer-registry-prometheus 必须在本 BOM 显式仲裁。
+                 背景（2026-10-11 取证）：Boot 4.1.1 把 actuator 拆成了 spring-boot-micrometer-metrics /
+                 micrometer-observation / spring-boot-actuator 三块，而 micrometer-registry-prometheus
+                 **不在** spring-boot-dependencies pom 的直接条目里（它只 import 了 micrometer-bom，
+                 条目不落在本文件文本中），故「能被 Boot 管到」这件事不可靠、且随版本可变。
+                 本仓钉死 ${micrometer.version}（1.17.1，与 Boot 4.1.1 内部值一致），
+                 该坐标会传递引入 prometheus-metrics-core / exposition-formats（Prometheus Java client 1.x，
+                 非已废弃的 simpleclient 版 —— 后者在 micrometer 1.17 里已改名为
+                 micrometer-registry-prometheus-simpleclient，切勿误引）。 -->
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-registry-prometheus</artifactId>
+                <version>${micrometer.version}</version>
+            </dependency>
             <dependency>
                 <groupId>org.elasticsearch</groupId>
                 <artifactId>elasticsearch</artifactId>
@@ -553,6 +575,12 @@
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-starter-datainspect</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- ========== ST-METRICS（V3.1-F · P1-B8-1）：指标底座 ========== -->
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-metrics</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <!-- ========== ST-CLOUD（V3-S2 L2）：三通道 SPI 契约 + local/cloud/alibaba 三个实现 ========== -->

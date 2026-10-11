@@ -466,7 +466,11 @@ class P0ArchitectureTest {
         java.util.Map.entry("MiniAuthController#login", "小程序登录入口：同上"),
         java.util.Map.entry("MiniAuthController#phone", "小程序手机号授权登录：同上"),
         java.util.Map.entry("MiniAuthController#bind", "小程序首次绑定：绑定前尚未有登录态，必须匿名"),
-        java.util.Map.entry("EncryptKeyController#publicKey", "RSA 公钥：本身就是公开材料，供前端加密传输用（私钥不出服务端）"));
+        java.util.Map.entry("EncryptKeyController#publicKey", "RSA 公钥：本身就是公开材料，供前端加密传输用（私钥不出服务端）"),
+        // V3.1-F · P1-B8-1：Prometheus 抓取端点。Prometheus server 抓取不带登录态，端点必须匿名可达；
+        // 代价是「指标全貌对任何能访问该端口的人可见」，故生产必须在网络层（Nginx/安全组）限制内网，
+        // 或直接用 PIVOTOS_METRICS_PROMETHEUS_ENABLED=false 把端点摘掉（指标仍在内存里，只是不对外）。
+        java.util.Map.entry("PrometheusScrapeController#scrape", "Prometheus 抓取端点：抓取方无登录态，必须匿名；生产须限内网或整体摘除"));
 
     private static boolean hasSaAuth(com.tngtech.archunit.core.domain.JavaClass javaClass) {
         return SA_AUTH_ANNOTATIONS.stream().anyMatch(a ->

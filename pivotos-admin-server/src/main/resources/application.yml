@@ -170,6 +170,20 @@ pivotos:
     #   enabled: true
     #   tessdata-path: /opt/homebrew/share/tessdata
     #   languages: chi_sim+eng
+  metrics:
+    # ST-METRICS（V3.1-F · P1-B8-1）：指标基础设施。
+    # 默认带来 jvm.* / system.* / process.* / logback.* / hikaricp.* / http.server.requests，
+    # 外加三类自研业务指标：检索调用量、AI 调用量与 token、慢接口。
+    # ⚠️ 抓取端点免鉴权（Prometheus 抓取不带登录态）→ 生产必须在网络层（Nginx/安全组）限制内网。
+    enabled: ${PIVOTOS_METRICS_ENABLED:true}
+    prometheus:
+      # 只摘端点、不停采集：指标仍在内存里，只是没人能抓走
+      enabled: ${PIVOTOS_METRICS_PROMETHEUS_ENABLED:true}
+      # 沿用 Prometheus 生态惯例（scrape_config 的默认 metrics_path 就是这个值），改这里要同步改抓取配置
+      path: ${PIVOTOS_METRICS_PROMETHEUS_PATH:/actuator/prometheus}
+    slow-request:
+      enabled: ${PIVOTOS_METRICS_SLOW_REQUEST_ENABLED:true}
+      threshold-ms: ${PIVOTOS_METRICS_SLOW_REQUEST_THRESHOLD_MS:1000}
   search:
     # ST-SEARCH（S121）：搜索抽象层。type=simple 为进程内内存兜底（零中间件，重启即失），
     # 生产接入 ES 时引入 pivotos-starter-search-easy-es（ES 7.17）或 -es-java（ES 8.x/9.x）

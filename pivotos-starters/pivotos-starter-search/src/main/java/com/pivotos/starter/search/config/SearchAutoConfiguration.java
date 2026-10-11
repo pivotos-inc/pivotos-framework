@@ -1,5 +1,6 @@
 package com.pivotos.starter.search.config;
 
+import com.pivotos.starter.metrics.support.BusinessMetrics;
 import com.pivotos.starter.search.api.config.SearchProperties;
 import com.pivotos.starter.search.api.spi.SearchProvider;
 import com.pivotos.starter.search.api.template.SearchTemplate;
@@ -8,6 +9,7 @@ import com.pivotos.starter.search.simple.SimpleSearchProvider;
 import com.pivotos.starter.search.template.SearchTemplateImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -66,10 +68,15 @@ public class SearchAutoConfiguration {
 
     /**
      * 搜索门面
+     *
+     * <p>{@code BusinessMetrics} 用 {@code ObjectProvider} 取：starter-metrics 是**可选**依赖
+     * （本模块可以独立使用），没有它时 {@code getIfAvailable()} 返回 null，
+     * {@link SearchTemplateImpl} 内部降级为 no-op 埋点，绝不能因为「没接指标」就让检索不可用。
      */
     @Bean
     @ConditionalOnMissingBean
-    public SearchTemplate searchTemplate(SearchProviderFactory factory, SearchProperties properties) {
-        return new SearchTemplateImpl(factory, properties);
+    public SearchTemplate searchTemplate(SearchProviderFactory factory, SearchProperties properties,
+                                         ObjectProvider<BusinessMetrics> businessMetricsProvider) {
+        return new SearchTemplateImpl(factory, properties, businessMetricsProvider.getIfAvailable());
     }
 }

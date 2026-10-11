@@ -46,6 +46,10 @@ WORK_ROOT = "/tmp/pivotos-v31c-e2e"
 ALWAYS_ANONYMOUS = {
     "/health/live": "存活探针：Nginx/k8s 必须匿名打（V3.1-B A2）",
     "/health/ready": "就绪探针：同上；匿名只给 status+checks，明细需登录",
+    # V3.1-F · P1-B8-1：Prometheus server 抓取不带登录态，端点必须匿名可达。
+    # 代价是「指标全貌对任何能访问该端口的人可见」，故生产必须在网络层限内网，
+    # 或用 PIVOTOS_METRICS_PROMETHEUS_ENABLED=false 把端点整个摘掉。
+    "/actuator/prometheus": "Prometheus 抓取端点：抓取方无登录态，必须匿名；生产须限内网或整体摘除",
 }
 
 results = []
@@ -328,11 +332,26 @@ def main():
               f"除登记在册的匿名端点外不得有任何漏出；未登记漏出={unexpected}")
         for p in sorted(leak_paths & set(ALWAYS_ANONYMOUS)):
             check("A4-2", True, f"登记匿名（{ALWAYS_ANONYMOUS[p]}）：{p}")
-        # 反向守卫：白名单里登记的端点如果**不再**漏出，说明被误加了鉴权（探针被拦会摘流）
-        missing = sorted(set(ALWAYS_ANONYMOUS) - leak_paths)
-        missing_real = [p for p in missing if p in {t[0].split('?')[0] for t in targets}]
-        check("A4-3", not missing_real,
-              f"登记为匿名的端点必须仍能匿名访问（否则 Nginx 探活会被摘流）；被误拦={missing_real}")
+        # 反向守卫：白名单里登记的端点必须真的还能匿名访问（否则 Nginx 探活会被摘流）。
+        #
+        # ⚠️ 判定必须分两轨，不能一律用 is_leak 的「响应体含成功码」口径：
+        # 白名单里不全是 REST JSON 端点——/actuator/prometheus 吐的是 Prometheus 文本
+        # （text/plain;version=0.0.4），压根没有 code 字段，按成功码判会被误报成「被拦」。
+        #   · JSON 端点   → 沿用 is_leak（成功码 / 无 code 的 200 JSON）
+        #   · 非 JSON 端点 → HTTP 200 且 body 非空即可达
+        not_reachable = []
+        for p in sorted(ALWAYS_ANONYMOUS):
+            st, raw = http_get(p)
+            text = raw.decode("utf-8", "replace")
+            try:
+                parsed = json.loads(text)
+            except Exception:
+                parsed = None
+            reachable = is_leak(parsed, st) if parsed is not None else (st == 200 and text.strip() != "")
+            if not reachable:
+                not_reachable.append(p)
+        check("A4-3", not not_reachable,
+              f"登记为匿名的端点必须仍能匿名访问（否则 Nginx 探活会被摘流）；被误拦={not_reachable}")
         check("A4-4", len(leaks) <= len(ALWAYS_ANONYMOUS),
               f"漏出总数 {len(leaks)} 不得超过登记数 {len(ALWAYS_ANONYMOUS)}")
 
