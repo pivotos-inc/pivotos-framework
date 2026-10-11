@@ -8,9 +8,12 @@
   生产上就是「磁盘被日志写满」的定时炸弹，出事后还要 grep 一个几十 GB 的单文件。
 
   【口径】
-  1. prod：只写滚动文件（ROLLING_FILE），不写控制台——否则 nohup 重定向会再存一份同样的
+  1. prod / test：只写滚动文件（ROLLING_FILE），不写控制台——否则 nohup 重定向会再存一份同样的
      日志，磁盘双写。控制台噪声改由 start-prod.sh 里的「每次启动归档一份 console log + 30 天清理」承担。
-  2. dev / test：只写控制台，与改动前逐字一致的行为（保持开发期可读性与 IT 956 零影响）。
+     test 由 V3.1-D（遗留④ / C4-1）纳入：长期跑的测试环境同样会被单文件日志写满磁盘，
+     且 CI 抓不到「哪一轮跑到哪一步」。目录由 PIVOTOS_LOG_DIR 决定，未显式配置时是相对 cwd 的 logs/。
+  2. dev：只写控制台，与改动前逐字一致的行为（保持开发期可读性，且 IT 段一/段二走 dev profile，
+     不会在构建工作区里生成 logs/ 污染产物）。
   3. 日志级别一律写在 application-{profile}.yml 的 logging.level.*，本文件不重复定义
      ——Spring Boot 在加载 logback 配置之后仍会应用 logging.level，两套同写会以 yml 为准，
      那样反而出现「改了 xml 没效果」的假象。
@@ -32,8 +35,10 @@
     <!-- pattern 统一字段：时间 级别 线程 logger traceId 消息；traceId 缺省时留空占位 -->
     <property name="PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} [%X{traceId:-}] - %msg%n"/>
 
-    <!-- ============ prod：滚动文件（不重复写控制台） ============ -->
-    <springProfile name="prod">
+    <!-- ============ prod / test：滚动文件（不重复写控制台） ============ -->
+    <!-- ⚠️ 表达式写成单个「prod | test」而不是拆两个块：两个块都命中时会出现
+         「滚动文件 + 控制台」双写，正是本文件在 prod 上刻意避免的形态。-->
+    <springProfile name="prod | test">
         <appender name="ROLLING_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
             <file>${LOG_DIR}/${LOG_FILE_NAME}.log</file>
             <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
@@ -60,8 +65,9 @@
         <logger name="com.baomidou" level="WARN"/>
     </springProfile>
 
-    <!-- ============ 非 prod（dev / test / 其他）：控制台，与改动前一致 ============ -->
-    <springProfile name="!prod">
+    <!-- ============ 其余形态（dev / 其他）：控制台，与改动前一致 ============ -->
+    <!-- 必须与上块互斥：改成 name="!prod" 会让 test 同时命中两块（滚动文件 + 控制台双写）。-->
+    <springProfile name="!prod &amp; !test">
         <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
             <encoder>
                 <pattern>${PATTERN}</pattern>

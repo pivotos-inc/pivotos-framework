@@ -10,6 +10,7 @@ import com.pivotos.starter.core.context.TenantContext;
 import com.pivotos.starter.mybatis.config.properties.MybatisProperties;
 import com.pivotos.starter.mybatis.crypto.FieldEncryptCrypto;
 import com.pivotos.starter.mybatis.guard.DataSourceUrlGuard;
+import com.pivotos.starter.mybatis.guard.FieldEncryptKeyGuard;
 import com.pivotos.starter.mybatis.handler.AuditMetaObjectHandler;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.expression.Expression;
@@ -36,6 +37,17 @@ public class MybatisPlusAutoConfiguration {
         // 字段加密密钥注入静态 holder（TypeHandler 由 MyBatis 实例化）
         if (StringUtils.hasText(properties.getFieldEncryptKey())) {
             FieldEncryptCrypto.init(properties.getFieldEncryptKey());
+        }
+        // 遗留③ / C3-1：prod 形态仍用开发默认密钥 → 拒绝启动；其余形态只 WARN（dev/test 零配置起服不受影响）
+        String rejection = FieldEncryptKeyGuard.rejection(environment, properties.getFieldEncryptKey());
+        if (rejection != null) {
+            log.error("[FieldEncrypt] 启动校验失败：{}", rejection);
+            throw new IllegalStateException("字段加密密钥校验失败：" + rejection);
+        }
+        if (FieldEncryptKeyGuard.usesDevDefault(properties.getFieldEncryptKey())) {
+            log.warn("[FieldEncrypt] 当前使用开发默认密钥（{}），仅允许 dev/test 形态；"
+                            + "生产必须注入 PIVOTOS_FIELD_ENCRYPT_KEY（16/24/32 位）",
+                    FieldEncryptKeyGuard.DEV_DEFAULT_KEY);
         }
         // L9：启动期打印「生效库 + 注入源」，并按需 fail-fast
         DataSourceUrlGuard.Report report = DataSourceUrlGuard.resolve(environment);
