@@ -21,6 +21,19 @@
   【默认保留策略】单文件 100MB + 按天切分 + 保留 30 天 + 总量 5GB 封顶 + 归档 gzip。
   全部可用环境变量覆盖：PIVOTOS_LOG_DIR / _FILE_NAME / _MAX_FILE_SIZE / _MAX_HISTORY / _TOTAL_SIZE_CAP。
 
+  【按级别分文件（V3.1-H · B1）】WARN 及以上**只**进 `${LOG_FILE_NAME}-error.log`，主文件**不再**含
+  WARN/ERROR 行——刻意做成零重叠，不在磁盘上存两份同样的 WARN/ERROR。
+  为什么刻意不留副本：本仓的业务异常由 GlobalExceptionHandler 以 WARN 落盘（该类里
+  `NoResourceFoundException` / `ServiceException` 两个 handler 都是 log.warn），故障期间 WARN 是
+  行数最多的级别，在主文件里再留一份等于把最难压缩、最常用的一段日志双倍计费。
+  代价要说清楚：主文件不再保留 WARN/ERROR 的完整时序，事后复盘需要两个文件对着看。
+  错误文件单独设限：默认保留 60 天（比主文件 30 天长——事故往往隔周才复盘）/ 总量封顶 1GB，
+  覆盖变量 PIVOTOS_LOG_ERROR_MAX_HISTORY / PIVOTOS_LOG_ERROR_TOTAL_SIZE_CAP。
+
+  【为什么错误 appender 不给开关】若允许「只关错误文件」，主文件里的 LevelFilter 就得跟着放行，
+  而 logback 原生 XML（不引 janino）没有条件分支，一旦漏放 = WARN/ERROR 直接丢盘且毫无报错。
+  宁可不提供这个旋钮，也不要一个「关掉之后日志会消失」的开关。
+
   【安全】pattern 里刻意带上 MDC 的 traceId（排障必需），但不含账密、请求体、SQL 参数。
 -->
 <configuration>
@@ -31,6 +44,9 @@
     <springProperty scope="context" name="MAX_FILE_SIZE" source="pivotos.log.max-file-size" defaultValue="100MB"/>
     <springProperty scope="context" name="MAX_HISTORY" source="pivotos.log.max-history" defaultValue="30"/>
     <springProperty scope="context" name="TOTAL_SIZE_CAP" source="pivotos.log.total-size-cap" defaultValue="5GB"/>
+    <!-- 错误文件单独的两条限（V3.1-H · B1）：保留更久、总量更小 -->
+    <springProperty scope="context" name="ERROR_MAX_HISTORY" source="pivotos.log.error-max-history" defaultValue="60"/>
+    <springProperty scope="context" name="ERROR_TOTAL_SIZE_CAP" source="pivotos.log.error-total-size-cap" defaultValue="1GB"/>
 
     <!-- pattern 统一字段：时间 级别 线程 logger traceId 消息；traceId 缺省时留空占位 -->
     <property name="PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} [%X{traceId:-}] - %msg%n"/>
@@ -41,6 +57,20 @@
     <springProfile name="prod | test">
         <appender name="ROLLING_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
             <file>${LOG_DIR}/${LOG_FILE_NAME}.log</file>
+            <!-- ⚠️ 两条 DENY 必须与 ERROR_FILE 的 ThresholdFilter 成对维护：
+                 主文件挡掉 WARN/ERROR，错误文件收 WARN/ERROR，两者零重叠。
+                 少写一条就会让该级别在主文件与错误文件各存一份（logback 的多个 <filter> 是责任链，
+                 单条 LevelFilter 只匹配一个精确级别）。 -->
+            <filter class="ch.qos.logback.classic.filter.LevelFilter">
+                <level>WARN</level>
+                <onMatch>DENY</onMatch>
+                <onMismatch>NEUTRAL</onMismatch>
+            </filter>
+            <filter class="ch.qos.logback.classic.filter.LevelFilter">
+                <level>ERROR</level>
+                <onMatch>DENY</onMatch>
+                <onMismatch>NEUTRAL</onMismatch>
+            </filter>
             <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
                 <!-- %i 为当天切片序号：同一天超过 100MB 再切，不丢日志 -->
                 <fileNamePattern>${LOG_DIR}/${LOG_FILE_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
@@ -54,8 +84,27 @@
             </encoder>
         </appender>
 
+        <!-- WARN 及以上的专用文件（V3.1-H · B1）：与 ROLLING_FILE 零重叠，值守只盯这一个文件 -->
+        <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${LOG_DIR}/${LOG_FILE_NAME}-error.log</file>
+            <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+                <level>WARN</level>
+            </filter>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>${LOG_DIR}/${LOG_FILE_NAME}-error.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+                <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+                <maxHistory>${ERROR_MAX_HISTORY}</maxHistory>
+                <totalSizeCap>${ERROR_TOTAL_SIZE_CAP}</totalSizeCap>
+            </rollingPolicy>
+            <encoder>
+                <pattern>${PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+
         <root level="INFO">
             <appender-ref ref="ROLLING_FILE"/>
+            <appender-ref ref="ERROR_FILE"/>
         </root>
 
         <!-- 第三方噪声默认收敛：

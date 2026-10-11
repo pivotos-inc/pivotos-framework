@@ -8,15 +8,15 @@ spring:
       datasource:
         master:
           # 凭据从环境变量读取（本机 .env.dev / shell export）；createDatabaseIfNotExist 首次自动建测试库
-          url: jdbc:mysql://175.24.176.176:3306/test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
-          username: root
-          password: ${PIVOTOS_TEST_MYSQL_PASSWORD:}
+          url: jdbc:mysql://${PIVOTOS_TEST_MYSQL_HOST:${MYSQL_HOST:175.24.176.176}}:${PIVOTOS_TEST_MYSQL_PORT:${MYSQL_PORT:3306}}/test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          username: ${PIVOTOS_TEST_MYSQL_USERNAME:${MYSQL_USER:root}}
+          password: ${PIVOTOS_TEST_MYSQL_PASSWORD:${MYSQL_PASSWORD:}}
           driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: 175.24.176.176
-      port: 6379
-      password: ${PIVOTOS_TEST_REDIS_PASSWORD:}
+      host: ${PIVOTOS_TEST_REDIS_HOST:${REDIS_HOST:175.24.176.176}}
+      port: ${PIVOTOS_TEST_REDIS_PORT:${REDIS_PORT:6379}}
+      password: ${PIVOTOS_TEST_REDIS_PASSWORD:${REDIS_PASSWORD:}}
       timeout: 5s
 
 sa-token:

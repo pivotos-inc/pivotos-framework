@@ -1,0 +1,522 @@
+{
+  "uid": "pivotos-overview",
+  "title": "PivotOS · 运行总览",
+  "description": "进程级黄金信号：在线时长 / HTTP 吞吐与错误率 / 延迟 / 慢接口 / JVM 堆与 GC / 线程 / Druid 连接池 / 错误日志速率。所有指标名均取自真实抓取结果（见 scripts/e2e/grafana_dashboard_test.py 的断言），不臆造。",
+  "tags": [
+    "pivotos",
+    "overview"
+  ],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "application",
+        "label": "application",
+        "type": "query",
+        "query": "label_values(process_uptime_seconds, application)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "refresh": 1,
+        "includeAll": true,
+        "multi": false,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "进程在线时长",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_uptime_seconds{application=~\"$application\"}",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "HTTP 吞吐（QPS，按 outcome）",
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 4,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(http_server_requests_seconds_count{application=~\"$application\"}[5m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "HTTP 错误率（5xx）",
+      "description": "注意：本系统 GlobalExceptionHandler 会把异常转成 HTTP 200 + 业务码，所以这里只看 HTTP 层的 5xx；业务错误请在《业务与 AI》面板看 logback_events_total{level=\\\"error\\\"} 与业务错误端点埋点。",
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 9,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_requests_seconds_count{application=~\"$application\",status=~\"5..\"}[5m])) / sum(rate(http_server_requests_seconds_count{application=~\"$application\"}[5m]))",
+          "legendFormat": "5xx 占比"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "慢接口速率",
+      "description": "pivotos_http_slow_total 由慢接口 Filter 产出（阈值 PIVOTOS_METRICS_SLOW_REQUEST_THRESHOLD_MS；阈值写 1 会漏掉亚毫秒请求，要「全部计入」得写 0）。",
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 14,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(pivotos_http_slow_total{application=~\"$application\"}[5m]))",
+          "legendFormat": "slow/s"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "等待连接的线程数（池不够用的信号）",
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 19,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(pivotos_datasource_connections_waiting{application=~\"$application\"})",
+          "legendFormat": "waiting"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "HTTP 耗时：均值与窗口内最大值（秒）",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_requests_seconds_sum{application=~\"$application\"}[5m])) / sum(rate(http_server_requests_seconds_count{application=~\"$application\"}[5m]))",
+          "legendFormat": "平均耗时"
+        },
+        {
+          "refId": "B",
+          "expr": "max(http_server_requests_seconds_max{application=~\"$application\"})",
+          "legendFormat": "窗口内最大耗时"
+        }
+      ],
+      "description": "本项目没有开启 percentiles-histogram，Timer 只发布 _count / _sum / _max，**没有 _bucket**——所以这里用 sum/sum÷count 算均值、用 _max 看窗口内最大耗时，而不是 histogram_quantile(0.95)。真机抓取已验证这三条序列存在。"
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Druid 连接池（注意：本项目是 Druid，不是 HikariCP，hikaricp_* 一条都不会有）",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "pivotos_datasource_connections_active{application=~\"$application\"}",
+          "legendFormat": "active {{pool}}"
+        },
+        {
+          "refId": "B",
+          "expr": "pivotos_datasource_connections_idle{application=~\"$application\"}",
+          "legendFormat": "idle {{pool}}"
+        },
+        {
+          "refId": "C",
+          "expr": "pivotos_datasource_connections_max{application=~\"$application\"}",
+          "legendFormat": "max {{pool}}"
+        },
+        {
+          "refId": "D",
+          "expr": "pivotos_datasource_connections_waiting{application=~\"$application\"}",
+          "legendFormat": "waiting {{pool}}"
+        },
+        {
+          "refId": "E",
+          "expr": "rate(pivotos_datasource_connections_connect_errors{application=~\"$application\"}[5m])",
+          "legendFormat": "connect_errors/s {{pool}}"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "JVM 堆使用 / 上限",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (id) (jvm_memory_used_bytes{application=~\"$application\",area=\"heap\"})",
+          "legendFormat": "used {{id}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (id) (jvm_memory_max_bytes{application=~\"$application\",area=\"heap\"})",
+          "legendFormat": "max {{id}}"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "GC 暂停（rate 累计秒 / 秒）",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (cause) (rate(jvm_gc_pause_seconds_sum{application=~\"$application\"}[5m]))",
+          "legendFormat": "{{cause}}"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "线程数 + 错误日志速率",
+      "description": "错误日志速率用 logback_events_total{level=\\\"error\\\"}：业务异常在本仓是 WARN 级别（GlobalExceptionHandler 里 log.warn），看故障不要只看 error。",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jvm_threads_live_threads{application=~\"$application\"}",
+          "legendFormat": "live threads"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(logback_events_total{application=~\"$application\",level=\"error\"}[5m]))",
+          "legendFormat": "error logs/s"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(rate(logback_events_total{application=~\"$application\",level=\"warn\"}[5m]))",
+          "legendFormat": "warn logs/s"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "CPU 使用率",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 20
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_cpu_usage{application=~\"$application\"}",
+          "legendFormat": "process"
+        },
+        {
+          "refId": "B",
+          "expr": "system_cpu_usage{application=~\"$application\"}",
+          "legendFormat": "system"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "打开文件数 / 上限",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 20
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_files_open_files{application=~\"$application\"}",
+          "legendFormat": "open"
+        },
+        {
+          "refId": "B",
+          "expr": "process_files_max_files{application=~\"$application\"}",
+          "legendFormat": "max"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Tomcat 活跃会话",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 20
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tomcat_sessions_active_current_sessions{application=~\"$application\"}",
+          "legendFormat": "current"
+        },
+        {
+          "refId": "B",
+          "expr": "tomcat_sessions_created_sessions_total{application=~\"$application\"}",
+          "legendFormat": "created total"
+        }
+      ]
+    }
+  ]
+}

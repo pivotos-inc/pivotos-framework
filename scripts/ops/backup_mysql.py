@@ -7,17 +7,21 @@ PivotOS MySQL 逻辑备份。
 - 在没有 mysql/mysqldump 客户端时，使用 pymysql 生成可恢复的 SQL。
 - 通过一致性快照逐表输出 SHOW CREATE TABLE 与分批 INSERT。
 - 备份结束后核对源表行数，并生成带 SHA-256 的 manifest。
+- 可选按份数轮转（V3.1-H · B4）：`--retain N` 只保留最近 N 份成功备份。
 
 凭据：
 - 推荐从 PIVOTOS_MYSQL_URL / PIVOTOS_MYSQL_USERNAME /
   PIVOTOS_MYSQL_PASSWORD 环境变量读取。
 - 也支持命令行参数；脚本不会打印密码。
+
+⚠️ 保留策略的逻辑（谁能删、按什么顺序删、什么情况拒绝删）刻意放在 `backup_lib.py`
+   并且**只用标准库**：删文件的规则必须能在没有数据库的机器上被反复验证，
+   否则这条最不可逆的路径永远只能靠肉眼评审。
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import sys
@@ -26,6 +30,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import unquote, urlparse
+
+ROOT = os.path.dirname(os.path.abspath(__file__))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 try:
     import pymysql
@@ -36,6 +44,9 @@ except ImportError:  # pragma: no cover - 由部署环境决定
         file=sys.stderr,
     )
     raise SystemExit(2)
+
+# 轮转与校验的纯逻辑层（同目录，只用标准库）
+import backup_lib  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -106,6 +117,13 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=10,
         help="连接超时秒数，默认 10。",
+    )
+    parser.add_argument(
+        "--retain",
+        type=int,
+        default=0,
+        help="只保留最近 N 份本库的备份（0 = 不清理，默认 0）。"
+             "N<1 一律视为不清理；清理只删 <database>-<时间戳>.sql 及其 manifest。",
     )
     args = parser.parse_args()
     if args.batch_size < 1:
@@ -188,12 +206,8 @@ def write_insert(
     output.write(";\n")
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+# 校验与轮转复用 backup_lib 的实现——同一个 sha256 若在两个脚本里各写一份，
+# 迟早会出现「备份这边算得对、校验那边算得错」这种最难查的形态。
 
 
 def create_connection(options: ConnectionOptions, timeout: int) -> pymysql.Connection:
@@ -323,7 +337,7 @@ def backup_database(args: argparse.Namespace, options: ConnectionOptions) -> tup
             "database": options.database,
             "tableCount": len(backups),
             "rowCount": total_rows,
-            "sha256": sha256_file(sql_path),
+            "sha256": backup_lib.sha256_file(sql_path),
             "sqlFile": sql_path.name,
             "tables": [
                 {"name": item.name, "rowCount": item.dumped_rows}
@@ -349,7 +363,8 @@ def main() -> int:
     try:
         options = resolve_connection(args)
         sql_path, manifest_path, table_count, row_count = backup_database(args, options)
-    except (ValueError, RuntimeError, pymysql.MySQLError, OSError) as exc:
+    except (ValueError, RuntimeError, pymysql.MySQLError, OSError,
+            backup_lib.RetentionError) as exc:
         print(f"[backup-mysql] FAILED: {exc}", file=sys.stderr)
         return 1
 
@@ -357,8 +372,24 @@ def main() -> int:
         f"[backup-mysql] PASS tables={table_count} rows={row_count} "
         f"sql={sql_path} manifest={manifest_path}"
     )
+
+    # 轮转放在**备份成功之后**：万一这一步失败也不能污染「备份有没有成功」的结论。
+    # 且只对本库(database)生效，避免一个多库共用的备份目录被别的库的轮转策略波及。
+    if args.retain and args.retain > 0:
+        try:
+            plan = backup_lib.apply_retention(args.output_dir, args.retain,
+                                              database=options.database, dry_run=False)
+        except backup_lib.RetentionError as exc:
+            print(f"[backup-mysql] 轮转未执行（备份本身已成功）：{exc}", file=sys.stderr)
+            return 0
+        if plan.delete:
+            for item in plan.delete:
+                print(f"[backup-mysql] rotate removed {item.sql.name}")
+        print(f"[backup-mysql] rotate keep={len(plan.keep)} removed={len(plan.delete)} "
+              f"incomplete-skipped={len(plan.incomplete)} (retain={args.retain})")
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
