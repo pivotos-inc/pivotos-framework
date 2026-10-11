@@ -5,7 +5,8 @@
 #   必需环境变量（缺一即拒绝启动，避免「连错环境还跑起来」）：
 #     PIVOTOS_MYSQL_URL / PIVOTOS_MYSQL_USERNAME / PIVOTOS_MYSQL_PASSWORD
 #     PIVOTOS_REDIS_HOST / PIVOTOS_REDIS_PASSWORD
-#   建议环境变量：PIVOTOS_FIELD_ENCRYPT_KEY（未设置会告警）/ PIVOTOS_LOG_DIR
+#     PIVOTOS_FIELD_ENCRYPT_KEY（16/24/32 位；不注入会用 git 里明文的开发默认密钥，prod 侧亦会拒启动）
+#   建议环境变量：PIVOTOS_LOG_DIR
 #                 JAVA_XMS / JAVA_XMX（未设置则不限制堆，等同容器/系统默认）
 #
 # 与部署机上上一个版本的 start-prod.sh 相比，改了三件事：
@@ -33,7 +34,9 @@ if [ ! -f "$JAR" ]; then
 fi
 
 # 凭据必须外置：这里是「拒绝启动」而不是「用默认值凑合」——凑合的默认值会把生产指向开发库。
-REQUIRED_VARS=(PIVOTOS_MYSQL_URL PIVOTOS_MYSQL_USERNAME PIVOTOS_MYSQL_PASSWORD PIVOTOS_REDIS_HOST PIVOTOS_REDIS_PASSWORD)
+# PIVOTOS_FIELD_ENCRYPT_KEY 同列必需（V3.1-D C3-1）：不注入就会用到 git 里明文的开发默认密钥，
+# 字段加密形同虚设；应用侧自 V3.1-D 起也会在 prod 形态直接拒绝启动，这里提前拦，错误信息更直白。
+REQUIRED_VARS=(PIVOTOS_MYSQL_URL PIVOTOS_MYSQL_USERNAME PIVOTOS_MYSQL_PASSWORD PIVOTOS_REDIS_HOST PIVOTOS_REDIS_PASSWORD PIVOTOS_FIELD_ENCRYPT_KEY)
 MISSING=()
 for v in "${REQUIRED_VARS[@]}"; do
   if [ -z "${!v:-}" ]; then
@@ -46,9 +49,14 @@ if [ ${#MISSING[@]} -gt 0 ]; then
   exit 1
 fi
 
-if [ -z "${PIVOTOS_FIELD_ENCRYPT_KEY:-}" ]; then
-  echo "⚠️  未设置 PIVOTOS_FIELD_ENCRYPT_KEY：将使用 application.yml 里的开发默认密钥" >&2
-  echo "   上线写入数据后不可更换，请务必注入生产值（字段加密守卫见生产化评估 C5）。" >&2
+# 长度由应用侧 FieldEncryptCrypto 强校验（16/24/32 位）；这里只做非空与长度的提前自检，
+# 免得起服到一半才抛 IllegalStateException。
+if [ -n "${PIVOTOS_FIELD_ENCRYPT_KEY:-}" ]; then
+  KEY_LEN=${#PIVOTOS_FIELD_ENCRYPT_KEY}
+  if [ "$KEY_LEN" -ne 16 ] && [ "$KEY_LEN" -ne 24 ] && [ "$KEY_LEN" -ne 32 ]; then
+    echo "❌ PIVOTOS_FIELD_ENCRYPT_KEY 长度必须为 16/24/32 位（当前 $KEY_LEN 位）" >&2
+    exit 1
+  fi
 fi
 
 if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then

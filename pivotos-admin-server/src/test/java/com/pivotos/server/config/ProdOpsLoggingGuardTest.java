@@ -76,14 +76,33 @@ class ProdOpsLoggingGuardTest {
         assertTrue(xml.contains("totalSizeCap"), "缺少总量封顶");
         assertTrue(xml.contains("%i.log.gz") || xml.contains(".log.gz"), "归档必须压缩，否则保留 30 天撑爆磁盘");
 
-        // prod 分支只许引用 ROLLING_FILE，不许再挂 CONSOLE（否则双写）
-        int prodStart = xml.indexOf("<springProfile name=\"prod\">");
-        assertTrue(prodStart > 0, "缺少 prod 分支");
+        // 滚动分支只许引用 ROLLING_FILE，不许再挂 CONSOLE（否则双写）
+        int prodStart = xml.indexOf("<springProfile name=\"prod | test\">");
+        assertTrue(prodStart > 0, "缺少滚动文件分支（应为 <springProfile name=\"prod | test\">）");
         int prodEnd = xml.indexOf("</springProfile>", prodStart);
         String prodBlock = xml.substring(prodStart, prodEnd);
-        assertTrue(prodBlock.contains("appender-ref ref=\"ROLLING_FILE\""), "prod 必须挂滚动文件 appender");
+        assertTrue(prodBlock.contains("appender-ref ref=\"ROLLING_FILE\""), "prod/test 必须挂滚动文件 appender");
         assertTrue(!prodBlock.contains("appender-ref ref=\"CONSOLE\""),
-                "prod 不得同时挂 CONSOLE（双重写：logback 一份 + nohup 一份）");
+                "prod/test 不得同时挂 CONSOLE（双重写：logback 一份 + nohup 一份）");
+    }
+
+    /**
+     * V3.1-D 遗留④ / C4-1：test 与 prod 共用滚动策略，dev 仍只写控制台。
+     *
+     * <p>守的是「改一行就翻车」的两条：① 把 test 从滚动分支里摘掉（长期跑的测试环境重新回到
+     * 单文件写满磁盘）；② 控制台分支写成 {@code !prod}（test 会同时命中两块 → 双写）。
+     * 前者只影响运维体感，后者会真的让磁盘双份，两条都必须钉死。
+     */
+    @Test
+    void testProfileRollsLikeProdAndDevKeepsConsoleOnly() throws IOException {
+        String xml = Files.readString(LOGBACK, StandardCharsets.UTF_8);
+
+        assertTrue(xml.contains("<springProfile name=\"prod | test\">"),
+                "test 必须纳入滚动分支（V3.1-D C4-1），否则长期跑的测试环境会退回无限增长的单文件");
+
+        // 控制台分支必须与滚动分支互斥：XML 里 & 已转义为 &amp;
+        assertTrue(xml.contains("<springProfile name=\"!prod &amp; !test\">"),
+                "控制台分支必须是 !prod & !test；写成 !prod 会让 test 同时命中两块（滚动文件 + 控制台双写）");
     }
 
     @Test

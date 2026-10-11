@@ -10,11 +10,14 @@
   ┃ 场景 4（prod·日志）：prod profile 下应用日志走滚动文件，按大小切 gzip；控制台不再重复落盘。
   ┃                    数据库指向 dev 实例（只读验证 Flyway 已是 85/85，不写任何业务数据），
   ┃                    日志目录与 cwd 都在 /tmp 下，跑完自清。
+  ┃ 场景 5（test·日志）：V3.1-D 遗留④ / C4-1 —— test profile 与 prod 共用同一份滚动策略
+  ┃                    （长期跑的测试环境同样会被单文件日志写满磁盘），而 dev 仍只写控制台。
 
 用法：
     python3 scripts/e2e/ops_health_test.py                 # 全跑
     python3 scripts/e2e/ops_health_test.py --only=probe    # 只跑场景 1
     python3 scripts/e2e/ops_health_test.py --only=log      # 只跑场景 4
+    python3 scripts/e2e/ops_health_test.py --only=testlog  # 只跑场景 5
 """
 import argparse
 import glob
@@ -347,9 +350,74 @@ def scenario_prod_logging():
         stop_server(proc, fh)
 
 
+def scenario_test_logging():
+    """场景 5：test profile 也走滚动日志（V3.1-D 遗留④ / C4-1）
+
+    与场景 4 同一套断言，用来证明两件事：① test 真的落滚动文件；② 落的是「只写文件不写控制台」，
+    没有因为表达式改成「prod | test」而变成两块 appender 同时命中（双写）。
+    """
+    log("SCENARIO", "5/5 test 形态日志滚动（C4-1：test 与 prod 共用滚动策略）")
+    db_env = read_dev_db_env()
+    missing = [k for k, v in db_env.items() if not v]
+    if missing:
+        raise RuntimeError(f"application-dev.yml 里没读到 {missing}，无法构造隔离的 test 起服环境")
+
+    if os.path.exists(LOG_DIR):
+        shutil.rmtree(LOG_DIR)
+    cwd = os.path.join(WORK_ROOT, "test-cwd")
+    if os.path.exists(cwd):
+        shutil.rmtree(cwd)
+    os.makedirs(cwd, exist_ok=True)
+
+    console_log = os.path.join(WORK_ROOT, "test-console.log")
+    proc, fh = start_server(
+        profile="test",
+        cwd=cwd,
+        env_extra={
+            # test yml 的默认值指向 10.0.0.7（内网），这里改指 dev 中间件才能真起来
+            "PIVOTOS_MYSQL_URL": db_env["url"],
+            "PIVOTOS_MYSQL_USERNAME": db_env["username"],
+            "PIVOTOS_MYSQL_PASSWORD": db_env["password"],
+            "PIVOTOS_REDIS_HOST": db_env["redis_host"],
+            "PIVOTOS_REDIS_PASSWORD": db_env["redis_password"],
+            "PIVOTOS_LOG_DIR": LOG_DIR,
+            "PIVOTOS_LOG_MAX_FILE_SIZE": "20KB",
+            # 32 位占位（非真凭据）：test 形态用开发默认密钥只会 WARN，但显式注入更贴近运维口径
+            "PIVOTOS_FIELD_ENCRYPT_KEY": "abcdefghijklmnopqrstuvwxyz012345",
+            "PIVOTOS_SEARCH_TYPE": "simple",
+        },
+        log_path=console_log, timeout=300)
+    try:
+        current = os.path.join(LOG_DIR, "pivotos-admin-server.log")
+        for _ in range(60):
+            if os.path.exists(current):
+                break
+            time.sleep(1)
+        check("C4-1", os.path.exists(current), f"test 形态应用日志落盘（与 prod 同一策略）：{current}")
+
+        for _ in range(300):
+            http_get("/health/not-exists")
+        time.sleep(3)
+
+        archives = sorted(glob.glob(os.path.join(LOG_DIR, "*.log.gz")))
+        check("C4-2", len(archives) >= 1,
+              f"test 形态同样按大小切片并 gzip（压到 20KB）：共 {len(archives)} 份归档")
+        check("C4-3", os.path.getsize(current) > 0, "当前日志持续写入")
+
+        console_size = os.path.getsize(console_log)
+        check("C4-4", console_size < 2 * 1024 * 1024,
+              f"test 形态不再双写控制台：{console_size} 字节（两块 appender 互斥，非 prod|test 双命中）")
+
+        status, body = get_json("/health/live")
+        check("C4-5", status == 200 and (body or {}).get("status") == "UP",
+              f"test 形态探活仍可用：HTTP {status} {body}")
+    finally:
+        stop_server(proc, fh)
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only", choices=["probe", "disabled", "anon", "log", "all"], default="all")
+    parser.add_argument("--only", choices=["probe", "disabled", "anon", "log", "testlog", "all"], default="all")
     args = parser.parse_args()
 
     if os.path.exists(WORK_ROOT):
@@ -361,6 +429,7 @@ def main():
         "disabled": scenario_disabled,
         "anon": scenario_anonymous_details,
         "log": scenario_prod_logging,
+        "testlog": scenario_test_logging,
     }
     todo = list(scenarios.values()) if args.only == "all" else [scenarios[args.only]]
 
