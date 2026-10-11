@@ -9,7 +9,8 @@ import org.dromara.warm.flow.orm.entity.FlowTask;
 /**
  * 待办任务归属查询 Mapper（S93）。
  * <p>
- * warm-flow 1.8.7 的 taskService.page 是纯实体条件分页，不做 PermissionHandler 权限过滤，
+ * warm-flow 的 taskService.page 是纯实体条件分页，不做 PermissionHandler 权限过滤
+ * （1.8.7 实测，V3.1-E 升 1.8.9 后复核仍成立），
  * 任何登录用户会看到全部待办；故在服务层以 flow_user 归属（审批/转办/委派三类办理人）
  * 子查询过滤，分页与计数同口径。任务办结后引擎删除 flow_user 记录，口径自洽。
  * <p>
