@@ -49,6 +49,11 @@
             <artifactId>pivotos-starter-redis</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- 留存策略公共能力（v3.1.0 P1-B1）：安全带模板 + 本地调度兜底 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-job</artifactId>
+        </dependency>
 
         <!-- 对象转换（BOM 已仲裁） -->
         <dependency>

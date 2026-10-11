@@ -3,6 +3,7 @@ package com.pivotos.ai.mapper;
 import com.baomidou.mybatisplus.annotation.InterceptorIgnore;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.pivotos.ai.domain.entity.AiUsage;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -70,4 +71,28 @@ public interface AiUsageMapper extends BaseMapper<AiUsage> {
             + "FROM ai_usage WHERE deleted = 0 AND create_time >= #{start} "
             + "GROUP BY DATE_FORMAT(create_time, '%Y-%m-%d') ORDER BY day")
     List<Map<String, Object>> selectTrend(@Param("start") LocalDateTime start);
+
+    /**
+     * 物理删除（仅供留存清理使用）。
+     * <p>
+     * 两个「为什么」：
+     * <ol>
+     *   <li><b>为什么显式 DELETE</b>：{@code TenantBaseDO → BaseDO#deleted} 带 {@code @TableLogic}，
+     *       {@code BaseMapper#delete*} 只置 {@code deleted=1}，空间不回收。</li>
+     *   <li><b>为什么加 @InterceptorIgnore</b>：与本 Mapper 其余方法同口径——
+     *       ai_usage 的写入来自 Reactor / 虚拟线程回调（无租户上下文），聚合也是平台跨租户视角，
+     *       故读写一律绕过租户行级过滤。留存清理自然也是<strong>跨租户全局清理</strong>，
+     *       对应调用方走 {@code RetentionCleanupTemplate#runGlobal}。
+     *       若这里不显式声明，绑定租户上下文时会被追加 {@code tenant_id = ?}，
+     *       与本表既定口径冲突（部分行 tenant_id 为 null，会被漏掉）。</li>
+     * </ol>
+     *
+     * @param ids 待删主键
+     * @return 实际删除行数
+     */
+    @InterceptorIgnore(tenantLine = "true")
+    @Delete("<script>DELETE FROM ai_usage WHERE id IN "
+            + "<foreach collection='ids' item='id' open='(' separator=',' close=')'>#{id}</foreach>"
+            + "</script>")
+    int physicalDeleteByIds(@Param("ids") List<Long> ids);
 }
