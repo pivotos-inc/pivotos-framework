@@ -48,6 +48,22 @@ OTLP_PORT = 4318
 OTLP_ENDPOINT = f"http://127.0.0.1:{OTLP_PORT}/v1/traces"
 TRACE_HEADER = "X-Trace-Id"
 
+# --local-db 用的环境变量：把数据源/Redis 指到本机容器（与 CI services 同参数）。
+# dev yml 的兜底连接串指向开发服务器；该机不可达时应用起不来（Flyway 校验卡住），
+# 于是「收不到 span」就会被误判成桥接失败 —— 两件事必须能分开。
+LOCAL_DB_ENV = {
+    "PIVOTOS_MYSQL_URL": "jdbc:mysql://127.0.0.1:3306/pivotos_dev?useUnicode=true&characterEncoding=utf8"
+                         "&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
+                         "&createDatabaseIfNotExist=true&allowMultiQueries=false",
+    "PIVOTOS_MYSQL_USERNAME": "root",
+    "PIVOTOS_MYSQL_PASSWORD": "root_ci",
+    # ⚠️ 密码绝不能是空串：Redisson 拿到空串照样发 AUTH "" 会被 Redis 拒绝
+    "PIVOTOS_REDIS_HOST": "127.0.0.1",
+    "PIVOTOS_REDIS_PASSWORD": "root_ci",
+}
+
+LOCAL_DB = False
+
 results = []
 received_spans = []
 
@@ -185,10 +201,14 @@ def start_server(tag, env_extra=None, timeout=420):
     os.makedirs(cwd, exist_ok=True)
     cmd = [JAVA, "-Djna.library.path=/opt/homebrew/lib", "-Djava.awt.headless=true",
            "-jar", JAR, "--spring.profiles.active=dev"]
-    log("START", f"起服（{tag}）日志={log_path}")
+    effective_env = dict(env_extra or {})
+    if LOCAL_DB:
+        effective_env = {**LOCAL_DB_ENV, **effective_env}
+    log("START", f"起服（{tag}）日志={log_path}"
+                 f"{' [本地库 127.0.0.1]' if LOCAL_DB else ' [dev yml 兜底=远端]'}")
     fh = open(log_path, "wb")
     proc = subprocess.Popen(cmd, stdout=fh, stderr=subprocess.STDOUT,
-                            env=clean_env(env_extra), cwd=cwd)
+                            env=clean_env(effective_env), cwd=cwd)
     deadline = time.time() + timeout
     while time.time() < deadline:
         if proc.poll() is not None:
@@ -373,8 +393,13 @@ def main():
     ap = argparse.ArgumentParser(description="链路追踪 OTLP E2E")
     ap.add_argument("--only", choices=list(SCENARIOS), help="只跑指定场景")
     ap.add_argument("--jaeger-url", help="可选：Jaeger Query 地址，附加断言 Jaeger 侧能查到该 trace")
+    ap.add_argument("--local-db", action="store_true",
+                    help="把数据源与 Redis 指到本机 127.0.0.1（docker 起的 mysql:8.4 / redis:8）。"
+                         "远端开发服务器不可达时必须加，否则「收不到 span」是环境不通而非桥接失败。")
     args = ap.parse_args()
 
+    global LOCAL_DB
+    LOCAL_DB = args.local_db
     os.makedirs(WORK_ROOT, exist_ok=True)
     if not os.path.exists(JAR):
         raise RuntimeError(f"找不到 fat jar：{JAR}（先 mvn clean package）")

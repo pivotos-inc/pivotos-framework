@@ -13,6 +13,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.Ordered;
 
 import java.util.concurrent.TimeUnit;
@@ -76,11 +77,19 @@ public class TracingAutoConfiguration {
     }
 
     /**
-     * 采样器：只在 {@code sampling-probability < 1.0} 时注册（1.0 时交给 Boot 默认，避免多余 Bean）。
+     * 采样器：只在 {@code sampling-probability} 显式配置时注册（1.0 时交给 Boot 默认，避免多余 Bean）。
      * 用 {@code parentBased} 是刻意的：父 span 已采样则子 span 必采，
      * 否则会出现「请求的前半段有 span、后半段没 span」的断链，比全采更难排查。
+     *
+     * <p><b>为什么必须 @Primary</b>（2026-10-12 真机踩到）：Boot 自己就有一个 {@code otelSampler}，
+     * 本 Bean 一旦同时存在，`otelSdkTracerProvider` 注入处会直接
+     * {@code No qualifying bean of type Sampler: expected single matching bean but found 2} ——
+     * **整个应用起不来**（不是「追踪不可用」这种降级，是启动失败）。
+     * 而 @ConditionalOnMissingBean 在这里靠不住：它取决于本自动配置与
+     * {@code OpenTelemetryTracingAutoConfiguration} 的评估先后，换一次依赖顺序就可能翻转。
      */
     @Bean
+    @Primary
     @ConditionalOnProperty(prefix = "pivotos.tracing", name = "sampling-probability", matchIfMissing = false)
     public Sampler tracingSampler(TracingProperties properties) {
         double probability = properties.getSamplingProbability();
