@@ -3,7 +3,7 @@ package com.pivotos.message;
 import com.alibaba.fastjson2.JSON;
 import com.pivotos.message.domain.entity.MsgSendLog;
 import com.pivotos.message.mapper.MsgSendLogMapper;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -40,12 +40,23 @@ class MessageIntegrationTest {
     @Autowired
     private MsgSendLogMapper sendLogMapper;
 
-    private static String adminToken;
     private static Long templateId;
     private static Long firstUserMessageId;
 
-    @BeforeAll
-    static void login() {
+    private String adminToken;
+
+    /**
+     * 登录态必须在**实例级**回调里创建，不能放在 {@code static @BeforeAll}。
+     *
+     * <p>原因（2026-10-12 定位）：JUnit 5 的 {@code static @BeforeAll} 早于 Spring 测试上下文加载，
+     * 此刻 {@code SaManager.getSaTokenDao()} 首次被调用会**惰性锁定为内存实现**
+     * （{@code SaTokenDaoDefaultImpl}），造出的 token 只写进内存；等上下文加载完成，
+     * sa-token 又把全局 dao 换成 Redis 实现，请求侧自然读不到 → 全量 {@code 1002}。
+     * 该缺陷只在「本模块是 JVM 里第一个加载 Spring 上下文的模块」时出现，
+     * 因此表现为「单跑红、全量绿」的顺序依赖。实例级 {@code @BeforeEach} 保证上下文已就绪。
+     */
+    @BeforeEach
+    void login() {
         adminToken = MessageTestApplication.loginToken(1L, "admin");
     }
 

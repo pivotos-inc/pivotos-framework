@@ -116,6 +116,13 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      # 测试隔离静态门禁（2026-10-12）：禁止在 `static @BeforeAll` 里访问 Spring 装配的
+      # 全局静态状态（SaManager / Stp*Util.STP / createLoginSession / loginToken / LoginContext）。
+      # 先跑 --selfcheck 做负向自检，证明门禁本身会变红 —— 一条永远绿的门禁等于没有门禁。
+      - name: 测试隔离门禁（红线 + 负向自检）
+        run: |
+          python3 scripts/ops/check_test_isolation.py --selfcheck
+          python3 scripts/ops/check_test_isolation.py
       - name: 启动 Redis（带密码，与 dev 形态一致）
         run: |
           docker run -d --name pivotos-ci-redis -p 6379:6379 redis:8 redis-server --requirepass root_ci
@@ -156,11 +163,21 @@ jobs:
           PIVOTOS_TEST_REDIS_PORT: '6379'
           # ⚠️ 绝不能是空串：空串会让 Redisson 发 AUTH "" 被 Redis 8 拒绝（详见上方注释）
           PIVOTOS_TEST_REDIS_PASSWORD: root_ci
-        # runOrder=alphabetical（2026-10-12）：surefire 默认是 filesystem 顺序，
-        # 而**文件遍历顺序在不同 OS 上不同** —— 一旦存在「测试间耦合」，就会出现
-        # 「本机全量绿、runner 全量红」且本机怎么都复现不出来。固定成字母序，
-        # 至少让顺序成为常量（本机已验证 alphabetical 下全量绿）。
-        run: mvn -B clean verify -Dsurefire.runOrder=alphabetical
+        # 这里**刻意不再**固定 -Dsurefire.runOrder=alphabetical（2026-10-12 拆除）。
+        #
+        # 它曾经是根因的止痛药：surefire 默认 filesystem 顺序在不同 OS 上不同，
+        # 一旦存在测试间耦合，就会出现「本机全量绿、runner 全量红」且本机复现不出来。
+        # 固定字母序只是把顺序变成常量，**耦合本身没消除**。
+        #
+        # 根因已于 2026-10-12 定位并修掉：JUnit 5 的 `static @BeforeAll` 早于 Spring 测试
+        # 上下文加载，而 Sa-Token 的 `SaManager` 是全局静态单例、dao **惰性初始化** ——
+        # 首次调用会把它锁定为内存实现，造出的 token 只写进内存；等上下文加载完，dao 被
+        # 换成 Redis 实现，请求侧读不到 → 全部 1002。只要同 JVM 里已有别的测试类先加载过
+        # 上下文就恰好是 Redis dao（这就是「单跑红、全量绿」的成因）。
+        #
+        # 修法：token 初始化挪到实例级 @BeforeEach。并由
+        # `scripts/ops/check_test_isolation.py` 静态守着不再复发（见上一步）。
+        run: mvn -B clean verify
 
       # 二分定位：全量红了之后，把首个失败模块**单独**重跑一次并上报结论。
       # 「全量红 + 单跑绿」= 测试间耦合/顺序问题；「全量红 + 单跑也红」= 该模块本身在 runner 上不过。
@@ -181,7 +198,7 @@ jobs:
           RESULT=FAIL
           if mvn -B -pl pivotos-plugins/pivotos-plugin-message -am test \
               -Dtest=MessageIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false \
-              -Dsurefire.runOrder=alphabetical > /tmp/bisect.log 2>&1; then
+              > /tmp/bisect.log 2>&1; then
             RESULT=SUCCESS
           fi
           TAIL=$(grep -E "Tests run:" /tmp/bisect.log | tail -1 | cut -c1-100)
