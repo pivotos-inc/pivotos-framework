@@ -62,7 +62,13 @@ import static org.assertj.core.api.Assertions.assertThat;
         // 双保险：本 IT 只做发现与调用，绝不把自己注册进去污染 Nacos
         "spring.cloud.nacos.discovery.register-enabled=false",
         "spring.cloud.nacos.discovery.fail-fast=false",
-        "spring.cloud.nacos.discovery.failure-tolerance-enabled=true"
+        "spring.cloud.nacos.discovery.failure-tolerance-enabled=true",
+        // 【必填，否则上下文根本起不来】SCA 在 environmentPrepared 阶段就校验
+        // 「spring.config.import 里必须有 nacos: 条目」，缺失直接抛
+        // No spring.config.import set —— 报错与「Nacos 连不上 / 没实例」长得完全不像。
+        // 本 IT 只测注册发现，不读配置中心，故指一个刻意不存在的 dataId 并以 optional: 兜底。
+        // （V3-S2 L6 接入 nacos-config 后此门槛才生效，本 IT 写于 L3，当时无需此行 → 被后续变更打挂。）
+        "spring.config.import[0]=optional:nacos:pivotos-nacos-it.yaml"
     }
 )
 class AlibabaNacosRealServerIT {
