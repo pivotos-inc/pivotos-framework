@@ -583,6 +583,11 @@
                 <artifactId>pivotos-starter-metrics</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-tracing</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <!-- ========== ST-CLOUD（V3-S2 L2）：三通道 SPI 契约 + local/cloud/alibaba 三个实现 ========== -->
             <!-- cloud-api 零三方中间件依赖（只依赖 Spring Boot / servlet / 本项目 core），
                  单体形态默认只引它与 cloud-local，fat jar 与引入前完全一致 -->

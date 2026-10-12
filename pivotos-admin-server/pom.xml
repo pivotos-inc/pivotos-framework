@@ -93,6 +93,15 @@
             <artifactId>pivotos-starter-metrics</artifactId>
         </dependency>
 
+        <!-- ===== ST-TRACING（v3.2.0 · P1-B8-2）：链路追踪底座（Micrometer Tracing + OTel 桥接 +
+             OTLP 导出 + X-Trace-Id 桥接 + MDC 补 userId/tenantId）。
+             ⚠️ 默认 pivotos.tracing.enabled=false —— 引了依赖不等于开启（与 cloud alibaba「引入 ≠ 生效」
+             同一口径）：未配 Collector 就开启只会得到导出失败的日志噪音，故默认零行为变化。 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-tracing</artifactId>
+        </dependency>
+
         <!-- ===== 业务 Plugin（system-api/message-api 由 plugin 传递带入） ===== -->
         <dependency>
             <groupId>com.pivotos</groupId>

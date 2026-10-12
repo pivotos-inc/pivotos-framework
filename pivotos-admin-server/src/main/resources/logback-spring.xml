@@ -48,8 +48,12 @@
     <springProperty scope="context" name="ERROR_MAX_HISTORY" source="pivotos.log.error-max-history" defaultValue="60"/>
     <springProperty scope="context" name="ERROR_TOTAL_SIZE_CAP" source="pivotos.log.error-total-size-cap" defaultValue="1GB"/>
 
-    <!-- pattern 统一字段：时间 级别 线程 logger traceId 消息；traceId 缺省时留空占位 -->
-    <property name="PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} [%X{traceId:-}] - %msg%n"/>
+    <!-- pattern 统一字段：时间 级别 线程 logger traceId 身份 消息；缺省时留空占位。
+         userId / tenantId 由 pivotos-starter-tracing 的 MdcContextFilter 写入（v3.2.0 · P1-B8-2），
+         ⚠️ 该模块默认 pivotos.tracing.enabled=false —— 未开启时这两段恒为空占位（u=-,t=-），
+         属预期形态，不是「没生效」。要它们有值就显式开 PIVOTOS_TRACING_ENABLED=true。
+         含身份维度是刻意的：多租户下只有 traceId 无法回答「哪个租户的请求在报错」。 -->
+    <property name="PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} [%X{traceId:-}] [u=%X{userId:-},t=%X{tenantId:-}] - %msg%n"/>
 
     <!-- ============ prod / test：滚动文件（不重复写控制台） ============ -->
     <!-- ⚠️ 表达式写成单个「prod | test」而不是拆两个块：两个块都命中时会出现
