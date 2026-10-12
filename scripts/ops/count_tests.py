@@ -176,7 +176,11 @@ def main() -> int:
             "reportCount": len(reports),
             "problems": problems,
         }
-        Path(args.json).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        # 目录不存在会 FileNotFoundError：本机根模块往往没有 target/（只有子模块才有），
+        # 而 CI 里 target/ 是存在的，于是这个坑只在本机复现、CI 上看不到（2026-10-12）。
+        out = Path(args.json)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"[count-tests] 已冻结到 {args.json}")
 
     bad = total["failures"] + total["errors"]

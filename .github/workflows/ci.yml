@@ -99,12 +99,16 @@ jobs:
         options: >-
           --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot_ci"
           --health-interval=5s --health-timeout=5s --health-retries=20
-      redis:
-        image: redis:8
-        ports: ['6379:6379']
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=5s --health-timeout=5s --health-retries=20
+      # Redis **刻意不放在 services 里**：services 只接受 image/ports/options，
+      # 没有 docker run 的 command 参数，而我们需要 `redis-server --requirepass root_ci`。
+      # （2026-10-12 实测：redis:8 官方镜像不支持 REDIS_ARGS 之类的等价环境变量，
+      #   加了也照样无密码 —— 所以只能自己 docker run，见下面的「启动 Redis」步骤。）
+      #
+      # 为什么**必须**带密码：Redisson 拿到**空字符串**密码也照样发 `AUTH ""`，
+      # Redis 8 会直接拒绝 —— `ERR AUTH <password> called without any password configured`，
+      # 表层现象是测试的 IllegalStateException: Failed to load ApplicationContext，
+      # 根因却在 Bean 创建深处的 RedisConnectionException（CI 红了三轮才靠摘要挖出来）。
+      # 让容器带密码，与 dev 环境一致（dev 的 Redis 也是带密码的）。
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -112,6 +116,16 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      - name: 启动 Redis（带密码，与 dev 形态一致）
+        run: |
+          docker run -d --name pivotos-ci-redis -p 6379:6379 redis:8 redis-server --requirepass root_ci
+          for i in $(seq 1 30); do
+            if docker exec pivotos-ci-redis redis-cli -a root_ci --no-auth-warning ping 2>/dev/null | grep -q PONG; then
+              echo "Redis 就绪（带密码）"; exit 0
+            fi
+            sleep 2
+          done
+          echo "Redis 未在 60s 内就绪"; docker logs pivotos-ci-redis; exit 1
       - name: 全量测试（ArchUnit A1-A7 随 verify 一并执行）
         # ⚠️ 这里的变量名必须与测试配置里真正消费的名字一致，否则注入毫无效果且不报错。
         # （2026-10-11 修复：此前注入的是 MYSQL_HOST / MYSQL_DB / REDIS_* 一组名字，
@@ -127,7 +141,8 @@ jobs:
           PIVOTOS_TEST_MYSQL_PASSWORD: root_ci
           PIVOTOS_TEST_REDIS_HOST: 127.0.0.1
           PIVOTOS_TEST_REDIS_PORT: '6379'
-          PIVOTOS_TEST_REDIS_PASSWORD: ''
+          # ⚠️ 绝不能是空串：空串会让 Redisson 发 AUTH "" 被 Redis 8 拒绝（详见上方注释）
+          PIVOTOS_TEST_REDIS_PASSWORD: root_ci
         run: mvn -B clean verify
 
       # 必须在 verify **之后**执行：verify 会清空并重建 target，报告是它跑出来的。
