@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.pivotos</groupId>
+        <artifactId>pivotos-starters</artifactId>
+        <version>3.1.0</version>
+    </parent>
+
+    <artifactId>pivotos-starter-tracing</artifactId>
+
+    <name>pivotos-starter-tracing</name>
+    <description>ST-TRACING 链路追踪（v3.2.0 · P1-B8-2）：Micrometer Tracing + OpenTelemetry 桥接 + OTLP 导出 + X-Trace-Id 桥接 + MDC 补 userId/tenantId</description>
+
+    <dependencies>
+        <!-- ========== Tracing 底座（Boot 4.1.1 形态，勿照抄 Boot 3 文档） ========== -->
+        <!-- 取证（2026-10-12，与 V3.1-F 的 B8-1 同款「先取证再动手」）：
+             ① Boot 4 **没有** spring-boot-starter-micrometer-tracing —— 只有 spring-boot-micrometer-tracing
+                （Maven Central 上该 artifactId 的 4.x 版本列表里查不到 starter 变体）；
+             ② 桥接要引 spring-boot-micrometer-tracing-opentelemetry，而它 **不再依赖**
+                micrometer-tracing-bridge-otel（Boot 4 把桥接做进了自己的模块），
+                但它的 OtlpTracingAutoConfiguration 上有
+                @ConditionalOnClass(io.micrometer.tracing.otel.bridge.OtelTracer) —— 这个类恰恰在
+                micrometer-tracing-bridge-otel 里。**缺了它 OTLP 导出自动配置静默不生效**（不报错，
+                只是没有 span 出去）。
+             ③ 因此本模块显式引三件：tracing-opentelemetry + bridge-otel + exporter-otlp。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-micrometer-tracing-opentelemetry</artifactId>
+        </dependency>
+
+        <!-- 提供 io.micrometer.tracing.otel.bridge.OtelTracer（上面第 ② 条，必引） -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+
+        <!-- 提供 io.opentelemetry.exporter.otlp.http.trace.OtlpHttpSpanExporter（OtlpTracingAutoConfiguration 的
+             @ConditionalOnClass 之一）。版本由 Boot BOM import 的 opentelemetry-bom（4.1.1 实测 1.62.0）管理，
+             本仓不另行仲裁——与 V3.1-F「micrometer-registry-prometheus 不在 Boot BOM 直接条目里」是两回事，
+             这个构件在 opentelemetry-bom 里。 -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+
+        <!-- MDC 需要 userId / tenantId：LoginContext / TenantContext 在 starter-core。
+             ArchUnit 只禁 starter → plugin（A3），不禁 starter → starter。 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>
