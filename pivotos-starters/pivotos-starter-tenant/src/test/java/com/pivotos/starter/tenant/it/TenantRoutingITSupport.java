@@ -41,8 +41,23 @@ abstract class TenantRoutingITSupport {
         return pwd != null ? pwd : "";
     }
 
+    /**
+     * 补 {@code createDatabaseIfNotExist=true}：直连的 JDBC URL 不带它时，
+     * **库不存在就直接 `Unknown database`**（2026-10-12 在 CI 上就是这样红的：
+     * runner 每次都是全新容器、库全靠测试自己建，而这里是 DriverManager 直连、
+     * 不走 Spring 数据源，连接串里那一份 createDatabaseIfNotExist 帮不上忙）。
+     * 本机之所以长期绿，是因为库早被别的测试建好了 —— 典型的「本机绿、CI 红」。
+     */
+    private static String withCreateDatabaseIfNotExist(String jdbcUrl) {
+        if (jdbcUrl.contains("createDatabaseIfNotExist")) {
+            return jdbcUrl;
+        }
+        return jdbcUrl + (jdbcUrl.contains("?") ? "&" : "?") + "createDatabaseIfNotExist=true";
+    }
+
     protected static void createFixtureTableIfAbsent(String jdbcUrl) throws Exception {
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, "root", testMysqlPassword());
+        String url = withCreateDatabaseIfNotExist(jdbcUrl);
+        try (Connection conn = DriverManager.getConnection(url, "root", testMysqlPassword());
              Statement st = conn.createStatement()) {
             st.execute("CREATE TABLE IF NOT EXISTS t_tenant_demo ("
                     + "id BIGINT NOT NULL, title VARCHAR(128) NOT NULL,"

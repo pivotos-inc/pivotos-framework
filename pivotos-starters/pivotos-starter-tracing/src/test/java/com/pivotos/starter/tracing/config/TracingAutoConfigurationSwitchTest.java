@@ -77,6 +77,23 @@ class TracingAutoConfigurationSwitchTest {
     }
 
     @Test
+    void sampler_must_be_primary_or_the_whole_app_fails_to_start() {
+        // 真机踩到（2026-10-12）：Boot 自带 otelSampler，本 Bean 若不是 @Primary，
+        // otelSdkTracerProvider 注入处会报 "expected single matching bean but found 2:
+        // otelSampler,tracingSampler" —— 后果是**整个应用起不来**，不是「追踪不可用」这种降级。
+        // 这条守卫看的是 BeanDefinition 的 primary 标志（光断言「有这个 bean」盖不住这个故障）。
+        runner.withPropertyValues(
+            "pivotos.tracing.enabled=true",
+            "pivotos.tracing.sampling-probability=0.1").run(context -> {
+            assertThat(context).hasSingleBean(Sampler.class);
+            org.springframework.beans.factory.config.BeanDefinition definition =
+                ((org.springframework.context.ConfigurableApplicationContext) context.getSourceApplicationContext())
+                    .getBeanFactory().getBeanDefinition("tracingSampler");
+            assertThat(definition.isPrimary()).as("tracingSampler 必须是 @Primary").isTrue();
+        });
+    }
+
+    @Test
     void sampler_registered_only_when_probability_is_configured() {
         runner.withPropertyValues("pivotos.tracing.enabled=true").run(context ->
             assertThat(context).doesNotHaveBean(Sampler.class));

@@ -59,6 +59,23 @@ WORK_ROOT = "/tmp/pivotos-v32a-sentinel-e2e"
 LOGIN_PATH = "/system/auth/login"
 BLOCK_MARK = "Blocked by Sentinel"
 
+# --local-db 用的环境变量：把数据源/Redis 指到本机容器（与 CI 的 services 同参数）。
+# 为什么需要这个开关：dev yml 的兜底连接串指向开发服务器 175.24.176.176，
+# 该机不可达时应用根本起不来（Flyway 校验卡住），本脚本就会全线假红 ——
+# 而「远端不通」与「限流没生效」是两件事，必须能分开。
+LOCAL_DB_ENV = {
+    "PIVOTOS_MYSQL_URL": "jdbc:mysql://127.0.0.1:3306/pivotos_dev?useUnicode=true&characterEncoding=utf8"
+                         "&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
+                         "&createDatabaseIfNotExist=true&allowMultiQueries=false",
+    "PIVOTOS_MYSQL_USERNAME": "root",
+    "PIVOTOS_MYSQL_PASSWORD": "root_ci",
+    # ⚠️ 密码绝不能是空串：Redisson 拿到空串照样发 AUTH "" 会被 Redis 拒绝
+    "PIVOTOS_REDIS_HOST": "127.0.0.1",
+    "PIVOTOS_REDIS_PASSWORD": "root_ci",
+}
+
+LOCAL_DB = False
+
 results = []
 
 
@@ -120,10 +137,14 @@ def start_server(tag, cli_args, env_extra=None, timeout=420):
     os.makedirs(cwd, exist_ok=True)
     cmd = [JAVA, "-Djna.library.path=/opt/homebrew/lib", "-Djava.awt.headless=true",
            "-jar", JAR, "--spring.profiles.active=dev"] + list(cli_args)
-    log("START", f"起服（{tag}）日志={log_path}")
+    effective_env = dict(env_extra or {})
+    if LOCAL_DB:
+        effective_env = {**LOCAL_DB_ENV, **effective_env}
+    log("START", f"起服（{tag}）日志={log_path}"
+                 f"{' [本地库 127.0.0.1]' if LOCAL_DB else ' [dev yml 兜底=远端]'}")
     fh = open(log_path, "wb")
     proc = subprocess.Popen(cmd, stdout=fh, stderr=subprocess.STDOUT,
-                            env=clean_env(env_extra), cwd=cwd)
+                            env=clean_env(effective_env), cwd=cwd)
     deadline = time.time() + timeout
     while time.time() < deadline:
         if proc.poll() is not None:
@@ -326,8 +347,14 @@ def main():
     ap.add_argument("--nacos-addr", default="127.0.0.1:9999",
                     help="Nacos 地址（默认指不可达端口，让连接快速失败；"
                          "指真机会显著拉长起服时间）")
+    ap.add_argument("--local-db", action="store_true",
+                    help="把数据源与 Redis 指到本机 127.0.0.1（docker 起的 mysql:8.4 / redis:8，"
+                         "与 CI services 同参数）。远端开发服务器不可达时必须加这个开关，"
+                         "否则起不来 —— 那不是限流没生效，是环境不通。")
     args = ap.parse_args()
 
+    global LOCAL_DB
+    LOCAL_DB = args.local_db
     os.makedirs(WORK_ROOT, exist_ok=True)
     assert_alibaba_jar()
     log("PRE", f"fat jar = {JAR}（{os.path.getsize(JAR)} 字节，形态校验通过：含 sentinel/nacos）")
