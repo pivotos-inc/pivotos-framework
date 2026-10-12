@@ -156,7 +156,38 @@ jobs:
           PIVOTOS_TEST_REDIS_PORT: '6379'
           # ⚠️ 绝不能是空串：空串会让 Redisson 发 AUTH "" 被 Redis 8 拒绝（详见上方注释）
           PIVOTOS_TEST_REDIS_PASSWORD: root_ci
-        run: mvn -B clean verify
+        # runOrder=alphabetical（2026-10-12）：surefire 默认是 filesystem 顺序，
+        # 而**文件遍历顺序在不同 OS 上不同** —— 一旦存在「测试间耦合」，就会出现
+        # 「本机全量绿、runner 全量红」且本机怎么都复现不出来。固定成字母序，
+        # 至少让顺序成为常量（本机已验证 alphabetical 下全量绿）。
+        run: mvn -B clean verify -Dsurefire.runOrder=alphabetical
+
+      # 二分定位：全量红了之后，把首个失败模块**单独**重跑一次并上报结论。
+      # 「全量红 + 单跑绿」= 测试间耦合/顺序问题；「全量红 + 单跑也红」= 该模块本身在 runner 上不过。
+      # 这两种情况的修法完全不同，靠猜一定会走错方向。
+      - name: 二分定位：单独重跑首个失败模块
+        if: failure()
+        continue-on-error: true
+        env:
+          PIVOTOS_TEST_MYSQL_HOST: 127.0.0.1
+          PIVOTOS_TEST_MYSQL_PORT: '3306'
+          PIVOTOS_TEST_MYSQL_USERNAME: root
+          PIVOTOS_TEST_MYSQL_PASSWORD: root_ci
+          PIVOTOS_TEST_REDIS_HOST: 127.0.0.1
+          PIVOTOS_TEST_REDIS_PORT: '6379'
+          PIVOTOS_TEST_REDIS_PASSWORD: root_ci
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RESULT=FAIL
+          if mvn -B -pl pivotos-plugins/pivotos-plugin-message -am test \
+              -Dtest=MessageIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false \
+              -Dsurefire.runOrder=alphabetical > /tmp/bisect.log 2>&1; then
+            RESULT=SUCCESS
+          fi
+          TAIL=$(grep -E "Tests run:" /tmp/bisect.log | tail -1 | cut -c1-100)
+          python3 scripts/ops/ci_failure_digest.py --repo ${{ github.repository }} \
+            --sha ${{ github.sha }} --report ci-bisect-message \
+            --state failure --text "单独重跑=$RESULT | $TAIL"
 
       # 必须在 verify **之后**执行：verify 会清空并重建 target，报告是它跑出来的。
       # 冻结成 JSON 是为了留一条「这一轮到底跑了多少条」的可回溯证据——
