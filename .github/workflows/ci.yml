@@ -6,9 +6,14 @@ on:
   pull_request:
     branches: [master, develop]
 
-# 最小权限：本流水线只读取代码、写出 workflow 产物，不需要更多。
+# 最小权限：本流水线只读取代码、写出 workflow 产物；
+# statuses:write 是给「失败摘要上报」用的 —— Actions 的日志与 artifact 下载都要求 admin 权限
+# （实测匿名 GET /actions/jobs/{id}/logs → 403 Must have admin rights），
+# 没有令牌的人只能看到「哪个 step 红了」而看不到原因。commit status 对 public 仓匿名可读，
+# 把摘要写进去后，任何人 `curl .../commits/<sha>/statuses` 都能读到定位信息（2026-10-12）。
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   compat-matrix:
@@ -131,6 +136,15 @@ jobs:
       - name: 冻结 IT 计数
         if: always()
         run: python3 scripts/ops/count_tests.py --json target/ci-test-counts.json
+
+      # 失败时把摘要写进 commit status：唯一一条「不持令牌也能读到失败原因」的通道。
+      # continue-on-error 是刻意的：上报只是锦上添花，它自己挂了不该改变构建结论。
+      - name: 失败摘要上报（写进 commit status，匿名可读）
+        if: failure()
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/ops/ci_failure_digest.py --repo ${{ github.repository }} --sha ${{ github.sha }}
 
       - name: 归档测试报告（surefire / failsafe）
         if: always()

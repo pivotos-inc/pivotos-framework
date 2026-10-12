@@ -1,5 +1,6 @@
 package com.pivotos.starter.tracing.propagation;
 
+import com.pivotos.starter.core.context.TraceContext;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanContext;
 import io.opentelemetry.api.trace.TraceFlags;
@@ -43,6 +44,29 @@ class XTraceIdPropagatorTest {
     @Test
     void fields_declares_only_the_project_header() {
         assertThat(propagator.fields()).containsExactly("X-Trace-Id");
+    }
+
+    @Test
+    void prefers_bound_trace_context_when_request_has_no_header() {
+        // 覆盖「普通请求」这一大多数场景：入口 TraceIdFilter 生成了 id（写进 MDC / 响应头），
+        // 但请求头里没有 X-Trace-Id —— 此时必须沿用入口那个 id，否则日志与 Jaeger 各说各话
+        Map<String, String> carrier = new HashMap<>();
+
+        Context extracted = ScopedValue.where(TraceContext.KEY, TRACE_ID)
+            .call(() -> propagator.extract(Context.root(), carrier, GETTER));
+
+        assertThat(Span.fromContext(extracted).getSpanContext().getTraceId()).isEqualTo(TRACE_ID);
+    }
+
+    @Test
+    void bound_trace_context_wins_over_conflicting_header() {
+        // MDC / 响应头用的是 TraceContext 的值，故以它为准，保证「日志 / 响应头 / Jaeger 三处同 ID」
+        Map<String, String> carrier = Map.of(XTraceIdPropagator.HEADER, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+
+        Context extracted = ScopedValue.where(TraceContext.KEY, TRACE_ID)
+            .call(() -> propagator.extract(Context.root(), carrier, GETTER));
+
+        assertThat(Span.fromContext(extracted).getSpanContext().getTraceId()).isEqualTo(TRACE_ID);
     }
 
     @Test

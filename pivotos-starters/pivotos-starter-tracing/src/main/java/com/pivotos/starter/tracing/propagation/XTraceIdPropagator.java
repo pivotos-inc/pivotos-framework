@@ -1,6 +1,7 @@
 package com.pivotos.starter.tracing.propagation;
 
 import com.pivotos.common.core.constant.CommonConstants;
+import com.pivotos.starter.core.context.TraceContext;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanContext;
 import io.opentelemetry.api.trace.SpanId;
@@ -65,14 +66,43 @@ public class XTraceIdPropagator implements TextMapPropagator {
 
     @Override
     public <C> Context extract(Context context, C carrier, TextMapGetter<C> getter) {
-        String raw = getter.get(carrier, HEADER);
-        String traceId = normalize(raw);
+        String traceId = resolveTraceId(carrier, getter);
         if (traceId == null) {
             return context;
         }
         SpanContext parent = SpanContext.create(traceId, randomSpanId(),
             TraceFlags.getSampled(), TraceState.getDefault());
         return context.with(Span.wrap(parent));
+    }
+
+    /**
+     * 决定用哪个 traceId，优先级：
+     * <ol>
+     *   <li><b>请求入口已绑定的 {@link TraceContext}</b>（{@code TraceIdFilter} 写入）；
+     *   <li>入站 {@code X-Trace-Id} 请求头；
+     *   <li>都没有 → 返回 null，交给 OTel 自己生成。</li>
+     * </ol>
+     *
+     * <p><b>为什么必须有第 1 条</b>（这条是本轮设计缺陷的修正）：
+     * 只认请求头时，「入站没带 {@code X-Trace-Id}」的普通请求（浏览器直连、定时任务回调）
+     * 会出现两个 traceId —— {@code TraceIdFilter} 生成的进了 MDC 与响应头，
+     * OTel 又自己生成了一个进了 span。**日志里的 ID 在 Jaeger 里搜不到**，
+     * 而且这种请求恰恰占绝大多数：桥接只在「上游传了头」时才成立等于没桥。
+     * {@code TraceIdFilter} 的 order 是 {@code HIGHEST_PRECEDENCE}、且用 ScopedValue 绑定，
+     * 到 Observation 创建 span 时（仍是同一请求线程）它必然可见，因此取它最准确。
+     *
+     * <p>两者不一致时以 {@link TraceContext} 为准：MDC、响应头用的都是它，
+     * 以它为准才能保证「三处（日志 / 响应头 / Jaeger）同一个 ID」。
+     */
+    private <C> String resolveTraceId(C carrier, TextMapGetter<C> getter) {
+        String bound = normalize(TraceContext.get());
+        if (bound != null) {
+            return bound;
+        }
+        if (getter == null || carrier == null) {
+            return null;
+        }
+        return normalize(getter.get(carrier, HEADER));
     }
 
     /** 合法化：null / 非 32 位十六进制 / 全 0 一律返回 null（表示不桥接） */
