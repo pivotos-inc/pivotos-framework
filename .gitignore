@@ -16,3 +16,4 @@ pivotos-admin-server/data/
 
 # Python 测试脚本缓存（S115 起 scripts/e2e 引入 python 模块）
 __pycache__/
+build/
