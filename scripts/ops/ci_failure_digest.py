@@ -25,7 +25,9 @@ import glob
 import json
 import os
 import re
+import socket
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -87,6 +89,53 @@ def collect(report_dirs):
     return failures, errors, lines
 
 
+def probe_env():
+    """探测 CI 里的中间件与机器环境 —— 本机绿 / runner 红这类差异，只能靠现场取证。
+
+    只用标准库：runner 上没有 pymysql。
+    """
+    parts = []
+    # MySQL：握手包里带版本号（明文，可直接读）
+    try:
+        with socket.create_connection(("127.0.0.1", 3306), timeout=5) as s:
+            s.settimeout(5)
+            greeting = s.recv(200)
+        idx = greeting.find(b"\x00", 5)
+        version = greeting[5:idx].decode("utf-8", "replace") if idx > 0 else "?"
+        parts.append(f"MySQL {version}")
+    except Exception as e:
+        parts.append(f"MySQL {type(e).__name__}")
+    # Redis：无密码会直接 PONG；要求密码会回 -NOAUTH（都算通）
+    try:
+        with socket.create_connection(("127.0.0.1", 6379), timeout=5) as s:
+            s.settimeout(5)
+            s.sendall(b"*1\r\n$4\r\nPING\r\n")
+            reply = s.recv(80).decode("utf-8", "replace").strip()
+        parts.append(f"Redis {reply[:12]}")
+    except Exception as e:
+        parts.append(f"Redis {type(e).__name__}")
+    parts.append("TZ=" + (os.environ.get("TZ") or time.strftime("%Z")))
+    parts.append(time.strftime("%H:%M"))
+    return " | ".join(parts)
+
+
+def publish(repo, sha, context, state, description, token):
+    payload = json.dumps({"state": state, "description": description[:MAX_DESC],
+                          "context": context}).encode()
+    req = urllib.request.Request(f"https://api.github.com/repos/{repo}/statuses/{sha}",
+                                 data=payload, method="POST", headers={
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            print(f"[digest] {context} 上报成功 HTTP {resp.status}")
+    except urllib.error.HTTPError as e:
+        print(f"[digest] {context} 上报失败 HTTP {e.code}: {e.read()[:160]!r}", file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True, help="owner/name")
@@ -115,8 +164,11 @@ def main():
             description = f"无测试失败，异常={etype_short}"
         state = "failure"
     else:
-        # 异常类型优先：140 字符很紧，「BeanCreationException」比三个用例名有用得多
-        head = f"F{failures} E{errors} {etype_short or ''}: " + "; ".join(ordered[:4])
+        # 排序：异常类型 > **异常消息** > 用例名。
+        # 「AssertionError」只能说明是断言红，「expected:<0> but was:<1002>」才说明是没登录 ——
+        # 后者才是能直接动手的信息（2026-10-12 第五轮 CI 就卡在这一层）。
+        head = f"F{failures} E{errors} {etype_short or ''}: {message}" if message else \
+            f"F{failures} E{errors} {etype_short or ''}: " + "; ".join(ordered[:4])
         description = head[:MAX_DESC]
         state = "failure"
     if message:
@@ -133,24 +185,15 @@ def main():
         print("[digest] 未设 GITHUB_TOKEN，跳过上报（不影响构建结论）", file=sys.stderr)
         return 0
 
-    payload = json.dumps({
-        "state": state,
-        "description": description,
-        "context": args.context,
-    }).encode()
-    url = f"https://api.github.com/repos/{args.repo}/statuses/{args.sha}"
-    req = urllib.request.Request(url, data=payload, method="POST", headers={
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "Content-Type": "application/json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    })
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            print(f"[digest] 上报成功 HTTP {resp.status}")
-    except urllib.error.HTTPError as e:
-        # 上报失败绝不能把 CI 结论从「失败」变成「构建错误」以外的误判，只提示
-        print(f"[digest] 上报失败 HTTP {e.code}: {e.read()[:200]!r}", file=sys.stderr)
+    publish(args.repo, args.sha, args.context, state, description, token)
+
+    # 分段续报：一个 status 只有 140 字符，装不下完整消息与现场信息。
+    # 出现「本机绿 / runner 红」时，靠的就是这几段（2026-10-12 第五轮 CI 正是卡在这里）。
+    for i, chunk_start in enumerate(range(0, len(message), MAX_DESC), start=1):
+        chunk = message[chunk_start:chunk_start + MAX_DESC]
+        if chunk:
+            publish(args.repo, args.sha, f"{args.context}-msg{i}", state, chunk, token)
+    publish(args.repo, args.sha, f"{args.context}-env", state, probe_env(), token)
     return 0
 
 

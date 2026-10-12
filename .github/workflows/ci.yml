@@ -126,6 +126,19 @@ jobs:
             sleep 2
           done
           echo "Redis 未在 60s 内就绪"; docker logs pivotos-ci-redis; exit 1
+      # 预建 8 个测试库，且字符集/排序规则与 dev 库一致（utf8mb4_general_ci）。
+      # 不预建的话，库由连接串的 createDatabaseIfNotExist=true 自动建，
+      # 用的是**服务器的默认排序规则** utf8mb4_0900_ai_ci —— 与日常开发库不同，
+      # 硬生生多出一处「本机绿、CI 红」的环境差异。库名与 reset_test_databases.py 的白名单一致。
+      - name: 预建测试库（字符集与 dev 一致）
+        run: |
+          CID=$(docker ps --filter "ancestor=mysql:8.4" --format '{{.ID}}' | head -1)
+          for db in pivotos_test test test_message test_tenant test_tenant_s1 test_tenant_s2 test_tenant_d1 test_tenant_d2; do
+            docker exec "$CID" mysql -uroot -proot_ci \
+              -e "CREATE DATABASE IF NOT EXISTS $db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci"
+          done
+          docker exec "$CID" mysql -uroot -proot_ci -e "SHOW DATABASES"
+
       - name: 全量测试（ArchUnit A1-A7 随 verify 一并执行）
         # ⚠️ 这里的变量名必须与测试配置里真正消费的名字一致，否则注入毫无效果且不报错。
         # （2026-10-11 修复：此前注入的是 MYSQL_HOST / MYSQL_DB / REDIS_* 一组名字，
