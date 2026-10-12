@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-starters</artifactId>
-        <version>3.0.0</version>
+        <version>3.1.0</version>
     </parent>
 
     <artifactId>pivotos-starter-search</artifactId>
@@ -19,6 +19,14 @@
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-search-api</artifactId>
+        </dependency>
+
+        <!-- ST-METRICS（V3.1-F · P1-B8-1）：检索调用量埋点。
+              SearchTemplateImpl 通过 ObjectProvider 取 BusinessMetrics，拿不到就降级 no-op，
+             故本依赖是「有指标更好、没有也能跑」的可选增强，不影响检索可用性。 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-metrics</artifactId>
         </dependency>
 
         <!-- JSON 统一 fastjson2：实体 ↔ 扁平文档映射 -->

@@ -1,8 +1,8 @@
 spring:
   data:
     redis:
-      host: ${REDIS_HOST:175.24.176.176}
-      port: 6379
+      host: ${PIVOTOS_TEST_REDIS_HOST:${REDIS_HOST:175.24.176.176}}
+      port: ${PIVOTOS_TEST_REDIS_PORT:${REDIS_PORT:6379}}
       password: ${PIVOTOS_TEST_REDIS_PASSWORD:${REDIS_PASSWORD:}}
       timeout: 5s
 

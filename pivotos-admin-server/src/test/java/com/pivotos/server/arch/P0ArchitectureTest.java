@@ -4,6 +4,7 @@ import com.pivotos.ai.api.enums.ToolType;
 import com.pivotos.ai.api.tool.AiToolMeta;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -391,6 +392,173 @@ class P0ArchitectureTest {
         String className = parts.length > 0 ? parts[parts.length - 1].replace(".java", "") : tail;
         String module = parts.length > 1 ? parts[1] : "";
         return module + "/" + className;
+    }
+
+    // ========== A11：REST 端点必须有鉴权信号（v3.1.0 生产化 · A4，治 S5「漏鉴权零信号」） ==========
+    //
+    // 背景：全项目鉴权是「注解驱动 + 业务代码取 LoginContext 兜底」的双轨制
+    // （AuthAutoConfiguration 只注册 SaInterceptor，不做全局路由拦截）。
+    // 后果：一个新增端点只要「不读登录上下文」，就自动匿名可达，
+    // 编译期 / 启动期 / 单测 / 原有 10 条 ArchRule 全绿，零信号——
+    // §10-K 实证漏出 9 个 GET，本轮带参数重扫实为 11 个。
+    //
+    // 口径（与 A10 同款「登记制 + 新增即红」，不搞一刀切）：
+    //   ① 类上有 @SaCheck* —— 最优，新增方法自动继承；
+    //   ② 方法上有 @SaCheck*；
+    //   ③ 方法体（含同类一跳）读了登录上下文（LoginContext / Stp*Util），即「业务代码兜底」那一轨；
+    //   ④ 以上都不是 → 必须登记在 ANONYMOUS_ENDPOINTS（设计上就该匿名，须写理由）。
+    // 第三方 jar 自带端点（如 warm-flow 的 /warm-flow/**）不在此规则覆盖范围内
+    // （包不在 com.pivotos 下），由 starter-auth 的匿名访问闸门在路由层兜底。
+
+    /** 算「已声明鉴权」的 Sa-Token 注解 */
+    private static final java.util.Set<String> SA_AUTH_ANNOTATIONS = java.util.Set.of(
+        "cn.dev33.satoken.annotation.SaCheckLogin",
+        "cn.dev33.satoken.annotation.SaCheckPermission",
+        "cn.dev33.satoken.annotation.SaCheckRole",
+        "cn.dev33.satoken.annotation.SaCheckSafe",
+        "cn.dev33.satoken.annotation.SaCheckHttpBasic",
+        "cn.dev33.satoken.annotation.SaCheckDisable");
+
+    /**
+     * 算「读了登录上下文」的目标类（= 业务代码兜底那一轨）。
+     *
+     * <p>{@code WorkflowAuthSupport} 必须登记在这里：workflow 的待办/审批/抄送端点是
+     * <b>三体系</b>（管端 / App / 小程序）共用的，靠它做「已登录」校验。
+     * 若按「没加 {@code @SaCheck*} 就补 {@code @SaCheckLogin(type=sys)}」一刀切，
+     * 会直接把移动端审批打死——这正是本规则必须认识第二轨的原因。
+     */
+    private static final java.util.Set<String> LOGIN_CONTEXT_CLASSES = java.util.Set.of(
+        "com.pivotos.starter.core.context.LoginContext",
+        "com.pivotos.workflow.support.WorkflowAuthSupport",
+        "com.pivotos.starter.auth.account.StpSysUtil",
+        "com.pivotos.starter.auth.account.StpAppUtil",
+        "com.pivotos.starter.auth.account.StpWxMiniUtil",
+        "com.pivotos.starter.auth.account.StpMindUtil",
+        "com.pivotos.starter.auth.account.StpMobileUtil",
+        "cn.dev33.satoken.stp.StpUtil");
+
+    /** handler 方法注解 */
+    private static final java.util.Set<String> MAPPING_ANNOTATIONS = java.util.Set.of(
+        "org.springframework.web.bind.annotation.GetMapping",
+        "org.springframework.web.bind.annotation.PostMapping",
+        "org.springframework.web.bind.annotation.PutMapping",
+        "org.springframework.web.bind.annotation.DeleteMapping",
+        "org.springframework.web.bind.annotation.PatchMapping",
+        "org.springframework.web.bind.annotation.RequestMapping");
+
+    /**
+     * 设计上就该匿名的端点（登记制：每一条都必须写清理由，删了端点就要同步删登记，
+     * 否则规则会因「登记数与实际不符」而失真——与 A10 的 last() 白名单同款纪律）。
+     * 键 = Controller 简名#方法名。
+     *
+     * <p><b>登记即欠条</b>：这里的每一项都是「已知且接受的匿名面」，不是「已修复」。
+     *
+     * <p>注意 {@code OpsHealthController#live/#ready} <b>不在</b>本登记里：它们方法体读了
+     * {@code LoginContext}（判断是否给明细），按 ③ 已算「有鉴权信号」，规则天然放行。
+     * 「探针必须匿名可用」是运行时语义，由 {@code scripts/e2e/anonymous_endpoint_audit.py}
+     * 的 ALWAYS_ANONYMOUS 白名单守——两条规则分工：本规则管「有没有信号」，脚本管「实际能不能匿名打」。
+     */
+    private static final java.util.Map<String, String> ANONYMOUS_ENDPOINTS = java.util.Map.ofEntries(
+        java.util.Map.entry("AuthController#login", "管端登录入口：必须在未登录态可用"),
+        java.util.Map.entry("AppAuthController#login", "App 端登录入口：同上"),
+        java.util.Map.entry("MindAuthController#login", "智域端登录入口：同上"),
+        java.util.Map.entry("MindAuthController#password", "智域端账号密码登录：同上（返回登录凭证，非「修改密码」）"),
+        java.util.Map.entry("MiniAuthController#login", "小程序登录入口：同上"),
+        java.util.Map.entry("MiniAuthController#phone", "小程序手机号授权登录：同上"),
+        java.util.Map.entry("MiniAuthController#bind", "小程序首次绑定：绑定前尚未有登录态，必须匿名"),
+        java.util.Map.entry("EncryptKeyController#publicKey", "RSA 公钥：本身就是公开材料，供前端加密传输用（私钥不出服务端）"),
+        // V3.1-F · P1-B8-1：Prometheus 抓取端点。Prometheus server 抓取不带登录态，端点必须匿名可达；
+        // 代价是「指标全貌对任何能访问该端口的人可见」，故生产必须在网络层（Nginx/安全组）限制内网，
+        // 或直接用 PIVOTOS_METRICS_PROMETHEUS_ENABLED=false 把端点摘掉（指标仍在内存里，只是不对外）。
+        java.util.Map.entry("PrometheusScrapeController#scrape", "Prometheus 抓取端点：抓取方无登录态，必须匿名；生产须限内网或整体摘除"));
+
+    private static boolean hasSaAuth(com.tngtech.archunit.core.domain.JavaClass javaClass) {
+        return SA_AUTH_ANNOTATIONS.stream().anyMatch(a ->
+            javaClass.isAnnotatedWith(a) || javaClass.isMetaAnnotatedWith(a));
+    }
+
+    private static boolean hasSaAuth(com.tngtech.archunit.core.domain.JavaMethod method) {
+        return SA_AUTH_ANNOTATIONS.stream().anyMatch(a ->
+            method.isAnnotatedWith(a) || method.isMetaAnnotatedWith(a));
+    }
+
+    private static boolean isHandlerMethod(com.tngtech.archunit.core.domain.JavaMethod method) {
+        return MAPPING_ANNOTATIONS.stream().anyMatch(a -> method.isAnnotatedWith(a));
+    }
+
+    @ArchTest
+    static void a11_rest_endpoints_must_declare_auth(JavaClasses classes) {
+        List<String> violations = new ArrayList<>();
+        List<String> staleRegistry = new ArrayList<>();
+        java.util.Set<String> matchedRegistry = new java.util.HashSet<>();
+        int handlerCount = 0;
+        for (JavaClass javaClass : classes) {
+            if (!javaClass.isAnnotatedWith("org.springframework.web.bind.annotation.RestController")) {
+                continue;
+            }
+            boolean classAuth = hasSaAuth(javaClass);
+            // 本类里「直接读登录上下文」的方法名（供一跳判定：controller 里常见的
+            // requireUserId() 私有方法就是这种形态）
+            java.util.Set<String> contextReaderMethods = new java.util.HashSet<>();
+            for (JavaMethod m : javaClass.getMethods()) {
+                for (var call : m.getMethodCallsFromSelf()) {
+                    if (LOGIN_CONTEXT_CLASSES.contains(call.getTarget().getOwner().getName())) {
+                        contextReaderMethods.add(m.getName());
+                        break;
+                    }
+                }
+            }
+            for (JavaMethod m : javaClass.getMethods()) {
+                if (!isHandlerMethod(m)) {
+                    continue;
+                }
+                handlerCount++;
+                if (classAuth || hasSaAuth(m)) {
+                    continue;
+                }
+                boolean readsLoginContext = false;
+                for (var call : m.getMethodCallsFromSelf()) {
+                    String owner = call.getTarget().getOwner().getName();
+                    if (LOGIN_CONTEXT_CLASSES.contains(owner)) {
+                        readsLoginContext = true;
+                        break;
+                    }
+                    // 同类一跳：调用了本类里那个「读登录上下文」的方法（如 requireUserId()）
+                    if (owner.equals(javaClass.getName())
+                            && contextReaderMethods.contains(call.getTarget().getName())) {
+                        readsLoginContext = true;
+                        break;
+                    }
+                }
+                if (readsLoginContext) {
+                    continue;
+                }
+                String key = javaClass.getSimpleName() + "#" + m.getName();
+                if (ANONYMOUS_ENDPOINTS.containsKey(key)) {
+                    matchedRegistry.add(key);
+                } else {
+                    violations.add(key);
+                }
+            }
+        }
+        // 防「规则空转」：注解名写错 / 包路径变化时规则会静默扫到 0 个 handler，
+        // 那时「0 违规」是假绿。这里用规模下限把它钉住（全仓 handler 约 300 个）。
+        org.assertj.core.api.Assertions.assertThat(handlerCount)
+            .as("A11 自检：扫描到的 handler 方法只有 %d 个，疑似注解判定失效（规则正在空转）", handlerCount)
+            .isGreaterThanOrEqualTo(100);
+        for (String key : ANONYMOUS_ENDPOINTS.keySet()) {
+            if (!matchedRegistry.contains(key)) {
+                staleRegistry.add(key);
+            }
+        }
+        org.assertj.core.api.Assertions.assertThat(staleRegistry)
+            .as("A11：匿名端点登记已失效（端点已改名/删除，或已被加上鉴权），请同步清理登记：%s", staleRegistry)
+            .isEmpty();
+        org.assertj.core.api.Assertions.assertThat(violations)
+            .as("A11：REST 端点必须有鉴权信号（类/方法 @SaCheck*，或方法体读登录上下文），"
+                    + "否则须登记进 ANONYMOUS_ENDPOINTS 并写明理由。无信号端点 %d 个：%s",
+                violations.size(), violations.isEmpty() ? "无" : violations)
+            .isEmpty();
     }
 
     // ========== C1~C4：V3「形态革命」（v3.0.0）契约门禁（S133 spike → V3-S1 落地） ==========

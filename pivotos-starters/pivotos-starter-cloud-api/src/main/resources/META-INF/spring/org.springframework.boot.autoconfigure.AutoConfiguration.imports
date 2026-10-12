@@ -1,1 +1,3 @@
 com.pivotos.starter.cloud.api.config.CloudContextAutoConfiguration
+com.pivotos.starter.cloud.api.facade.FacadeHttpAutoConfiguration
+com.pivotos.starter.cloud.api.feign.CloudContextFeignAutoConfiguration

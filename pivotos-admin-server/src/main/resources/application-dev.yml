@@ -7,27 +7,30 @@ spring:
           # 开发库 pivotos；中间件已迁至公网服务器 175.24.176.176（2026-07-31 搬迁）
           # allowMultiQueries=false（S130）：驱动层禁用堆叠查询，是数据监控 SQL 闸门的第二道防线
           # （第一道是闸门的单语句校验，两道独立生效，不互相依赖）
-          url: jdbc:mysql://175.24.176.176:3306/pivotos_dev?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false
-          username: root
-          password: mysql_DNCi3f
+          url: ${PIVOTOS_MYSQL_URL:jdbc:mysql://175.24.176.176:3306/pivotos_dev?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false}
+          username: ${PIVOTOS_MYSQL_USERNAME:root}
+          password: ${PIVOTOS_MYSQL_PASSWORD:mysql_DNCi3f}
           driver-class-name: com.mysql.cj.jdbc.Driver
+      # 连接池（V3.1-G · P1-B2）：与容量无关的生产参数在 application.yml，
+      # 这里只给容量三件套。dev 保持 20/5/5 不动，避免开发机多开时连接数膨胀。
       druid:
         initial-size: 5
         min-idle: 5
         max-active: 20
   data:
     redis:
-      host: 175.24.176.176
+      host: ${PIVOTOS_REDIS_HOST:175.24.176.176}
       port: 6379
-      password: redis_Q6aiiX
+      password: ${PIVOTOS_REDIS_PASSWORD:redis_Q6aiiX}
       timeout: 5s
       database: 0
 
   ai:
     # dev 兜底：IDEA 直接启动（不 source .env.dev）时用此值
-    # 优先级：环境变量 DASHSCOPE_API_KEY > 此兜底值；生产环境必须通过环境变量注入
+    # 优先级：环境变量 PIVOTOS_LLM_API_KEY > 此兜底值；生产环境必须通过环境变量注入
     openai:
-      api-key: ${DASHSCOPE_API_KEY:sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC}
+      api-key: ${PIVOTOS_LLM_API_KEY:sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC}
+
     # Milvus 服务端实际未部署（2026-09-24 实测 19530 不通）：
     # ① spring.ai.vectorstore.type 显式设为 simple——该自动装配 matchIfMissing=true，不设会按默认 localhost:19530 连 Milvus 导致启动失败；
     # ② 本地 dev 向量库走 pivotos.kb.vector-store.type=simple（内存 + JSON 快照，零中间件，即 Milvus Lite 定位的落地形态）；
@@ -43,6 +46,25 @@ spring:
     #     embedding-dimension: 1024
     #     initialize-schema: true
     #     metric-type: COSINE
+
+  cloud:
+    # ===== dev Nacos（V3-S3）=====
+    # 与上方 MySQL / Redis 同款口径：dev 配置文件里本来就存明文口令，故此处直接写 dev 值；
+    # test / prod 仍走 application.yml 的 ${PIVOTOS_NACOS_*} 占位符，不落任何明文。
+    # 仍保留覆盖能力：显式注入 PIVOTOS_NACOS_* 环境变量时以环境变量为准。
+    # ⚠️ 缩进必须是 2 空格，且必须整块放在 spring 的最后一个子项之后：
+    #    插到别的子项中间会把后续配置「吸」进 cloud 子树（本轮就踩了一次——
+    #    spring.ai.vectorstore.type 被吞掉，Milvus 自动装配复活并连 19530 把启动打断）。
+    nacos:
+      config:
+        server-addr: ${PIVOTOS_NACOS_SERVER_ADDR:175.24.176.176:8848}
+        username: ${PIVOTOS_NACOS_USERNAME:nacos}
+        password: "${PIVOTOS_NACOS_PASSWORD:OdBp8FX5Bp5#*pCq}"
+      discovery:
+        # 注册开关仍沿用 application.yml 的默认 false：连得上 ≠ 该注册（V3-S2 L2 铁律）
+        server-addr: ${PIVOTOS_NACOS_SERVER_ADDR:175.24.176.176:8848}
+        username: ${PIVOTOS_NACOS_USERNAME:nacos}
+        password: "${PIVOTOS_NACOS_PASSWORD:OdBp8FX5Bp5#*pCq}"
 
 mybatis-plus:
   configuration:
@@ -63,18 +85,18 @@ pivotos:
     storage-type: s3
     vendor: cos
     endpoint: https://cos.ap-shanghai.myqcloud.com
-    access-key: AKIDKhrqb9UbVCg3D9B9AA4qPuENXUJvJUSC
-    secret-key: ayBIG1aw51jEVlqiNtDKOL7i5HJ8k9LO
+    access-key: ${PIVOTOS_COS_ACCESS_KEY:AKIDKhrqb9UbVCg3D9B9AA4qPuENXUJvJUSC}
+    secret-key: ${PIVOTOS_COS_SECRET_KEY:ayBIG1aw51jEVlqiNtDKOL7i5HJ8k9LO}
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
-  # XXL-Job 调度中心（测试环境本地）
+  # XXL-Job 调度中心（开发环境本地）
   job:
     admin-addresses: http://127.0.0.1:8101
     app-name: pivotos-dev-executor
     port: 9999
     group-id: 1   # XXL-Job admin 中 pivotos-executor 执行器组 ID
-    access-token: qaz123
+    access-token: ${PIVOTOS_XXL_JOB_ACCESS_TOKEN:qaz123}
   # A4-1 代码索引与定位（S110）：默认关闭（要扫仓库源码），dev 显式开启
   ai:
     coding:

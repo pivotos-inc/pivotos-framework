@@ -1,5 +1,8 @@
 package com.pivotos.starter.cloud.sc.feign;
 
+import com.pivotos.starter.cloud.api.feign.CloudContextFeignAutoConfiguration;
+import com.pivotos.starter.cloud.api.feign.CloudContextFeignInterceptor;
+
 import com.pivotos.starter.cloud.api.CloudProvider;
 import com.pivotos.starter.cloud.api.config.CloudProperties;
 import com.pivotos.starter.cloud.sc.config.ScCloudAutoConfiguration;

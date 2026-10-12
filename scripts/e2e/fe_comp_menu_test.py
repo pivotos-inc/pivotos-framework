@@ -92,7 +92,7 @@ def wait_ready(timeout=180):
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            urllib.request.urlopen(f"{BASE}/actuator/health", timeout=3)
+            urllib.request.urlopen(f"{BASE}/health/live", timeout=3)
             return True
         except urllib.error.HTTPError:
             return True
@@ -105,7 +105,7 @@ def start_if_needed():
     """8080 没人跑就自己拉一个，并记录 PID（退出时只 kill 这个）"""
     global OWNED_PID
     try:
-        urllib.request.urlopen(f"{BASE}/actuator/health", timeout=3)
+        urllib.request.urlopen(f"{BASE}/health/live", timeout=3)
         print("· 8080 已有服务在运行，本脚本复用，不做任何 kill")
         return True
     except urllib.error.HTTPError:

@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "pivotos.tenant.mode=datasource",
         "pivotos.tenant.datasource-map[2]=d2",
         "spring.datasource.dynamic.primary=master",
-        "spring.datasource.dynamic.datasource.master.url=jdbc:mysql://175.24.176.176:3306/test_tenant_d1?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true",
+        "spring.datasource.dynamic.datasource.master.url=jdbc:mysql://${PIVOTOS_TEST_MYSQL_HOST:${MYSQL_HOST:175.24.176.176}}:${PIVOTOS_TEST_MYSQL_PORT:${MYSQL_PORT:3306}}/test_tenant_d1?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true",
         "spring.datasource.dynamic.datasource.master.username=root",
         "spring.datasource.dynamic.datasource.master.password=${PIVOTOS_TEST_MYSQL_PASSWORD:}",
         "spring.datasource.dynamic.datasource.master.driver-class-name=com.mysql.cj.jdbc.Driver"
@@ -30,10 +30,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class TenantDatasourceRoutingTest extends TenantRoutingITSupport {
 
-    private static final String PRIMARY_URL =
-            "jdbc:mysql://175.24.176.176:3306/test_tenant_d1?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true";
-    private static final String SECONDARY_URL =
-            "jdbc:mysql://175.24.176.176:3306/test_tenant_d2?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true";
+    // 运行期用裸 JDBC 核对落位不需要 createDatabaseIfNotExist（库已由数据源建好），
+    // 多带一个参数会让 URL 与连接池里的不一致，落到另一个库上去。
+    private static final String PRIMARY_URL = TestDbDefaults.jdbcUrl("test_tenant_d1", false);
+    private static final String SECONDARY_URL = TestDbDefaults.jdbcUrl("test_tenant_d2", false);
 
     private static final String RUN = UUID.randomUUID().toString().substring(0, 8);
     private static final String TITLE_T1 = "D1-" + RUN;

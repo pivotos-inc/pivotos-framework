@@ -30,12 +30,26 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 /**
  * 迁移任务管理端点。
  * 进度流用 POST + SseEmitter：EventSource 带不了 Authorization 头，
- * 前端用 fetch + ReadableStream 消费（与 AI 对话流式端点同款约定）。
+ * 前端用 fetch + ReadableStream 消费（与 AI 对话流式端点同款约定），
+ * 实测前端 {@code subscribeMigrationProgress} 显式带了 {@code Authorization: getToken()}——
+ * 因此类级鉴权对进度流同样成立，不存在「流端点必须匿名」的例外。
+ *
+ * <p><b>类级 {@code @SaCheckLogin}（v3.1.0 生产化 · A4）</b>：本控制器此前全文无鉴权注解，
+ * 实证匿名即可 {@code GET /migration/task/page} 拿到完整分页对象。
+ *
+ * <p>危险的不只是「看得到」：<b>匿名请求没有租户上下文</b>，而 MP 租户拦截器
+ * （{@code TenantLineHandler#ignoreTable}）在 {@code TenantContext.get() == null} 时
+ * <b>全表放行</b>——即匿名调用翻的是全租户的迁移任务。要求登录后，租户过滤才真正生效。
+ *
+ * <p>刻意用 {@code @SaCheckLogin} 而不是 {@code @SaCheckPermission}：migration 的权限码
+ * 尚未进 {@code sys_menu}，用后者会让 super_admin 也被 403（S124 同款口径）。
+ * {@code type} 必须显式给 {@code StpSysUtil.TYPE}：默认 realm 是 login，管端 token 会被判 1002。
  */
 @Tag(name = "迁移任务管理")
 @RestController
 @RequestMapping("/migration/task")
 @RequiredArgsConstructor
+@SaCheckLogin(type = StpSysUtil.TYPE)
 public class MigrationTaskController {
 
     private final MigrationTaskService migrationTaskService;

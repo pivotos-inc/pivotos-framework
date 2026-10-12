@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>3.0.0</version>
+        <version>3.1.0</version>
     </parent>
 
     <artifactId>pivotos-dependencies</artifactId>
@@ -74,6 +74,14 @@
         <!-- ==================== 监控（S48 2.3-F6 服务监控 oshi 采集） ==================== -->
         <oshi.version>6.9.1</oshi.version>
 
+        <!-- ==================== 可观测（V3.1-F · P1-B8-1 指标基础设施） ==================== -->
+        <!-- ⚠️ micrometer 版本必须与当前 Boot 的 spring-boot-dependencies 内部
+             <micrometer.version> 对齐（Boot 4.1.1 实测为 1.17.1）。升 Boot 时必须回来核对这一行：
+             `grep -n "micrometer.version" ~/.m2/repository/org/springframework/boot/spring-boot-dependencies/<boot.version>/spring-boot-dependencies-<boot.version>.pom`
+             不对齐的后果是 micrometer-core（Boot 仲裁）与 micrometer-registry-prometheus（本仓仲裁）
+             混用两个大版本，症状是 PrometheusMeterRegistry 构造期 NoSuchMethodError。 -->
+        <micrometer.version>1.17.1</micrometer.version>
+
         <!-- ==================== 搜索（Easy-ES 锁定 ES 7.17.28） ==================== -->
         <easy-es.version>3.0.2</easy-es.version>
         <elasticsearch.version>7.17.28</elasticsearch.version>
@@ -88,7 +96,19 @@
         <freemarker.version>2.3.34</freemarker.version>
 
         <!-- ==================== 工作流引擎（WarmFlow：Dromara 社区，轻量国产，BPMN 2.0 子集） ==================== -->
-        <warm-flow.version>1.8.7</warm-flow.version>
+        <!--
+          V3.1-E：1.8.7 → 1.8.9。升级前已逐项取证（结论见《V3.1-E-收口报告.md》）：
+            · FlowForm 实体 javap 反射字段 15 个，与 1.8.7 **diff 空** → V1.2.53 建的 flow_form
+              15 列仍然对齐，**无需新增迁移**（1.8.9 不引入新列）；
+            · warm-flow-plugin-ui-sb-web / -core / warm-flow-core / warm-flow-mybatis-plus-core
+              五个构件逐条目 CRC 对比，唯一变化的类是 warm-flow-core 的
+              InsServiceImpl#saveFlowInfo（私有方法，hisTask 落库顺序提前），
+              **端点清单与 controller 前缀（/warm-flow）一字未变** → 匿名闸门前缀无需调整；
+            · sb4-starter 1.8.9 的 pom 与 1.8.7 完全一致，仍直引
+              com.baomidou:mybatis-plus-extension:3.5.15 → **下面的 extension 仲裁仍然必要**。
+          升级后必须重跑 scripts/e2e/anonymous_endpoint_audit.py（闸门是前缀级）。
+        -->
+        <warm-flow.version>1.8.9</warm-flow.version>
 
         <!-- ==================== 测试 ==================== -->
         <testcontainers.version>2.0.5</testcontainers.version>
@@ -140,8 +160,11 @@
             <!--
               mybatis-plus-extension 必须显式钉到与 starter 同一个版本（S125 实测缺陷）。
 
-              经过：warm-flow-mybatis-plus-sb4-starter 1.8.7 直接传递依赖
+              经过：warm-flow-mybatis-plus-sb4-starter 直接传递依赖
               com.baomidou:mybatis-plus-extension:3.5.15，而 mybatis-plus-spring-boot4-starter
+              （V3.1-E 复核：1.8.9 的 sb4-starter pom 与 1.8.7 完全相同，仍是 3.5.15，仲裁仍必要；
+               守卫见 plugin-workflow 的 WarmFlowVersionGuardTest，用反射断言 AbstractRepository
+               存在 executeBatch(Collection,int,BiFunction) 这个 3.5.17 才有的重载）
               3.5.17 并不传递引入 extension 模块（3.5.17 把它拆出去了），于是 classpath 上
               extension 只有 warm-flow 带来的 3.5.15：
                 · 3.5.17 的 spring.repository.CrudRepository 继承 extension.repository.AbstractRepository，
@@ -248,6 +271,13 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.datatype</groupId>
                 <artifactId>jackson-datatype-jsr310</artifactId>
+                <version>${jackson2.version}</version>
+            </dependency>
+            <!-- V3-S4：Optional 序列化模块（ICodeIndexFacade 的 Optional<...> 返回值需要）。
+                 与 jsr310 同款：Jackson 2 模块不受 Spring Boot 仲裁，必须自己钉版本。 -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.datatype</groupId>
+                <artifactId>jackson-datatype-jdk8</artifactId>
                 <version>${jackson2.version}</version>
             </dependency>
             <!-- Jackson 2（com.fasterxml）：ES 官方客户端的 JacksonJsonpMapper 依赖它，
@@ -369,6 +399,20 @@
                 <groupId>co.elastic.clients</groupId>
                 <artifactId>elasticsearch-java</artifactId>
                 <version>${elasticsearch-java.version}</version>
+            </dependency>
+            <!-- ⚠️ io.micrometer:micrometer-registry-prometheus 必须在本 BOM 显式仲裁。
+                 背景（2026-10-11 取证）：Boot 4.1.1 把 actuator 拆成了 spring-boot-micrometer-metrics /
+                 micrometer-observation / spring-boot-actuator 三块，而 micrometer-registry-prometheus
+                 **不在** spring-boot-dependencies pom 的直接条目里（它只 import 了 micrometer-bom，
+                 条目不落在本文件文本中），故「能被 Boot 管到」这件事不可靠、且随版本可变。
+                 本仓钉死 ${micrometer.version}（1.17.1，与 Boot 4.1.1 内部值一致），
+                 该坐标会传递引入 prometheus-metrics-core / exposition-formats（Prometheus Java client 1.x，
+                 非已废弃的 simpleclient 版 —— 后者在 micrometer 1.17 里已改名为
+                 micrometer-registry-prometheus-simpleclient，切勿误引）。 -->
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-registry-prometheus</artifactId>
+                <version>${micrometer.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.elasticsearch</groupId>
@@ -531,6 +575,12 @@
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-starter-datainspect</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- ========== ST-METRICS（V3.1-F · P1-B8-1）：指标底座 ========== -->
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-metrics</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <!-- ========== ST-CLOUD（V3-S2 L2）：三通道 SPI 契约 + local/cloud/alibaba 三个实现 ========== -->

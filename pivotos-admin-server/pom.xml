@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>3.0.0</version>
+        <version>3.1.0</version>
     </parent>
 
     <artifactId>pivotos-admin-server</artifactId>
@@ -83,6 +83,14 @@
         <dependency>
             <groupId>com.pivotos</groupId>
             <artifactId>pivotos-starter-cloud-local</artifactId>
+        </dependency>
+
+        <!-- ===== ST-METRICS（V3.1-F · P1-B8-1）：指标底座 + 自研 Prometheus 抓取端点 =====
+             只引 starter-metrics（内含 spring-boot-starter-micrometer-metrics + micrometer-observation
+             + micrometer-registry-prometheus），刻意不引 spring-boot-starter-actuator。 -->
+        <dependency>
+            <groupId>com.pivotos</groupId>
+            <artifactId>pivotos-starter-metrics</artifactId>
         </dependency>
 
         <!-- ===== 业务 Plugin（system-api/message-api 由 plugin 传递带入） ===== -->

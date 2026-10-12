@@ -1,0 +1,283 @@
+{
+  "uid": "pivotos-business",
+  "title": "PivotOS · 业务与 AI",
+  "description": "检索通道（六操作的调用量与延迟，按实现类型区分）、AI 调用/耗时/token、慢接口构成。AI 系列指标只有真的打过 LLM 调用才会出现——本机没有 LLM Key，所以这几个面板的表达式是从源码常量反推出的名字（pivotos.ai.calls / pivotos.ai.tokens / pivotos.ai.latency），未经过真机抓取验证。",
+  "tags": [
+    "pivotos",
+    "business",
+    "ai"
+  ],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "application",
+        "label": "application",
+        "type": "query",
+        "query": "label_values(process_uptime_seconds, application)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "refresh": 1,
+        "includeAll": true,
+        "multi": false,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "检索调用量（按实现 / 操作 / 结果）",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (type, operation, outcome) (rate(pivotos_search_calls_total{application=~\"$application\"}[5m]))",
+          "legendFormat": "{{type}} / {{operation}} / {{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "检索耗时：均值与窗口内最大值（秒）",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (operation) (rate(pivotos_search_latency_seconds_sum{application=~\"$application\"}[5m])) / sum by (operation) (rate(pivotos_search_latency_seconds_count{application=~\"$application\"}[5m]))",
+          "legendFormat": "均值 {{operation}}"
+        },
+        {
+          "refId": "B",
+          "expr": "max by (operation) (pivotos_search_latency_seconds_max{application=~\"$application\"})",
+          "legendFormat": "最大 {{operation}}"
+        }
+      ],
+      "description": "同《运行总览》：Timer 未开启 percentiles-histogram，没有 _bucket，故不用 histogram_quantile。"
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "AI 调用量（按 provider / model / 结果）",
+      "description": "指标名来自源码常量 pivotos.ai.calls（Prometheus 侧 pivotos_ai_calls_total）。无 LLM Key 的环境不会有数据。",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (provider, model, outcome) (rate(pivotos_ai_calls_total{application=~\"$application\"}[5m]))",
+          "legendFormat": "{{provider}} / {{model}} / {{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "AI 耗时：均值与窗口内最大值（秒）",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (provider, model) (rate(pivotos_ai_latency_seconds_sum{application=~\"$application\"}[5m])) / sum by (provider, model) (rate(pivotos_ai_latency_seconds_count{application=~\"$application\"}[5m]))",
+          "legendFormat": "均值 {{provider}}/{{model}}"
+        },
+        {
+          "refId": "B",
+          "expr": "max by (provider, model) (pivotos_ai_latency_seconds_max{application=~\"$application\"})",
+          "legendFormat": "最大 {{provider}}/{{model}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "AI token 消耗速率",
+      "description": "指标名来自源码常量 pivotos.ai.tokens（Counter，Prometheus 侧 pivotos_ai_tokens_total）。",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (provider, model) (rate(pivotos_ai_tokens_total{application=~\"$application\"}[5m]))",
+          "legendFormat": "{{provider}}/{{model}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "慢接口构成（按 URI 模板）",
+      "description": "慢接口的 tag 用的是 URI 模板而不是实际 URI：做成实际 URI 会让带 ID 的路径把 Prometheus 的时间序列表打爆（基数爆炸）。",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (pattern, method) (rate(pivotos_http_slow_total{application=~\"$application\"}[5m]))",
+          "legendFormat": "{{method}} {{pattern}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "慢接口耗时：均值与窗口内最大值（秒）",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (pattern) (rate(pivotos_http_slow_latency_seconds_sum{application=~\"$application\"}[5m])) / sum by (pattern) (rate(pivotos_http_slow_latency_seconds_count{application=~\"$application\"}[5m]))",
+          "legendFormat": "均值 {{pattern}}"
+        },
+        {
+          "refId": "B",
+          "expr": "max by (pattern) (pivotos_http_slow_latency_seconds_max{application=~\"$application\"})",
+          "legendFormat": "最大 {{pattern}}"
+        }
+      ]
+    }
+  ]
+}

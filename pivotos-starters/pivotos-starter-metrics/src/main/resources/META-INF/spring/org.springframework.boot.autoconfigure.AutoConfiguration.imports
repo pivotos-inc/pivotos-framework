@@ -1,0 +1,2 @@
+com.pivotos.starter.metrics.config.MetricsInfrastructureAutoConfiguration
+com.pivotos.starter.metrics.config.MetricsNoOpAutoConfiguration

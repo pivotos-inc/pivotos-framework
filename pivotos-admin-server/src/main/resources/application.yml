@@ -1,11 +1,95 @@
 server:
   port: 8080
+  # ===== 优雅停机（V3.1-G · P1-B3 进程托管）=====
+  # ⚠️ Boot 4 口径与 Boot 3 **相反**：Boot 4.1.1 的
+  #    org.springframework.boot.web.server.autoconfigure.ServerProperties#shutdown
+  #    默认值**已经是 graceful**（javap -c 可见构造函数里
+  #    getstatic Shutdown.GRACEFUL → putfield shutdown），Boot 3 才是 immediate。
+  #    这里显式写死是「固化」而非新增能力，防止上游默认值回退或部署方误配成 immediate。
+  #
+  #    配套的等在途请求上限见下方 spring.lifecycle.timeout-per-shutdown-phase；
+  #    停机超时三处成链（应用 30s / systemd 45s / stop-prod.sh 30s），改一处要同步另外两处。
+  shutdown: graceful
 
 spring:
   application:
     name: pivotos-admin-server
   profiles:
     active: dev
+  # ===== 停机宽限期（V3.1-G · P1-B3）=====
+  # SIGTERM 之后，等在途请求完成的最大时长；超时即进入下一阶段（最终 SIGKILL）。
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  # ===== 连接池生产参数（V3.1-G · P1-B2）=====
+  # ⚠️ 本项目连接池是 **Druid**（dynamic-datasource + druid-spring-boot-4-starter），
+  #    **不是** HikariCP —— 别照抄 hikari.*，写了不生效且不报错。
+  #    实证：启动日志 `com.alibaba.druid.pool.DruidDataSource {dataSource-1,master} inited`。
+  #
+  # 这里只放**与容量无关**的生产参数（获取等待 / 有效性检测 / 驱逐 / 保活 / 泄漏回收 / 慢 SQL）。
+  # 容量三件套 initial-size / min-idle / max-active **按 profile 覆盖**，
+  # 见 application-dev.yml（20/5/5）、application-test.yml（20/5/5）、application-prod.yml（50/10/5）。
+  datasource:
+    dynamic:
+      druid:
+        # ---- 获取连接 ----
+        # 池满时最多等 60s。Druid 默认 -1 = 无限等待：表现为「请求全部挂住且不报错」，
+        # 比快速失败难排查得多，生产必须给上限。
+        max-wait: 60000
+
+        # ---- 有效性检测 ----
+        # MySQL wait_timeout 默认 8 小时，空闲连接会被服务端单方面掐断；
+        # 不探活就会把「已断」连接发给业务，表现为偶发 CommunicationsException。
+        validation-query: "SELECT 1"
+        validation-query-timeout: 3        # 秒；探活本身也要有上限
+        test-while-idle: true              # 空闲时探活：成本最低，只在驱逐线程里做
+        test-on-borrow: false              # 借出时**不**探活：每次借出多一次 RTT，高并发下白给
+        test-on-return: false              # 归还时不探活
+
+        # ---- 空闲连接驱逐 ----
+        time-between-eviction-runs-millis: 60000   # 驱逐线程 60s 跑一轮
+        min-evictable-idle-time-millis: 300000    # 空闲 5 分钟起「可以」被驱逐
+        max-evictable-idle-time-millis: 900000    # 空闲 15 分钟「必须」被驱逐（别让它无限续命）
+
+        # ---- 连接保活 ----
+        # 让驱逐线程对「接近 min-evictable 的空闲连接」主动发一次探活，
+        # 避免长时间空闲的连接被 MySQL / 负载均衡 / 防火墙静默掐断。
+        # 注意：keep-alive-between-time-millis 必须 **小于** min-evictable，否则保活永远轮不到。
+        keep-alive: true
+        keep-alive-between-time-millis: 120000
+
+        # ---- 连接泄漏回收 ----
+        # 借出后超过阈值仍未归还，Druid 强制回收；配合 log-abandoned 会打出**借出时的堆栈**，
+        # 这是定位「忘记 close / 事务未提交」这类泄漏的唯一抓手。
+        # ⚠️ 阈值必须 **大于** 最长事务/批处理耗时，否则会把正常长事务掐断 → 数据不一致。
+        #    已知最长的是迁移引擎执行与批量导入，3 分钟留足余量。
+        remove-abandoned: true
+        remove-abandoned-timeout-millis: 180000
+        log-abandoned: true
+
+        # ---- 慢 SQL 统计 ----
+        # ⚠️ 只挂 stat（统计），**刻意不挂 slf4j**：slf4j 是「日志过滤器」，
+        #    会把**每一条** SQL 都打进日志，与 A3「生产日志收敛到 info」直接冲突，
+        #    磁盘与 IO 会被打爆。统计与日志在 Druid 里是两个不同的 filter。
+        # ⚠️ 没有配 query-timeout：那是给**每条 Statement** 设超时，
+        #    会把数据监控查询、批量导入这类**合法**的慢语句一起掐掉。
+        filters: stat
+        stat-sql-max-size: 4096
+        # StatFilter 的自定义项。key 由 dynamic-datasource 的 lineToUpper 转成 setter：
+        #   slow-sql-millis → slowSqlMillis → StatFilter#setSlowSqlMillis(long)
+        #   merge-sql       → mergeSql      → StatFilter#setMergeSql(boolean)
+        stat:
+          merge-sql: true
+          slow-sql-millis: 1000
+          # ⚠️ 刻意**不开** log-slow-sql：StatFilter 打慢 SQL 用的是 **ERROR** 级别
+          #    （javap -c 实证：invokeinterface Log.error）。开了会把每条慢 SQL 灌进错误日志，
+          #    与「ERROR 0 才健康」的巡检口径冲突，也会淹没真正的异常。
+          #    慢 SQL 只从 stat 统计口径看，不落日志。
+          log-slow-sql: false
+
+        # ---- 网络超时 ----
+        # 建连 10s / 读超时 60s。不设的话一次网络分区就能让线程永久挂住。
+        connect-timeout: 10000
+        socket-timeout: 60000
   # ===== Nacos 配置中心导入（V3-S2 L6）=====
   # ⚠️ optional: 前缀是硬要求：去掉它，「Nacos 不可达 / 鉴权失败 / dataId 不存在 /
   #    默认形态 classpath 上没有 nacos: 解析器」四种情况都会直接把启动打断。
@@ -26,7 +110,7 @@ spring:
     validate-on-migrate: true
     out-of-order: true
   # AI 模型接入（阿里云百炼 DashScope · OpenAI 兼容模式）
-  # API Key 优先级：环境变量 DASHSCOPE_API_KEY > profile 配置兜底值（见 application-dev.yml）
+  # API Key 优先级：环境变量 PIVOTOS_LLM_API_KEY > profile 配置兜底值（见 application-dev.yml）
   # 程序运行时可从数据库动态覆盖（ChatModelFactory 按 provider.code 装配）；此处为静态兜底
   ai:
     # S46：anthropic/gemini starter 的自动装配以 spring.ai.model.chat 为开关且 matchIfMissing=true，
@@ -35,7 +119,7 @@ spring:
     model:
       chat: openai
     openai:
-      api-key: ${DASHSCOPE_API_KEY:}
+      api-key: ${PIVOTOS_LLM_API_KEY:}
       # Spring AI 2.0 底层为官方 openai-java SDK，base-url 须含 /v1（SDK 直接追加 /chat/completions）
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       chat:
@@ -51,7 +135,7 @@ spring:
     mcp:
       server:
         name: pivotos-mcp-server
-        version: 3.0.0
+        version: 3.1.0
   # ===== Spring Cloud / Alibaba（V3-S2 L2）=====
   # 这两项只在 -P cloud / -P alibaba 打进 fat jar 时才有意义；默认形态下无 spring-cloud 依赖，
   # 配置被忽略（Spring Boot 对未知属性宽松），不会有任何副作用。
@@ -116,17 +200,42 @@ mybatis-plus:
 # API 文档（Knife4j Next 增强 UI，底层复用 SpringDoc OpenAPI 3）
 springdoc:
   api-docs:
+    enabled: ${PIVOTOS_API_DOCS_ENABLED:true}
     path: /v3/api-docs
   default-flat-param-object: true
 
 knife4j:
-  enable: true
+  enable: ${PIVOTOS_API_DOCS_ENABLED:true}
   setting:
     language: zh_cn
 
 # PivotOS 自定义配置
 pivotos:
   deploy-mode: monolith
+  # 匿名访问闸门（v3.1.0 生产化 · A4）：路由层兜底，专门守「第三方 jar 自带端点」——
+  # 那些控制器源码不在本仓内，加不上 @SaCheckLogin（实证：warm-flow 的 7 个 GET 端点匿名可取
+  # 流程定义结构 / 处理器字典 / 监听器清单）。命中前缀且未登录 → HTTP 200 + code=1002。
+  # 只守显式登记的前缀，不动 PivotOS 自有端点（自有端点仍是注解 + 业务代码取 LoginContext 的口径）。
+  # 回滚：PIVOTOS_AUTH_GUARD_ENABLED=false 即不注册过滤器。
+  auth:
+    guard:
+      enabled: ${PIVOTOS_AUTH_GUARD_ENABLED:true}
+      paths: ${PIVOTOS_AUTH_GUARD_PATHS:/warm-flow/**}
+      exclude-paths: ${PIVOTOS_AUTH_GUARD_EXCLUDE_PATHS:}
+      message: ${PIVOTOS_AUTH_GUARD_MESSAGE:该端点要求登录后访问}
+  # 日志落盘（v3.1.0 生产化 · A3，V3.1-H · B1 追加按级别分文件）。实际由 logback-spring.xml 消费，
+  # 这里只定义可覆盖项：prod/test 按「单文件 100MB + 按天切分 + 归档 gzip」滚动写两个文件——
+  #   主文件  ：INFO 及以下（保留 ${PIVOTOS_LOG_MAX_HISTORY} 天 / 总量 ${PIVOTOS_LOG_TOTAL_SIZE_CAP}）
+  #   错误文件：WARN 及以上，文件名前缀带 -error（保留 60 天 / 总量 1GB，事故常隔周复盘）
+  # 两者零重叠，不存双份 WARN/ERROR。dev 只写控制台（保持开发期可读性）。全部可环境变量覆盖。
+  log:
+    dir: ${PIVOTOS_LOG_DIR:logs}
+    file-name: ${PIVOTOS_LOG_FILE_NAME:pivotos-admin-server}
+    max-file-size: ${PIVOTOS_LOG_MAX_FILE_SIZE:100MB}
+    max-history: ${PIVOTOS_LOG_MAX_HISTORY:30}
+    total-size-cap: ${PIVOTOS_LOG_TOTAL_SIZE_CAP:5GB}
+    error-max-history: ${PIVOTOS_LOG_ERROR_MAX_HISTORY:60}
+    error-total-size-cap: ${PIVOTOS_LOG_ERROR_TOTAL_SIZE_CAP:1GB}
   migration:
     # 迁移工作区使用绝对路径，避免因启动目录不同（mvn spring-boot:run vs java -jar）导致路径漂移
     workspace: ${PIVOTOS_MIGRATION_WORKSPACE:/Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-framework/pivotos-admin-server/data/migration}
@@ -149,6 +258,20 @@ pivotos:
     #   enabled: true
     #   tessdata-path: /opt/homebrew/share/tessdata
     #   languages: chi_sim+eng
+  metrics:
+    # ST-METRICS（V3.1-F · P1-B8-1）：指标基础设施。
+    # 默认带来 jvm.* / system.* / process.* / logback.* / hikaricp.* / http.server.requests，
+    # 外加三类自研业务指标：检索调用量、AI 调用量与 token、慢接口。
+    # ⚠️ 抓取端点免鉴权（Prometheus 抓取不带登录态）→ 生产必须在网络层（Nginx/安全组）限制内网。
+    enabled: ${PIVOTOS_METRICS_ENABLED:true}
+    prometheus:
+      # 只摘端点、不停采集：指标仍在内存里，只是没人能抓走
+      enabled: ${PIVOTOS_METRICS_PROMETHEUS_ENABLED:true}
+      # 沿用 Prometheus 生态惯例（scrape_config 的默认 metrics_path 就是这个值），改这里要同步改抓取配置
+      path: ${PIVOTOS_METRICS_PROMETHEUS_PATH:/actuator/prometheus}
+    slow-request:
+      enabled: ${PIVOTOS_METRICS_SLOW_REQUEST_ENABLED:true}
+      threshold-ms: ${PIVOTOS_METRICS_SLOW_REQUEST_THRESHOLD_MS:1000}
   search:
     # ST-SEARCH（S121）：搜索抽象层。type=simple 为进程内内存兜底（零中间件，重启即失），
     # 生产接入 ES 时引入 pivotos-starter-search-easy-es（ES 7.17）或 -es-java（ES 8.x/9.x）
@@ -304,3 +427,37 @@ pivotos:
         # ignore-exceptions: com.pivotos.common.api.exception.BizException
         # ⚠️ 不要开 spring.cloud.openfeign.circuitbreaker.enabled：那是 Feign 内建的全局包装，
         #    与本通道熔断叠加会造成双重包装，且它的 fallback 只能是个 Class（拿不到容器内本地实现）。
+    # ==================== Facade 契约 HTTP 化（V3-S4） ====================
+    # 把 *-api 的 Facade 契约按「接口名 + 方法名」反射暴露成 HTTP 端点（POST /__facade/{iface}/{method}），
+    # 契约层零改动（不在契约接口上加 @PostMapping —— 参数注解取的是实现类方法，复杂 DTO 会退化成表单绑定）。
+    facade-http:
+      # 默认不开：这是「默认形态零行为」边界的一部分。开启会强制校验 context.internal-token，
+      # 未配凭证启动 FAIL-FAST（与 local 通道的 /__rpc/invoke 同口径）。
+      enabled: ${PIVOTOS_CLOUD_FACADE_HTTP_ENABLED:false}
+      # 白名单刻意不在 yml 里写默认值：
+      # 一旦写了 interfaces: ${X:} 且 X 为空，Spring 会把空串绑成空 List，
+      # 把代码默认值（只有 ContextFacade）顶掉 —— 「默认值」会被配置静默改写。
+      # 因此业务接口一律由部署方显式传（命令行 --pivotos.cloud.facade-http.interfaces=... 或环境变量）。
+      #
+      # 语法：条目之间逗号，方法之间分号（分号不是 Spring 的 List 分隔符，逗号是）
+      #   com.pivotos.system.api.facade.IUserFacade                      整个接口可调用
+      #   com.pivotos.generator.service.IGeneratorFacade:previewCode     只开列出的方法
+      #
+      # 只读业务预置组（见 FacadeHttpPresets.READ_ONLY_BUSINESS，12 个接口 / 33 个只读方法）：
+      #   com.pivotos.system.api.facade.IDeptFacade,com.pivotos.system.api.facade.IDictFacade,
+      #   com.pivotos.system.api.facade.IRoleFacade,com.pivotos.system.api.facade.IStatsFacade,
+      #   com.pivotos.system.api.facade.IUserFacade,com.pivotos.ai.kb.api.facade.IKnowledgeBaseFacade,
+      #   com.pivotos.file.api.facade.IFileFacade:buildFileUrl;storageStats,
+      #   com.pivotos.ai.api.facade.IAiFacade:chatStats;resolveModel,
+      #   com.pivotos.generator.service.IGeneratorFacade:previewCode;previewPluginSkeleton,
+      #   com.pivotos.migration.api.codeindex.ICodeIndexFacade:symbolTable;readFile;stats,
+      #   com.pivotos.workflow.api.IWorkflowFacade:countPending;instanceStats;pagePendingTasks;pageMyInstances;getApprovalTaskContext,
+      #   com.pivotos.message.api.facade.IMessageFacade:pageByUser;countUnread
+      #
+      # ⚠️ 依赖登录态的成员（IWorkflowFacade 的 5 个方法、IMessageFacade 的 2 个读方法）
+      #    必须同时开 context.restore-login=true，否则一律按「未登录」返回空页 ——
+      #    HTTP 200 + ok=true，但结果是错的（这是本轮最难取证的点）。
+      #
+      # ⚠️ 写方法（send / approveTask / generateToProject / presignDownload / chat* / rebuildIndex 等）
+      #    能力已具备但刻意不进任何默认配置：这个端点的唯一闸门是内部凭证，
+      #    开放即等于「凭一张凭证就能远程落库 / 审批 / 写文件」，须自行评估后显式开启。

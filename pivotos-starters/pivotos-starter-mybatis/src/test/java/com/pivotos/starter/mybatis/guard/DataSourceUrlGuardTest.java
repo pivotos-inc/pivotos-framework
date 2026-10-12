@@ -34,8 +34,10 @@ class DataSourceUrlGuardTest {
     @Test
     @DisplayName("databaseOf：带查询参数 / 裸路径 / 末尾斜杠 / 非法串 全部不抛且结果确定")
     void databaseOfBoundaries() {
+        // 夹具刻意用中性地址：这里只测字符串解析，不建连接；写真实 dev 主机地址会让
+        // scripts/ops/check_ci_wiring.py 误判成「测试配置硬编码中间件」，也让读者以为是必须连通的目标
         assertEquals("pivotos_dev",
-                DataSourceUrlGuard.databaseOf("jdbc:mysql://175.24.176.176:3306/pivotos_dev"
+                DataSourceUrlGuard.databaseOf("jdbc:mysql://10.0.0.1:3306/pivotos_dev"
                         + "?useUnicode=true&characterEncoding=utf8&allowMultiQueries=false"));
         assertEquals("pivotos_dev", DataSourceUrlGuard.databaseOf("jdbc:mysql://127.0.0.1:3306/pivotos_dev"));
         assertEquals("", DataSourceUrlGuard.databaseOf("jdbc:mysql://127.0.0.1:3306/"));
