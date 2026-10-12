@@ -6,15 +6,43 @@ on:
   pull_request:
     branches: [master, develop]
 
+# 最小权限：本流水线只读取代码、写出 workflow 产物，不需要更多。
+permissions:
+  contents: read
+
 jobs:
   compat-matrix:
-    name: "兼容矩阵 JDK ${{ matrix.jdk }} × SB ${{ matrix.sb }}"
+    name: "基线构建守护（兼容矩阵）JDK ${{ matrix.jdk }} × SB ${{ matrix.sb }}"
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        jdk: ['21', '25']
-        sb: ['4.0.0', '4.1.1']
+        # ⚠️⚠️ 这两个维度的取值是**实测收敛**出来的，不要凭直觉加值（2026-10-12）。
+        #
+        # ① JDK 只能 25，不能加 21：
+        #    项目大量使用 java.lang.ScopedValue（全仓 48 个文件），它在 **JDK 25 才转正**
+        #    （JEP 506）；JDK 21 下仍是预览 API，而 pom 里 maven.compiler.release=25 且
+        #    **没有**开 --enable-preview（pom.xml:26）。实测 JDK 21 两格编译直接失败：
+        #      [ERROR] java.lang.ScopedValue 是预览 API，默认情况下处于禁用状态
+        #    要支持 JDK 21 就等于要求「运行时也全程预览」，不做。
+        #
+        # ② SB 只能当前基线，暂不能加 4.0.0：
+        #    实测 SB 4.0.0 **编译能通过、但产物起不来** —— 这不是 Boot 的锅，是本仓的
+        #    pivotos-dependencies 显式仲裁了 jackson2.version=2.21.4，而 Boot 4.0.0 的 BOM
+        #    把 jackson-annotations 锁在 2.20，两者在同一 classpath 错配，databind 初始化时
+        #    去找已从 annotations 2.20 移除的 JsonSerializeAs：
+        #      ExceptionInInitializerError: com/fasterxml/jackson/annotation/JsonSerializeAs
+        #      → Flyway bean 创建失败 → 依赖它的 Mapper/Service 整链崩 → 应用起不来
+        #    即：**这一格会让 CI 显示绿色，却交付一个起不来的包**（比红灯危险得多）。
+        #
+        # ③ 本 job 只跑 `package -DskipTests`，证明的是「能编译打包」，
+        #    **不能证明「产物能运行」** —— 运行能力由下面的 test job 与本地 E2E 兜。
+        #
+        # ④ 想新增维度/取值，先在本机跑 `python3 scripts/ops/ci_local_simulate.py --simulate`，
+        #    本地都过不了的组合不要提交（本流水线历史上从未在 GitHub Actions 上真绿过，
+        #    根因之一就是往 matrix 里塞了没人验证过的组合）。
+        jdk: ['25']
+        sb: ['4.1.1']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -24,6 +52,35 @@ jobs:
           cache: maven
       - name: 编译打包（生产纪律 -DskipTests）
         run: mvn -B clean package -DskipTests -Dspring-boot.version=${{ matrix.sb }} -Dmaven.compiler.release=${{ matrix.jdk }}
+
+      # 这一步是把「手工做了很多轮的收口动作」搬进流水线：
+      # fat jar 字节数**不能当指纹**（zip 条目存 mtime，同份代码两次打包字节数不同），
+      # 内层 pivotos 构件的版本号才是硬证据；顺带验证默认形态没有把 cloud/nacos 打进去。
+      - name: 构件指纹核对（内层构件版本 + 形态残留红线）
+        run: |
+          python3 scripts/ops/check_jar_artifacts.py \
+            --forbid spring-cloud --forbid nacos \
+            --json target/ci-fingerprint-jdk${{ matrix.jdk }}-sb${{ matrix.sb }}.json
+
+      # if: always() 是必须的：编译挂掉的那一版，恰恰是最需要留证据的时候。
+      # if-no-files-found: error 也是必须的：缺省 warn 会让「路径写错」静默归档一个空包。
+      - name: 归档 fat jar（仅主干/Release，PR 不占配额）
+        if: always() && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fatjar-jdk${{ matrix.jdk }}-sb${{ matrix.sb }}
+          path: pivotos-admin-server/target/*.jar
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: 归档构建指纹
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jar-fingerprint-jdk${{ matrix.jdk }}-sb${{ matrix.sb }}
+          path: target/ci-fingerprint-jdk${{ matrix.jdk }}-sb${{ matrix.sb }}.json
+          retention-days: 30
+          if-no-files-found: error
 
   test:
     name: "全量测试（JDK 25 × SB 4.1 + MySQL/Redis）"
@@ -67,3 +124,31 @@ jobs:
           PIVOTOS_TEST_REDIS_PORT: '6379'
           PIVOTOS_TEST_REDIS_PASSWORD: ''
         run: mvn -B clean verify
+
+      # 必须在 verify **之后**执行：verify 会清空并重建 target，报告是它跑出来的。
+      # 冻结成 JSON 是为了留一条「这一轮到底跑了多少条」的可回溯证据——
+      # 历史出现过同一份代码用不同命令能差出 10 条的情况。
+      - name: 冻结 IT 计数
+        if: always()
+        run: python3 scripts/ops/count_tests.py --json target/ci-test-counts.json
+
+      - name: 归档测试报告（surefire / failsafe）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            **/target/surefire-reports/**/*.xml
+            **/target/surefire-reports/**/*.txt
+            **/target/failsafe-reports/**/*.xml
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: 归档 IT 计数冻结产物
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-counts
+          path: target/ci-test-counts.json
+          retention-days: 30
+          if-no-files-found: error
