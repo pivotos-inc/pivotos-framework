@@ -142,7 +142,19 @@ def main():
     ap.add_argument("--sha", required=True)
     ap.add_argument("--context", default="ci-failure-digest")
     ap.add_argument("--dry-run", action="store_true", help="只打印不上报（本机自测用）")
+    ap.add_argument("--report", metavar="CONTEXT", help="直接上报一条 status（配合 --text/--state）")
+    ap.add_argument("--text", help="--report 的描述文本")
+    ap.add_argument("--state", default="failure", choices=["failure", "success", "error"])
     args = ap.parse_args()
+
+    if args.report:
+        # 给 CI 里的「二分定位」步骤用：把任意一段结论写进 status，供匿名读取
+        token = os.environ.get("GITHUB_TOKEN")
+        if not token:
+            print("[digest] 未设 GITHUB_TOKEN，跳过上报", file=sys.stderr)
+            return 0
+        publish(args.repo, args.sha, args.report, args.state, args.text or "", token)
+        return 0
 
     patterns = [
         "**/target/surefire-reports/**/*.txt",
