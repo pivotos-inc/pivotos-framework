@@ -39,6 +39,32 @@ CASE_RE = re.compile(r"^\s*(\S+)\.(\S+)\s+--\s+Time elapsed.*(FAILURE|ERROR)!", 
 MAX_DESC = 140
 
 
+def collect_xml_errors():
+    """从 surefire/failsafe 的 XML 里取「第一个」失败的异常类型与消息片段。
+
+    光有类名不够定位（「DemoAcceptanceTest 6 个 Error」仍然不知道为什么红），
+    真正有信息量的是异常类型：BeanCreationException ≈ 上下文起不来、
+    RedisConnectionException ≈ 中间件不通、NoSuchMethodError ≈ 依赖版本错配。
+    """
+    import xml.etree.ElementTree as ET
+    for pattern in ("**/target/surefire-reports/**/*.xml", "**/target/failsafe-reports/**/*.xml"):
+        for path in glob.glob(pattern, recursive=True):
+            try:
+                root = ET.parse(path).getroot()
+            except Exception:
+                continue
+            for case in root.iter("testcase"):
+                for kind in ("error", "failure"):
+                    node = case.find(kind)
+                    if node is None:
+                        continue
+                    etype = node.get("type") or kind
+                    message = (node.get("message") or "").strip().replace("\n", " ")
+                    short = etype.split(".")[-1]
+                    return short, message
+    return None, None
+
+
 def collect(report_dirs):
     """返回 (失败总数, 错误总数, [摘要行])"""
     failures = errors = 0
@@ -82,13 +108,19 @@ def main():
             seen.add(line)
             ordered.append(line)
 
+    etype_short, message = collect_xml_errors()
     if failures == 0 and errors == 0:
-        description = "无测试失败（可能是构建/依赖阶段失败，见日志）"
+        description = "无测试失败（可能是构建/依赖阶段失败）"
+        if etype_short:
+            description = f"无测试失败，异常={etype_short}"
         state = "failure"
     else:
-        head = f"F{failures} E{errors}: " + "; ".join(ordered[:6])
+        # 异常类型优先：140 字符很紧，「BeanCreationException」比三个用例名有用得多
+        head = f"F{failures} E{errors} {etype_short or ''}: " + "; ".join(ordered[:4])
         description = head[:MAX_DESC]
         state = "failure"
+    if message:
+        print(f"[digest] 首个异常消息={message[:300]}")
 
     print(f"[digest] state={state} failures={failures} errors={errors}")
     print(f"[digest] description={description}")
