@@ -2,6 +2,8 @@ package com.pivotos.starter.metrics.support;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 
 import java.util.concurrent.TimeUnit;
 
@@ -35,16 +37,70 @@ public class BusinessMetrics {
     public static final String AI_TOKENS = "pivotos.ai.tokens";
     /** 慢接口：命中次数 */
     public static final String HTTP_SLOW = "pivotos.http.slow";
+    /** AI 调用的 Observation 名（同时是 span 名） */
+    public static final String AI_CALL_OBSERVATION = "pivotos.ai.call";
 
     private final MeterRegistry registry;
+    /** 链路侧门面；为 null 时所有 Observation 退化为 no-op（与指标同一口径） */
+    private final ObservationRegistry observationRegistry;
 
     public BusinessMetrics(MeterRegistry registry) {
+        this(registry, null);
+    }
+
+    public BusinessMetrics(MeterRegistry registry, ObservationRegistry observationRegistry) {
         this.registry = registry;
+        this.observationRegistry = observationRegistry;
     }
 
     /** 是否为 no-op 形态（总开关关闭时） */
     public boolean active() {
         return registry != null;
+    }
+
+    /** 链路侧是否可用（指标开着但没接 ObservationRegistry 时，span 一侧静默降级） */
+    public boolean observationActive() {
+        return observationRegistry != null;
+    }
+
+    /**
+     * 开启一次 AI 调用的 Observation（指标之外补链路侧：span + attribute）。
+     *
+     * <p>为什么 token 数走 {@code highCardinalityKeyValue}：它是**每个请求都不同**的数值，
+     * 若当 low cardinality 会被 {@code DefaultMeterObservationHandler} 变成 Prometheus tag，
+     * 每个取值一条时间序列 —— 高基数爆内存是「接了可观测之后把自己打挂」的经典形态。
+     * high cardinality 只进 span attribute，不进指标 tag。
+     *
+     * @return 未开链路时为 {@link Observation#NOOP}，调用方无需判空
+     */
+    public Observation startAiCall(String provider, String model) {
+        if (observationRegistry == null) {
+            return Observation.NOOP;
+        }
+        return Observation.createNotStarted(AI_CALL_OBSERVATION, observationRegistry)
+            .lowCardinalityKeyValue("ai.provider", nullToUnknown(provider))
+            .lowCardinalityKeyValue("ai.model", nullToUnknown(model))
+            .start();
+    }
+
+    /**
+     * 结束一次 AI 调用的 Observation。
+     *
+     * @param promptTokens     / completionTokens 为 0 表示「供应商未返回用量」（口径：未计量）
+     * @param error            失败时传入（会记 error 事件 + outcome=failure），成功传 null
+     */
+    public void stopAiCall(Observation observation, boolean success,
+                           int promptTokens, int completionTokens, Throwable error) {
+        if (observation == null || observation.isNoop()) {
+            return;
+        }
+        observation.lowCardinalityKeyValue("ai.outcome", success ? "success" : "failure");
+        observation.highCardinalityKeyValue("ai.prompt_tokens", String.valueOf(promptTokens));
+        observation.highCardinalityKeyValue("ai.completion_tokens", String.valueOf(completionTokens));
+        if (error != null) {
+            observation.error(error);
+        }
+        observation.stop();
     }
 
     /**

@@ -2,6 +2,7 @@ package com.pivotos.ai.client;
 
 import com.pivotos.ai.client.AiUsageRecorder.Snapshot;
 import com.pivotos.starter.metrics.support.BusinessMetrics;
+import io.micrometer.observation.Observation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.metadata.Usage;
@@ -68,6 +69,9 @@ public class MeteredChatModel implements ChatModel {
     public ChatResponse call(Prompt prompt) {
         Snapshot snapshot = Snapshot.capture();
         long start = System.nanoTime();
+        // 链路侧：模型名在调用前只能从 prompt 取（响应 metadata 要等回来才知道），
+        // 故 span 上的 ai.model 可能与指标上的略有出入，以「调用发起时的意图」为准。
+        Observation observation = metrics.startAiCall(providerCode, modelOf(null, prompt));
         try {
             ChatResponse response = delegate.call(prompt);
             Usage usage = usageOf(response);
@@ -77,6 +81,7 @@ public class MeteredChatModel implements ChatModel {
                     promptTokens(usage), completionTokens(usage), false);
             metrics.recordAiCall(providerCode, model, true, elapsedMillis(start));
             metrics.recordAiTokens(providerCode, model, promptTokens(usage), completionTokens(usage));
+            metrics.stopAiCall(observation, true, promptTokens(usage), completionTokens(usage), null);
             return response;
         } catch (RuntimeException e) {
             String model = modelOf(null, prompt);
@@ -84,6 +89,7 @@ public class MeteredChatModel implements ChatModel {
                     model, "chat", 0, 0, true);
             // 失败也要记一次调用（outcome=failure），否则「成功率」这个指标永远看不到失败
             metrics.recordAiCall(providerCode, model, false, elapsedMillis(start));
+            metrics.stopAiCall(observation, false, 0, 0, e);
             throw e;
         }
     }
@@ -97,6 +103,9 @@ public class MeteredChatModel implements ChatModel {
         // 流内局部承载：本 client 被缓存复用，多流并发不可共享模型名状态
         String[] modelHolder = new String[1];
         AtomicReference<Usage> lastUsage = new AtomicReference<>();
+        // 链路侧：stream 的 span 覆盖「订阅 → 结束」整段（doFinally 里收尾），
+        // 组装段也在同一线程，故此处的 Observation 与后续回调是同一个对象。
+        Observation observation = metrics.startAiCall(providerCode, fallbackModel);
         return delegate.stream(prompt)
                 .doOnNext(response -> {
                     Usage usage = usageOf(response);
@@ -123,6 +132,9 @@ public class MeteredChatModel implements ChatModel {
                             metrics.recordAiTokens(providerCode, model,
                                     promptTokens(usage), completionTokens(usage));
                         }
+                        metrics.stopAiCall(observation, ok,
+                                ok ? promptTokens(usage) : 0,
+                                ok ? completionTokens(usage) : 0, null);
                     } catch (Exception e) {
                         log.warn("[PivotOS] 流式用量记录异常（不影响业务）：{}", e.getMessage());
                     }
