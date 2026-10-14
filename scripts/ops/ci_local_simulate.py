@@ -29,7 +29,8 @@
     A4  if-no-files-found 必须为 error —— 缺省是 warn，路径写错会「静默归档了一个空包」
     A5  artifact name 在同一上下文内唯一；带 matrix 的 job，name 必须含 matrix 变量
         （否则矩阵各格互相覆盖，最后只剩一个）
-    A6  path 每一行必须至少匹配到一个文件（需先构建过；未构建时跳过并显式说明）
+    A6  path 每一行必须至少匹配到一个文件 —— **运行态门禁**：只有 --simulate 跑完 run 之后才查；
+        lint-only 不跑 run、产物目录不存在，查它必然假红（实测 FAIL 6，V3.1-J 遗留④，本批修）
     A7  run 步骤里引用的 scripts/** 文件必须存在（防止 yml 写了不存在的脚本）
     A8  禁止已废弃的 actions/upload-artifact@v3 及其以下
     A9  fat jar 这类大件，retention-days > 7 会告警（配额成本）
@@ -780,14 +781,23 @@ def main() -> int:
     # ---- S1 由解析阶段保证（解析不出 job 已 return 2） ----
     # A6 检查「归档 path 能不能命中文件」，而产物是 run 步骤跑出来的 ——
     # 所以 simulate 时它必须放到 run **之后**做，否则必然误报。
+    #
+    # ⚠️ 同一个道理反过来也成立（V3.1-J 遗留④，本批修）：**lint-only 不跑 run**，
+    #    产物目录（target/surefire-reports、target/ci-*.json）根本不存在，
+    #    此时查 A6 必然假红 —— 实测 `--lint-only` 稳定 FAIL 6 项，掩盖了真正的结构问题。
+    #    故 A6 定为**运行态门禁**：只有 simulate 且 run 之后才查，lint-only 一律跳过并显式说明。
     pre_run = args.simulate and not args.dry_run
+    is_lint_only = not args.simulate or args.dry_run
     fails, warns = lint_ci(
         jobs,
-        check_path_exists=bool(args.lint_only and not args.allow_missing_build),
+        check_path_exists=bool(pre_run and not args.allow_missing_build),
         out_dir=args.out_dir,
         allow_missing_build=args.allow_missing_build,
-        skip_codes={"A6"} if pre_run else None,
+        skip_codes={"A6"} if (pre_run or is_lint_only) else None,
     )
+    if is_lint_only:
+        print(f"{YEL}说明{RESET}：A6（归档 path 产物层）已跳过 —— 它是运行态门禁，"
+              f"lint-only 不跑 run 就没有产物；要查请用 --simulate")
     print(f"\n静态门禁（结构层）：FAIL {len(fails)} / WARN {len(warns)}")
     for w in warns:
         print(f"  {YEL}WARN{RESET} {w}")

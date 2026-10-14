@@ -11,6 +11,7 @@ import io.opentelemetry.context.Context;
 import io.opentelemetry.context.propagation.TextMapGetter;
 import io.opentelemetry.context.propagation.TextMapPropagator;
 import io.opentelemetry.context.propagation.TextMapSetter;
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
 
 import java.util.Collection;
 import java.util.List;
@@ -30,13 +31,39 @@ import java.util.concurrent.ThreadLocalRandom;
  * <p>本传播器把二者对齐：入站用 {@code X-Trace-Id} 作为父 span 的 traceId，
  * 出站把当前 span 的 traceId 写回 {@code X-Trace-Id}。
  *
- * <h3>为什么 extract 要自己造一个 spanId</h3>
- * {@code X-Trace-Id} 只带 traceId、不带 spanId（历史设计如此，改头格式会波及前端）。
- * 而 OTel 的 {@code SpanContext} 要求 spanId 合法（16 位十六进制，全 0 视为无效），
- * 传 {@link SpanId#getInvalid()} 会让整条上下文被判定为 invalid、parent 直接丢失 ——
- * 表现为「加了传播器但 Jaeger 里 traceId 还是新的」，极难归因。
- * 因此这里补一个随机 spanId 当作父 spanId：traceId 对齐（这是桥接的目的），
- * 父 spanId 是合成值（跨服务的父子层级因此不严谨，这一点如实记录，不做粉饰）。
+ * <h3>双头对齐（v3.2.0 补：跨服务父子层级）</h3>
+ * 初版只认 {@code X-Trace-Id}，而它**只带 traceId、不带 spanId**（历史设计如此，改头格式会波及前端），
+ * 于是父 spanId 只能合成一个随机值 —— Jaeger 里看得到同一个 traceId，
+ * 但**父子层级是假的**（父 spanId 指向一个不存在的 span）。
+ *
+ * <p>取证（2026-10-13，**结论修正过一次**）：Boot 4 的
+ * {@code OpenTelemetryTracingAutoConfiguration#otelContextPropagators} 是
+ * {@code TextMapPropagator.composite(全部 TextMapPropagator bean)}，composite 的
+ * {@code extract} 会**依次**把结果串起来（后写的 {@code context.with(...)} 覆盖先写的）。
+ * Boot 自己注册了 W3C 传播器且排在本类之前 —— 实证：把本类的 {@code w3c.extract} 去掉后
+ * 父子层级依然正确，说明 {@code traceparent} **一直有在被解析**。
+ *
+ * <p>所以真正的根因不是「traceparent 没参与」，而是**本类无条件用合成 spanId 覆盖了
+ * W3C 已经解析好的真实 parent**：v3.1 的 extract 只要拿到 {@code X-Trace-Id} 就
+ * {@code SpanContext.create(traceId, 随机spanId, ...)} 一把盖掉，真实父 spanId 当场丢失。
+ *
+ * <p>修法：先承认「入站 context 里可能已经有合法的父 span」，再决定要不要重写：
+ * <ul>
+ *   <li>有 {@code traceparent} → **父 spanId 直接取它的真实值**（父子层级真实）；</li>
+ *   <li>两个头的 traceId 不一致时，以 {@code X-Trace-Id} 为准重写 traceId、
+ *       但**保留 traceparent 的真实 spanId** —— 既守住「日志 / 响应头 / Jaeger 三处同 ID」，
+ *       又不牺牲父子层级；</li>
+ *   <li>没有 {@code traceparent}（老上游 / 浏览器直连）→ 退回合成 spanId，
+ *       这是已知限制，如实记录。</li>
+ * </ul>
+ *
+ * <h3>为什么这里还要自己再组合一份 {@link W3CTraceContextPropagator}</h3>
+ * 既然 Boot 已经注册了 W3C，本类再调一次 {@code w3c.extract} 看起来是多余的
+ * —— 实测去掉它也确实不影响结果。留着的理由是**不把正确性押在装配顺序上**：
+ * composite 的先后由 {@code orderedStream()} 决定，一旦有人改了
+ * {@code management.tracing.propagation.type}（比如切 b3）或新增别的传播器 bean，
+ * 「谁排在前面」就会变；本类自带一份解析后，无论排在哪都能拿到真实父 spanId。
+ * 代价只是多解析一次同一个头（幂等，无副作用）。
  *
  * <h3>非法值一律忽略</h3>
  * 头是外部可控输入：非 32 位十六进制（含全 0）一律当作没传，回退到 OTel 自己的生成逻辑，
@@ -47,12 +74,18 @@ public class XTraceIdPropagator implements TextMapPropagator {
     /** 与 {@code TraceIdFilter} 共用同一个头常量，避免两处字面量漂移 */
     public static final String HEADER = CommonConstants.TRACE_ID_HEADER;
 
+    /** W3C 标准头：跨服务的父子层级靠它传真实 spanId */
+    public static final String TRACEPARENT_HEADER = "traceparent";
+
     private static final int TRACE_ID_HEX_LEN = 32;
     private static final String INVALID_TRACE_ID = "00000000000000000000000000000000";
 
+    /** 组合而非注册成第二个 bean：extract/inject 的先后顺序由本类固定，避免被装配顺序翻转 */
+    private final W3CTraceContextPropagator w3c = W3CTraceContextPropagator.getInstance();
+
     @Override
     public Collection<String> fields() {
-        return List.of(HEADER);
+        return List.of(HEADER, TRACEPARENT_HEADER);
     }
 
     @Override
@@ -61,18 +94,36 @@ public class XTraceIdPropagator implements TextMapPropagator {
         if (!spanContext.isValid()) {
             return;
         }
+        // 先写 traceparent（下游拿它建真实父子），再写自有头（前端/网关一路都在看它）
+        w3c.inject(context, carrier, setter);
         setter.set(carrier, HEADER, spanContext.getTraceId());
     }
 
     @Override
     public <C> Context extract(Context context, C carrier, TextMapGetter<C> getter) {
+        // ① 让 W3C 先解析 traceparent：有则拿到真实的父 spanId
+        Context extracted = w3c.extract(context, carrier, getter);
+        SpanContext fromW3c = Span.fromContext(extracted).getSpanContext();
+
         String traceId = resolveTraceId(carrier, getter);
         if (traceId == null) {
-            return context;
+            // 没有自有链路头：traceparent 说了算（有则真实父子，无则原样交回 OTel 自己生成）
+            return extracted;
         }
+        if (fromW3c.isValid() && traceId.equals(fromW3c.getTraceId())) {
+            // ② 两头一致 —— 直接采用，父 spanId 是真实值
+            return extracted;
+        }
+        if (fromW3c.isValid()) {
+            // ③ 两头 traceId 不一致：以自有头为准（保证三处同 ID），但保留 traceparent 的真实 spanId
+            SpanContext aligned = SpanContext.create(traceId, fromW3c.getSpanId(),
+                fromW3c.getTraceFlags(), fromW3c.getTraceState());
+            return extracted.with(Span.wrap(aligned));
+        }
+        // ④ 只有 X-Trace-Id：只能合成父 spanId（已知限制，父子层级在这一支上是假的）
         SpanContext parent = SpanContext.create(traceId, randomSpanId(),
             TraceFlags.getSampled(), TraceState.getDefault());
-        return context.with(Span.wrap(parent));
+        return extracted.with(Span.wrap(parent));
     }
 
     /**

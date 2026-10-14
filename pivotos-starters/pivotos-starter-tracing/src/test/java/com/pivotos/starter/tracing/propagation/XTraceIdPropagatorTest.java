@@ -42,8 +42,85 @@ class XTraceIdPropagatorTest {
     };
 
     @Test
-    void fields_declares_only_the_project_header() {
-        assertThat(propagator.fields()).containsExactly("X-Trace-Id");
+    void fields_declares_both_headers() {
+        // traceparent 必须一并声明：下游靠它建真实父子层级（只声明自有头时它永远不会被传播）
+        assertThat(propagator.fields())
+            .containsExactlyInAnyOrder("X-Trace-Id", "traceparent");
+    }
+
+    // ---------------------------------------------------------------- 双头对齐（跨服务父子层级）
+
+    @Test
+    void inbound_traceparent_gives_real_parent_span_id() {
+        // 跨服务父子层级的硬判据：父 spanId 必须等于上游 traceparent 里的那个，不能是合成值
+        Map<String, String> carrier = Map.of("traceparent",
+            "00-" + TRACE_ID + "-0000000000000042-01");
+
+        SpanContext parent = Span.fromContext(propagator.extract(Context.root(), carrier, GETTER))
+            .getSpanContext();
+
+        assertThat(parent.getTraceId()).isEqualTo(TRACE_ID);
+        assertThat(parent.getSpanId()).as("父 spanId 必须取 traceparent 的真实值（这是本轮修的重点）")
+            .isEqualTo("0000000000000042");
+        assertThat(parent.isValid()).isTrue();
+    }
+
+    @Test
+    void both_headers_agree_keeps_real_parent_span_id() {
+        Map<String, String> carrier = Map.of(
+            "traceparent", "00-" + TRACE_ID + "-0000000000000042-01",
+            XTraceIdPropagator.HEADER, TRACE_ID);
+
+        SpanContext parent = Span.fromContext(propagator.extract(Context.root(), carrier, GETTER))
+            .getSpanContext();
+
+        assertThat(parent.getTraceId()).isEqualTo(TRACE_ID);
+        assertThat(parent.getSpanId()).isEqualTo("0000000000000042");
+    }
+
+    @Test
+    void conflicting_headers_align_trace_id_but_keep_real_span_id() {
+        // 上游只传了 X-Trace-Id、中间层自己开了新 trace 时会撞上：
+        // traceId 以自有头为准（保证日志 / 响应头 / Jaeger 三处同 ID），
+        // spanId 仍取 traceparent 的真实值（不牺牲父子层级）
+        Map<String, String> carrier = Map.of(
+            "traceparent", "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-0000000000000042-01",
+            XTraceIdPropagator.HEADER, TRACE_ID);
+
+        SpanContext parent = Span.fromContext(propagator.extract(Context.root(), carrier, GETTER))
+            .getSpanContext();
+
+        assertThat(parent.getTraceId()).isEqualTo(TRACE_ID);
+        assertThat(parent.getSpanId()).isEqualTo("0000000000000042");
+    }
+
+    @Test
+    void inject_writes_traceparent_as_well_as_project_header() {
+        SpanContext spanContext = SpanContext.create(TRACE_ID, "0000000000000001",
+            TraceFlags.getSampled(), TraceState.getDefault());
+        Context context = Context.root().with(Span.wrap(spanContext));
+
+        Map<String, String> carrier = new HashMap<>();
+        propagator.inject(context, carrier, Map::put);
+
+        assertThat(carrier).containsEntry(XTraceIdPropagator.HEADER, TRACE_ID);
+        assertThat(carrier.get("traceparent"))
+            .as("下游要能拿到 traceparent 才能建真实父子")
+            .isEqualTo("00-" + TRACE_ID + "-0000000000000001-01");
+    }
+
+    @Test
+    void malformed_traceparent_falls_back_without_throwing() {
+        // 头是外部可控输入：traceparent 写错不该让请求失败，也不该污染自有头的桥接
+        Map<String, String> carrier = Map.of(
+            "traceparent", "not-a-traceparent",
+            XTraceIdPropagator.HEADER, TRACE_ID);
+
+        SpanContext parent = Span.fromContext(propagator.extract(Context.root(), carrier, GETTER))
+            .getSpanContext();
+
+        assertThat(parent.getTraceId()).isEqualTo(TRACE_ID);
+        assertThat(parent.isValid()).isTrue();
     }
 
     @Test

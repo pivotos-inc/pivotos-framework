@@ -5,6 +5,7 @@ import com.pivotos.starter.metrics.jdbc.DruidPoolMetricsBinder;
 import com.pivotos.starter.metrics.support.BusinessMetrics;
 import com.pivotos.starter.metrics.web.SlowRequestMetricsFilter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,12 +60,18 @@ public class MetricsInfrastructureAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public BusinessMetrics businessMetrics(ObjectProvider<MeterRegistry> registryProvider) {
+    public BusinessMetrics businessMetrics(ObjectProvider<MeterRegistry> registryProvider,
+                                           ObjectProvider<ObservationRegistry> observationRegistryProvider) {
         MeterRegistry registry = registryProvider.getIfAvailable();
         if (registry == null) {
             log.warn("[METRICS] classpath 上没有 MeterRegistry，业务埋点降级为 no-op（指标不会出现在任何地方）");
         }
-        return new BusinessMetrics(registry);
+        // ObservationRegistry 独立于指标开关：没接链路时 startAiCall 返回 noop，业务零感知
+        ObservationRegistry observationRegistry = observationRegistryProvider.getIfAvailable();
+        if (observationRegistry == null) {
+            log.info("[METRICS] 未装配 ObservationRegistry，业务埋点的 span 一侧降级为 no-op（指标不受影响）");
+        }
+        return new BusinessMetrics(registry, observationRegistry);
     }
 
     /** 统一打 application 标签：多实例/多应用共用一个 Prometheus 时靠它区分 */

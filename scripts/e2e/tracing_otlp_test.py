@@ -28,6 +28,7 @@
 import argparse
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -36,6 +37,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 BASE = "http://127.0.0.1:8080"
@@ -63,6 +65,9 @@ LOCAL_DB_ENV = {
 }
 
 LOCAL_DB = False
+# Jaeger 真机验证（可选）：给了 --jaeger-url 才会跑 jaeger 场景
+JAEGER_URL = None
+JAEGER_OTLP_ENDPOINT = "http://127.0.0.1:4318/v1/traces"
 
 results = []
 received_spans = []
@@ -375,8 +380,94 @@ def scenario_mdc():
 
         time.sleep(2)
         text = read_log(log_path)
-        check("S4-3", "[u=1," in text or "[u=2," in text or "[u=3," in text,
-              "日志出现真实 userId（MDC 身份维度已生效）；若为 u=- 说明 MdcContextFilter 未装配")
+        # v3.2.0 起身份段从 [u=1,t=12] 改为独立 kv 字段 userId=1 tenantId=12
+        check("S4-3", re.search(r"\buserId=(?!-)\d", text) is not None,
+              "日志出现真实 userId（MDC 身份维度已生效）；若恒为 userId=- 说明 MdcContextFilter 未装配")
+    finally:
+        stop_server(proc, fh)
+
+
+def scenario_jaeger():
+    """场景 5（Jaeger 真机 · UI 层）：span 打进**真的 Jaeger**，并按 traceId 从 Query API 查回来。
+
+    与场景 1~2 的区别：那两个用的是脚本内置的 OTLP 接收器，只能证明「导出通路通了」；
+    本场景证明的是**运维在 Jaeger UI 上真的能搜到这条 trace，且父子层级是对的**。
+
+    父子层级是 v3.2.0 的重点：入站同时带 X-Trace-Id 与 W3C traceparent（含上游 spanId），
+    导出后 Jaeger 侧该 span 的 CHILD_OF 引用必须指向 traceparent 里的那个 spanId ——
+    修之前父 spanId 是合成随机值，UI 上父子层级是假的（看得到同一个 traceId，但连不上）。
+    """
+    tag = "jaeger"
+    received_spans.clear()
+    jaeger_env = dict(TRACING_ENV)
+    jaeger_env["PIVOTOS_TRACING_OTLP_ENDPOINT"] = JAEGER_OTLP_ENDPOINT
+    proc, fh, log_path = start_server(tag, jaeger_env)
+    try:
+        text = read_log(log_path)
+        check("S5-1", f"[TRACING] OTLP 导出器已注册：endpoint={JAEGER_OTLP_ENDPOINT}" in text,
+              f"导出器指向真 Jaeger（{JAEGER_OTLP_ENDPOINT}）")
+
+        # ⚠️ traceId / 上游 spanId 必须**每轮随机**：
+        # Jaeger all-in-one 默认内存存储会保留上一轮的 span，用固定 ID 时
+        # 「改动没生效」也会读到上一轮的正确数据 —— 断言恒绿，等于没断言。
+        # 这是本场景第一版就踩到的假绿（变异后仍 PASS）。
+        trace_id = uuid.uuid4().hex
+        upstream_span_id = uuid.uuid4().hex[:16]
+        traceparent = f"00-{trace_id}-{upstream_span_id}-01"
+        status, _, _ = http_get("/health/live", {TRACE_HEADER: trace_id, "traceparent": traceparent})
+        check("S5-2", status == 200, f"带双头的请求正常（{status}）")
+
+        payload = wait_jaeger_trace(trace_id)
+        check("S5-3", payload is not None,
+              f"Jaeger Query API 能按 traceId 查到 trace（{trace_id}）")
+
+        spans = []
+        if payload:
+            for tr in payload.get("data") or []:
+                spans.extend(tr.get("spans") or [])
+        check("S5-4", bool(spans), f"trace 里有 span（实际 {len(spans)} 个）")
+
+        parent_refs = []
+        for sp in spans:
+            for ref in sp.get("references") or []:
+                if ref.get("refType") == "CHILD_OF":
+                    parent_refs.append(ref.get("spanID"))
+        check("S5-5", upstream_span_id in parent_refs,
+              f"父 spanId 取 traceparent 的真实值（期望 {upstream_span_id}，实际 {parent_refs}）"
+              f"—— 这是「父子层级真实」的硬判据，合成值会指向一个不存在的 span")
+
+        # S5-8 是唯一能区分「对齐逻辑生效」与「W3C 自己碰巧对了」的断言：
+        # 两头 traceId **故意不一致** —— 若只是 Boot 的 W3C propagator 在起作用，
+        # 落到 Jaeger 的会是 traceparent 的 traceId；只有本仓的对齐逻辑（以 X-Trace-Id
+        # 为准重写 traceId、保留 traceparent 的真实 spanId）才会产出下面这个组合。
+        conflict_trace = uuid.uuid4().hex
+        conflict_upstream = uuid.uuid4().hex[:16]
+        w3c_trace = uuid.uuid4().hex
+        status, _, _ = http_get("/health/live", {
+            TRACE_HEADER: conflict_trace,
+            "traceparent": f"00-{w3c_trace}-{conflict_upstream}-01",
+        })
+        check("S5-8a", status == 200, f"冲突双头请求正常（{status}）")
+        payload2 = wait_jaeger_trace(conflict_trace)
+        spans2 = []
+        if payload2:
+            for tr in payload2.get("data") or []:
+                spans2.extend(tr.get("spans") or [])
+        parents2 = [ref.get("spanID")
+                    for sp in spans2
+                    for ref in (sp.get("references") or [])
+                    if ref.get("refType") == "CHILD_OF"]
+        check("S5-8", bool(payload2) and conflict_upstream in parents2,
+              f"traceId 取 X-Trace-Id（{conflict_trace[:8]}…）且父 spanId 仍取 traceparent 的"
+              f"真实值（{conflict_upstream}）；实际父引用 {parents2}")
+
+        services = jaeger_get("/api/services").get("data") or []
+        check("S5-6", bool(services),
+              f"Jaeger 已登记服务（{services}）——证明 span 真的进了 Jaeger 存储而非只被接收")
+
+        ui_status, ui_body = http_raw(JAEGER_URL + "/search", timeout=10)
+        check("S5-7", ui_status == 200 and ("Jaeger" in ui_body or "jaeger" in ui_body),
+              f"Jaeger UI 层可达（HTTP {ui_status}）")
     finally:
         stop_server(proc, fh)
 
@@ -386,26 +477,71 @@ SCENARIOS = {
     "noheader": scenario_noheader,
     "disabled": scenario_disabled,
     "mdc": scenario_mdc,
+    "jaeger": scenario_jaeger,
 }
+
+
+def jaeger_get(path, timeout=15):
+    req = urllib.request.Request(JAEGER_URL.rstrip("/") + path)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
+def wait_jaeger_trace(trace_id, timeout=60):
+    """Jaeger 落库是异步的（BatchSpanProcessor + 存储写入），必须轮询而不是 sleep 一刀切。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            payload = jaeger_get(f"/api/traces/{trace_id}")
+            if payload.get("data"):
+                return payload
+        except Exception:
+            pass
+        time.sleep(3)
+    return None
+
+
+def http_raw(url, timeout=10):
+    req = urllib.request.Request(url)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.getcode(), r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
 
 
 def main():
     ap = argparse.ArgumentParser(description="链路追踪 OTLP E2E")
     ap.add_argument("--only", choices=list(SCENARIOS), help="只跑指定场景")
-    ap.add_argument("--jaeger-url", help="可选：Jaeger Query 地址，附加断言 Jaeger 侧能查到该 trace")
+    ap.add_argument("--jaeger-url", help="Jaeger Query 地址（如 http://127.0.0.1:16686）；"
+                                          "给了才会跑 jaeger 场景（真机 UI 层验证）")
+    ap.add_argument("--jaeger-otlp", default="http://127.0.0.1:4318/v1/traces",
+                    help="Jaeger 的 OTLP HTTP 接收端点（默认 http://127.0.0.1:4318/v1/traces）")
     ap.add_argument("--local-db", action="store_true",
                     help="把数据源与 Redis 指到本机 127.0.0.1（docker 起的 mysql:8.4 / redis:8）。"
                          "远端开发服务器不可达时必须加，否则「收不到 span」是环境不通而非桥接失败。")
     args = ap.parse_args()
 
-    global LOCAL_DB
+    global LOCAL_DB, JAEGER_URL, JAEGER_OTLP_ENDPOINT
     LOCAL_DB = args.local_db
+    JAEGER_URL = args.jaeger_url
+    JAEGER_OTLP_ENDPOINT = args.jaeger_otlp
     os.makedirs(WORK_ROOT, exist_ok=True)
     if not os.path.exists(JAR):
         raise RuntimeError(f"找不到 fat jar：{JAR}（先 mvn clean package）")
+    if args.only == "jaeger" and not JAEGER_URL:
+        raise RuntimeError("jaeger 场景必须给 --jaeger-url（Jaeger Query 地址）")
 
-    server = start_otlp_receiver()
     plan = [args.only] if args.only else ["bridge", "noheader", "disabled", "mdc"]
+    # --only 已显式指定时不再追加（否则 --only jaeger + --jaeger-url 会把该场景跑两遍）
+    if JAEGER_URL and not args.only:
+        plan.append("jaeger")
+    # ⚠️ 内置接收器占 4318，而 Jaeger 的 OTLP HTTP 接收端也是 4318 ——
+    #    同时跑会 bind 失败（表现为「Jaeger 收不到 span」而不是「端口冲突」，极难归因）。
+    #    只跑 jaeger 场景时就不起内置接收器。
+    server = None
+    if any(n != "jaeger" for n in plan):
+        server = start_otlp_receiver()
     failed = []
     try:
         for name in plan:
@@ -416,7 +552,8 @@ def main():
                 failed.append((name, e))
                 log("ERROR", f"{name} 场景异常：{e}")
     finally:
-        server.shutdown()
+        if server:
+            server.shutdown()
 
     log("SUMMARY", f"断言 {len(results)} 条，通过 {sum(1 for _, ok in results if ok)} 条")
     for tag, ok in results:
