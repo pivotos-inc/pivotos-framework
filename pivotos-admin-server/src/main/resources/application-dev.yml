@@ -128,7 +128,7 @@ pivotos:
       enabled: true
       max-steps: 10              # 单条计划步骤上限（防 LLM 产出失控长链）
       max-intent-length: 500
-      model: qwen-plus           # 留空则取供应商默认模型
+      model: qwen3.8-flash       # V3.2-D 降档（原 qwen-plus）；留空则取供应商默认模型
       # 排除写工程源码的工具：改源码属 A4 评审面职责，编排面不给旁路
       excluded-tools:
         - writeCodeFile

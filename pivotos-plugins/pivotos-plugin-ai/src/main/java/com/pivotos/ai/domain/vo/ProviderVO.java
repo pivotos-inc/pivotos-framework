@@ -21,6 +21,14 @@ public class ProviderVO extends BaseDTO {
     /** 默认模型 */
     private String defaultModel;
 
+    /**
+     * 对话模型池（英文逗号分隔；V3.2-D）
+     *
+     * <p>百炼免费额度按模型独立发放且官方不会自动切模型，配池后由应用层轮询分摊；
+     * 为空表示只用 defaultModel。
+     */
+    private String modelPool;
+
     /** 向量化模型名（空则回退 spring.ai.openai.embedding.options.model） */
     private String embeddingModel;
 

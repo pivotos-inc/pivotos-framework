@@ -6,6 +6,7 @@ import com.pivotos.ai.api.dto.AiTrendPointDTO;
 import com.pivotos.ai.api.enums.AiErrorCode;
 import com.pivotos.ai.api.facade.IAiFacade;
 import com.pivotos.ai.client.AiClientRegistry;
+import com.pivotos.ai.client.AiModelPoolRouter;
 import com.pivotos.ai.domain.entity.AiApiKey;
 import com.pivotos.ai.domain.entity.AiChatMessage;
 import com.pivotos.ai.domain.entity.AiProvider;
@@ -48,6 +49,8 @@ public class AiLocalFacade implements IAiFacade {
     /** ChatClient 可能不存在（api-key 未配置），懒获取 + 5020 兜底 */
     private final ObjectProvider<ChatClient> chatClientProvider;
     private final AiClientRegistry clientRegistry;
+    /** 模型池轮询器（V3.2-D：内部生成链路同样按池分摊免费额度） */
+    private final AiModelPoolRouter modelPoolRouter;
     private final AiConversationMapper conversationMapper;
     private final AiChatMessageMapper messageMapper;
     private final AiProviderMapper providerMapper;
@@ -87,12 +90,22 @@ public class AiLocalFacade implements IAiFacade {
         try {
             // S96 K7：DashScope 兼容端对 [system, user] 形态的特定结构化 prompt 实测稳定返回空数组（[]），
             // 同内容拼入单条 user 消息则正常产出；内部生成链路改用单 user 形态规避
-            return clientRegistry.getInternalChatClient(provider, keys.get(0))
-                    .prompt()
-                    .user(systemPrompt + "\n\n" + userPrompt)
-                    .options(clientRegistry.buildChatOptions(provider, provider.getDefaultModel()))
-                    .call()
-                    .content();
+            // V3.2-D：模型走池轮询（未配池时 nextModel 直接回落 defaultModel，行为不变）
+            String model = modelPoolRouter.nextModel(provider);
+            try {
+                return clientRegistry.getInternalChatClient(provider, keys.get(0))
+                        .prompt()
+                        .user(systemPrompt + "\n\n" + userPrompt)
+                        .options(clientRegistry.buildChatOptions(provider, model))
+                        .call()
+                        .content();
+            } catch (Exception e) {
+                // 免费额度耗尽的锅在模型：摘除它，下次自动切池里下一个（内部链路不重试）
+                if (AiModelPoolRouter.isFreeTierExhausted(e)) {
+                    modelPoolRouter.markExhausted(provider.getId(), model);
+                }
+                throw e;
+            }
         } catch (Exception e) {
             log.error("[PivotOS] AI 单轮生成失败 providerId={}", provider.getId(), e);
             throw new ServiceException(AiErrorCode.CHAT_FAILED);
@@ -169,15 +182,21 @@ public class AiLocalFacade implements IAiFacade {
         if (key == null) {
             throw new ServiceException(AiErrorCode.NO_AVAILABLE_KEY);
         }
+        // V3.2-D：与 chatWithSystem 同口径，动态通道也按池分摊免费额度
+        String model = modelPoolRouter.nextModel(provider);
         try {
             return clientRegistry.getChatClient(provider, key)
                     .prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
+                    .options(clientRegistry.buildChatOptions(provider, model))
                     .call()
                     .content();
         } catch (Exception e) {
-            log.error("[PivotOS] 动态通道 LLM 调用失败 providerId={}", provider.getId(), e);
+            if (AiModelPoolRouter.isFreeTierExhausted(e)) {
+                modelPoolRouter.markExhausted(provider.getId(), model);
+            }
+            log.error("[PivotOS] 动态通道 LLM 调用失败 providerId={} model={}", provider.getId(), model, e);
             throw new ServiceException(AiErrorCode.CHAT_FAILED);
         }
     }
@@ -188,7 +207,8 @@ public class AiLocalFacade implements IAiFacade {
             return modelOverride.trim();
         }
         AiProvider provider = firstEnabledProvider();
-        return provider == null ? STATIC_MODEL : provider.getDefaultModel();
+        // peekModel 不推进轮询游标：查询动作本身不该改变「下一个用谁」
+        return provider == null ? STATIC_MODEL : modelPoolRouter.peekModel(provider);
     }
 
     /** 首个启用供应商（status=0 启用，口径同 AiChatServiceImpl / 原 ai-coding 实现） */
