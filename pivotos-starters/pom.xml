@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>3.1.0</version>
+        <version>3.2.0</version>
     </parent>
 
     <artifactId>pivotos-starters</artifactId>
@@ -41,6 +41,7 @@
         <module>pivotos-starter-cloud-alibaba</module>
         <!-- ST-METRICS（V3.1-F P1-B8-1）：指标底座 + Prometheus 抓取端点 + 业务埋点门面 -->
         <module>pivotos-starter-metrics</module>
+        <module>pivotos-starter-tracing</module>
     </modules>
 
     <dependencyManagement>

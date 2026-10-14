@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.pivotos</groupId>
         <artifactId>pivotos-framework</artifactId>
-        <version>3.1.0</version>
+        <version>3.2.0</version>
     </parent>
 
     <artifactId>pivotos-dependencies</artifactId>
@@ -581,6 +581,11 @@
             <dependency>
                 <groupId>com.pivotos</groupId>
                 <artifactId>pivotos-starter-metrics</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pivotos</groupId>
+                <artifactId>pivotos-starter-tracing</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <!-- ========== ST-CLOUD（V3-S2 L2）：三通道 SPI 契约 + local/cloud/alibaba 三个实现 ========== -->

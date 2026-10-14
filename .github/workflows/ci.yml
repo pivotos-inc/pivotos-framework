@@ -6,9 +6,14 @@ on:
   pull_request:
     branches: [master, develop]
 
-# 最小权限：本流水线只读取代码、写出 workflow 产物，不需要更多。
+# 最小权限：本流水线只读取代码、写出 workflow 产物；
+# statuses:write 是给「失败摘要上报」用的 —— Actions 的日志与 artifact 下载都要求 admin 权限
+# （实测匿名 GET /actions/jobs/{id}/logs → 403 Must have admin rights），
+# 没有令牌的人只能看到「哪个 step 红了」而看不到原因。commit status 对 public 仓匿名可读，
+# 把摘要写进去后，任何人 `curl .../commits/<sha>/statuses` 都能读到定位信息（2026-10-12）。
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   compat-matrix:
@@ -94,12 +99,16 @@ jobs:
         options: >-
           --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot_ci"
           --health-interval=5s --health-timeout=5s --health-retries=20
-      redis:
-        image: redis:8
-        ports: ['6379:6379']
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=5s --health-timeout=5s --health-retries=20
+      # Redis **刻意不放在 services 里**：services 只接受 image/ports/options，
+      # 没有 docker run 的 command 参数，而我们需要 `redis-server --requirepass root_ci`。
+      # （2026-10-12 实测：redis:8 官方镜像不支持 REDIS_ARGS 之类的等价环境变量，
+      #   加了也照样无密码 —— 所以只能自己 docker run，见下面的「启动 Redis」步骤。）
+      #
+      # 为什么**必须**带密码：Redisson 拿到**空字符串**密码也照样发 `AUTH ""`，
+      # Redis 8 会直接拒绝 —— `ERR AUTH <password> called without any password configured`，
+      # 表层现象是测试的 IllegalStateException: Failed to load ApplicationContext，
+      # 根因却在 Bean 创建深处的 RedisConnectionException（CI 红了三轮才靠摘要挖出来）。
+      # 让容器带密码，与 dev 环境一致（dev 的 Redis 也是带密码的）。
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -107,6 +116,36 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      # 测试隔离静态门禁（2026-10-12）：禁止在 `static @BeforeAll` 里访问 Spring 装配的
+      # 全局静态状态（SaManager / Stp*Util.STP / createLoginSession / loginToken / LoginContext）。
+      # 先跑 --selfcheck 做负向自检，证明门禁本身会变红 —— 一条永远绿的门禁等于没有门禁。
+      - name: 测试隔离门禁（红线 + 负向自检）
+        run: |
+          python3 scripts/ops/check_test_isolation.py --selfcheck
+          python3 scripts/ops/check_test_isolation.py
+      - name: 启动 Redis（带密码，与 dev 形态一致）
+        run: |
+          docker run -d --name pivotos-ci-redis -p 6379:6379 redis:8 redis-server --requirepass root_ci
+          for i in $(seq 1 30); do
+            if docker exec pivotos-ci-redis redis-cli -a root_ci --no-auth-warning ping 2>/dev/null | grep -q PONG; then
+              echo "Redis 就绪（带密码）"; exit 0
+            fi
+            sleep 2
+          done
+          echo "Redis 未在 60s 内就绪"; docker logs pivotos-ci-redis; exit 1
+      # 预建 8 个测试库，且字符集/排序规则与 dev 库一致（utf8mb4_general_ci）。
+      # 不预建的话，库由连接串的 createDatabaseIfNotExist=true 自动建，
+      # 用的是**服务器的默认排序规则** utf8mb4_0900_ai_ci —— 与日常开发库不同，
+      # 硬生生多出一处「本机绿、CI 红」的环境差异。库名与 reset_test_databases.py 的白名单一致。
+      - name: 预建测试库（字符集与 dev 一致）
+        run: |
+          CID=$(docker ps --filter "ancestor=mysql:8.4" --format '{{.ID}}' | head -1)
+          for db in pivotos_test test test_message test_tenant test_tenant_s1 test_tenant_s2 test_tenant_d1 test_tenant_d2; do
+            docker exec "$CID" mysql -uroot -proot_ci \
+              -e "CREATE DATABASE IF NOT EXISTS $db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci"
+          done
+          docker exec "$CID" mysql -uroot -proot_ci -e "SHOW DATABASES"
+
       - name: 全量测试（ArchUnit A1-A7 随 verify 一并执行）
         # ⚠️ 这里的变量名必须与测试配置里真正消费的名字一致，否则注入毫无效果且不报错。
         # （2026-10-11 修复：此前注入的是 MYSQL_HOST / MYSQL_DB / REDIS_* 一组名字，
@@ -122,8 +161,50 @@ jobs:
           PIVOTOS_TEST_MYSQL_PASSWORD: root_ci
           PIVOTOS_TEST_REDIS_HOST: 127.0.0.1
           PIVOTOS_TEST_REDIS_PORT: '6379'
-          PIVOTOS_TEST_REDIS_PASSWORD: ''
+          # ⚠️ 绝不能是空串：空串会让 Redisson 发 AUTH "" 被 Redis 8 拒绝（详见上方注释）
+          PIVOTOS_TEST_REDIS_PASSWORD: root_ci
+        # 这里**刻意不再**固定 -Dsurefire.runOrder=alphabetical（2026-10-12 拆除）。
+        #
+        # 它曾经是根因的止痛药：surefire 默认 filesystem 顺序在不同 OS 上不同，
+        # 一旦存在测试间耦合，就会出现「本机全量绿、runner 全量红」且本机复现不出来。
+        # 固定字母序只是把顺序变成常量，**耦合本身没消除**。
+        #
+        # 根因已于 2026-10-12 定位并修掉：JUnit 5 的 `static @BeforeAll` 早于 Spring 测试
+        # 上下文加载，而 Sa-Token 的 `SaManager` 是全局静态单例、dao **惰性初始化** ——
+        # 首次调用会把它锁定为内存实现，造出的 token 只写进内存；等上下文加载完，dao 被
+        # 换成 Redis 实现，请求侧读不到 → 全部 1002。只要同 JVM 里已有别的测试类先加载过
+        # 上下文就恰好是 Redis dao（这就是「单跑红、全量绿」的成因）。
+        #
+        # 修法：token 初始化挪到实例级 @BeforeEach。并由
+        # `scripts/ops/check_test_isolation.py` 静态守着不再复发（见上一步）。
         run: mvn -B clean verify
+
+      # 二分定位：全量红了之后，把首个失败模块**单独**重跑一次并上报结论。
+      # 「全量红 + 单跑绿」= 测试间耦合/顺序问题；「全量红 + 单跑也红」= 该模块本身在 runner 上不过。
+      # 这两种情况的修法完全不同，靠猜一定会走错方向。
+      - name: 二分定位：单独重跑首个失败模块
+        if: failure()
+        continue-on-error: true
+        env:
+          PIVOTOS_TEST_MYSQL_HOST: 127.0.0.1
+          PIVOTOS_TEST_MYSQL_PORT: '3306'
+          PIVOTOS_TEST_MYSQL_USERNAME: root
+          PIVOTOS_TEST_MYSQL_PASSWORD: root_ci
+          PIVOTOS_TEST_REDIS_HOST: 127.0.0.1
+          PIVOTOS_TEST_REDIS_PORT: '6379'
+          PIVOTOS_TEST_REDIS_PASSWORD: root_ci
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RESULT=FAIL
+          if mvn -B -pl pivotos-plugins/pivotos-plugin-message -am test \
+              -Dtest=MessageIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false \
+              > /tmp/bisect.log 2>&1; then
+            RESULT=SUCCESS
+          fi
+          TAIL=$(grep -E "Tests run:" /tmp/bisect.log | tail -1 | cut -c1-100)
+          python3 scripts/ops/ci_failure_digest.py --repo ${{ github.repository }} \
+            --sha ${{ github.sha }} --report ci-bisect-message \
+            --state failure --text "单独重跑=$RESULT | $TAIL"
 
       # 必须在 verify **之后**执行：verify 会清空并重建 target，报告是它跑出来的。
       # 冻结成 JSON 是为了留一条「这一轮到底跑了多少条」的可回溯证据——
@@ -131,6 +212,15 @@ jobs:
       - name: 冻结 IT 计数
         if: always()
         run: python3 scripts/ops/count_tests.py --json target/ci-test-counts.json
+
+      # 失败时把摘要写进 commit status：唯一一条「不持令牌也能读到失败原因」的通道。
+      # continue-on-error 是刻意的：上报只是锦上添花，它自己挂了不该改变构建结论。
+      - name: 失败摘要上报（写进 commit status，匿名可读）
+        if: failure()
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/ops/ci_failure_digest.py --repo ${{ github.repository }} --sha ${{ github.sha }}
 
       - name: 归档测试报告（surefire / failsafe）
         if: always()

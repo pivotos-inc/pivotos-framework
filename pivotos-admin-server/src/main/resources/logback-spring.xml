@@ -48,8 +48,23 @@
     <springProperty scope="context" name="ERROR_MAX_HISTORY" source="pivotos.log.error-max-history" defaultValue="60"/>
     <springProperty scope="context" name="ERROR_TOTAL_SIZE_CAP" source="pivotos.log.error-total-size-cap" defaultValue="1GB"/>
 
-    <!-- pattern 统一字段：时间 级别 线程 logger traceId 消息；traceId 缺省时留空占位 -->
-    <property name="PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} [%X{traceId:-}] - %msg%n"/>
+    <!-- pattern 统一字段：时间 级别 线程 logger traceId 身份 消息；缺省时留空占位。
+         userId / tenantId 由 pivotos-starter-tracing 的 MdcContextFilter 写入（v3.2.0 · P1-B8-2），
+         ⚠️ 该模块默认 pivotos.tracing.enabled=false —— 未开启时这两段恒为空占位（userId=-,tenantId=-），
+         属预期形态，不是「没生效」。要它们有值就显式开 PIVOTOS_TRACING_ENABLED=true。
+         含身份维度是刻意的：多租户下只有 traceId 无法回答「哪个租户的请求在报错」。
+
+         ⚠️ v3.2.0 起身份/链路段改为 **独立 kv 字段**（原形态为 [u=1,t=12] + [traceId]）：
+         采集侧（Filebeat / Promtail / Loki）原先要按「括号 + 逗号」正则切两个维度，
+         一旦某个维度取不到就会切错列且**不报错**（静默错位，是最难归因的一类故障）。
+         改为 traceId=/userId=/tenantId= 三个自描述 kv 后，采集侧用通用 kv 解析器即可，
+         不依赖本项目专用正则，也不会因空值错位。
+
+         整段可由运维整体替换（pivotos.log.pattern / PIVOTOS_LOG_PATTERN），例如换成
+         JSON 一行式给结构化采集用。logback 原生 XML（不引 janino）没有条件分支，
+         所以「换格式」走变量覆盖而不是 XML 条件判断。 -->
+    <springProperty scope="context" name="PATTERN" source="pivotos.log.pattern"
+                    defaultValue="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} traceId=%X{traceId:-} userId=%X{userId:-} tenantId=%X{tenantId:-} - %msg%n"/>
 
     <!-- ============ prod / test：滚动文件（不重复写控制台） ============ -->
     <!-- ⚠️ 表达式写成单个「prod | test」而不是拆两个块：两个块都命中时会出现
