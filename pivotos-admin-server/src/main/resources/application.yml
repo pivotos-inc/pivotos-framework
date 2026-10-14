@@ -124,9 +124,15 @@ spring:
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       chat:
         options:
-          model: qwen-plus
+          # V3.2-D 降档：qwen-plus 属中档偏贵，改 qwen3.8-flash
+          #（2026-08-27 起输入 0.8 元/百万、输出 2.7 元/百万）。
+          # 注意：这只是「静态兜底」+模型池全耗尽时的降级终点，运行时以 DB 的
+          # ai_provider.default_model / model_pool 为准。
+          model: qwen3.8-flash
       embedding:
         options:
+          # ⚠️ 不要为了省钱换 embedding 模型：向量维度一变，历史向量全部失效，
+          # 知识库要整体重建。降本只动 chat 侧。
           model: text-embedding-v3
     # S97 A2：MCP Server（WebMVC SSE）——端点 GET /sse + POST /mcp/message；
     # S98 建实端点防护：McpEndpointAuthFilter 强制登录（匿名 401），工具调用再经

@@ -7,6 +7,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.pivotos.ai.api.enums.AiErrorCode;
 import com.pivotos.ai.api.usage.AiUsageContext;
 import com.pivotos.ai.client.AiClientRegistry;
+import com.pivotos.ai.client.AiModelPoolRouter;
 import com.pivotos.ai.domain.dto.ChatSendRequest;
 import com.pivotos.ai.domain.entity.AiApiKey;
 import com.pivotos.ai.domain.entity.AiChatMessage;
@@ -76,6 +77,8 @@ public class AiChatServiceImpl implements AiChatService {
     private final Environment environment;
     private final AiProviderService aiProviderService;
     private final AiClientRegistry clientRegistry;
+    /** 模型池轮询器（V3.2-D：免费额度按模型独立发放，需应用层轮换才能吃满） */
+    private final AiModelPoolRouter modelPoolRouter;
     /** 知识库门面（可选依赖：kb 插件未部署时为 null，RAG 功能静默降级） */
     private final ObjectProvider<IKnowledgeBaseFacade> kbFacadeProvider;
     /** AI 工具回调（可选依赖：S97 起同步对话链路挂载 function calling，工具缺失静默降级） */
@@ -148,7 +151,7 @@ public class AiChatServiceImpl implements AiChatService {
             }
             StringBuilder answer = new StringBuilder();
             // 流式已发 meta，失败不换 Key 重试（半途换 Key 会重复输出），直接下发 error 事件
-            Flux<String> flux = buildPrompt(chatClient, target, history, request.getContent(), rag.context())
+            Flux<String> flux = buildPrompt(chatClient, target, target.model(), history, request.getContent(), rag.context())
                     .stream()
                     .content();
             flux.subscribe(
@@ -241,18 +244,19 @@ public class AiChatServiceImpl implements AiChatService {
             if (keys.isEmpty()) {
                 throw new ServiceException(AiErrorCode.NO_AVAILABLE_KEY);
             }
-            String model = request.getModel() != null && !request.getModel().isBlank()
-                    ? request.getModel().strip()
-                    : provider.getDefaultModel();
+            // V3.2-D：未显式指定模型且配了模型池时，按池轮询分摊各模型的独立免费额度
+            String model = modelPoolRouter.resolveModel(provider, request.getModel());
+            boolean rotateModel = (request.getModel() == null || request.getModel().isBlank())
+                    && !modelPoolRouter.parsePool(provider).isEmpty();
             int startIndex = clientRegistry.nextKeyIndex(provider.getId(), keys.size());
-            return new ChatTarget(provider, keys, startIndex, model, null);
+            return new ChatTarget(provider, keys, startIndex, model, null, rotateModel);
         }
         ChatClient staticClient = chatClientProvider.getIfAvailable();
         if (staticClient == null) {
             throw new ServiceException(AiErrorCode.AI_NOT_CONFIGURED);
         }
         return new ChatTarget(null, null, 0,
-                environment.getProperty("spring.ai.openai.chat.options.model", ""), staticClient);
+                environment.getProperty("spring.ai.openai.chat.options.model", ""), staticClient, false);
     }
 
     /** 取第 attempt 次尝试对应的 Key（轮询偏移取模；静态目标无 Key 返回 null） */
@@ -277,7 +281,7 @@ public class AiChatServiceImpl implements AiChatService {
      * RAG 上下文非空时以 system 消息注入，位于历史消息之后、用户消息之前。
      */
     private ChatClient.ChatClientRequestSpec buildPrompt(
-            ChatClient client, ChatTarget target, List<Message> history,
+            ChatClient client, ChatTarget target, String model, List<Message> history,
             String content, String ragContext) {
         ChatClient.ChatClientRequestSpec spec = client.prompt()
                 .messages(history);
@@ -285,27 +289,36 @@ public class AiChatServiceImpl implements AiChatService {
             spec = spec.system(ragContext);
         }
         spec = spec.user(content);
-        if (target.dynamic() && target.model() != null && !target.model().isBlank()) {
+        if (target.dynamic() && model != null && !model.isBlank()) {
             // Spring AI 2.0 options() 收 Builder 本体，内部与 client 默认 options 合并；
             // 工厂按 code 产出对应 SDK 的 options Builder 上转型，屏蔽供应商类型差异
-            spec = spec.options(clientRegistry.buildChatOptions(target.provider(), target.model()));
+            spec = spec.options(clientRegistry.buildChatOptions(target.provider(), model));
         }
         return spec;
     }
 
-    /** 同步调用：动态目标失败自动换下一 Key 重试一次（单 Key 或静态目标不重试），逐 Key 记健康度 */
+    /**
+     * 同步调用：动态目标失败自动重试——换下一 Key，或（配了模型池时）换池里下一个模型。
+     * 逐 Key 记健康度，但<b>免费额度耗尽不记 Key 失败</b>：锅在模型不在 Key。
+     */
     private String callWithFailover(ChatTarget target, List<Message> history, String content,
                                      Long conversationId, String ragContext) {
-        int attempts = target.dynamic() ? Math.min(2, target.keys().size()) : 1;
+        int attempts = resolveAttempts(target);
+        String model = target.model();
         for (int i = 0; i < attempts; i++) {
+            // 第 0 次用 resolveTarget 定好的模型（已含池轮询）；重试时才推进到池里下一个
+            if (i > 0 && target.rotateModel()) {
+                model = modelPoolRouter.nextModel(target.provider());
+            }
             AiApiKey key = pickKey(target, i);
             if (key != null) {
-                // 轮询分摊可审计：每次尝试记录实际使用的 keyId
-                log.info("[PivotOS] AI 同步对话使用 Key：conversationId={} providerId={} keyId={} 第 {}/{} 次尝试",
-                        conversationId, target.provider().getId(), key.getId(), i + 1, attempts);
+                // 轮询分摊可审计：每次尝试记录实际使用的 keyId 与 model
+                log.info("[PivotOS] AI 同步对话使用 Key：conversationId={} providerId={} keyId={} model={} 第 {}/{} 次尝试",
+                        conversationId, target.provider().getId(), key.getId(), model, i + 1, attempts);
             }
             try {
-                ChatClient.ChatClientRequestSpec spec = buildPrompt(pickClient(target, i), target, history, content, ragContext);
+                ChatClient.ChatClientRequestSpec spec =
+                        buildPrompt(pickClient(target, i), target, model, history, content, ragContext);
                 // S97：同步对话挂载 AI 工具（function calling）——工具在请求线程内执行，
                 // LoginContext 可用；流式链路不挂（回调线程上下文丢失，工具语义不成立）
                 ToolCallbackProvider tools = toolCallbackProvider.getIfAvailable();
@@ -319,10 +332,17 @@ public class AiChatServiceImpl implements AiChatService {
                 return reply;
             } catch (Exception e) {
                 boolean lastAttempt = i == attempts - 1;
-                log.error("[PivotOS] AI 同步对话失败：conversationId={} providerId={} keyId={} 第 {}/{} 次尝试",
+                boolean freeTierExhausted = AiModelPoolRouter.isFreeTierExhausted(e);
+                log.error("[PivotOS] AI 同步对话失败：conversationId={} providerId={} keyId={} model={} freeTierExhausted={} 第 {}/{} 次尝试",
                         conversationId, target.dynamic() ? target.provider().getId() : null,
-                        key == null ? null : key.getId(), i + 1, attempts, e);
-                if (key != null) {
+                        key == null ? null : key.getId(), model, freeTierExhausted, i + 1, attempts, e);
+                if (freeTierExhausted) {
+                    // 摘除的是「模型」不是「Key」：绝不记 Key 失败，否则好 Key 会被
+                    // key-fail-threshold 打满而误停用（还带站内信告警）
+                    if (target.dynamic()) {
+                        modelPoolRouter.markExhausted(target.provider().getId(), model);
+                    }
+                } else if (key != null) {
                     aiProviderService.recordKeyFailure(key.getId());
                 }
                 if (lastAttempt) {
@@ -333,9 +353,27 @@ public class AiChatServiceImpl implements AiChatService {
         throw new ServiceException(AiErrorCode.CHAT_FAILED);
     }
 
-    /** 调用目标：动态 = 供应商 + 启用 Key 列表 + 轮询起点；静态 = 兜底 ChatClient */
+    /**
+     * 同步链路尝试次数：Key 维度最多 2 次；配了模型池时按池大小放开（要能轮到未耗尽的模型），
+     * 但整体上限定 4 —— 池配得很大时不能让单次请求延迟爆炸。
+     */
+    private int resolveAttempts(ChatTarget target) {
+        if (!target.dynamic()) {
+            return 1;
+        }
+        int poolSize = Math.max(1, modelPoolRouter.parsePool(target.provider()).size());
+        int keyAttempts = Math.min(2, target.keys().size());
+        return Math.min(4, Math.max(keyAttempts, poolSize));
+    }
+
+    /**
+     * 调用目标：动态 = 供应商 + 启用 Key 列表 + 轮询起点；静态 = 兜底 ChatClient。
+     *
+     * @param rotateModel 重试时是否允许轮换模型池里的下一个模型
+     *                    （仅「请求未显式指定模型 + 供应商配了模型池」时为真）
+     */
     private record ChatTarget(AiProvider provider, List<AiApiKey> keys, int startIndex,
-                              String model, ChatClient staticClient) {
+                              String model, ChatClient staticClient, boolean rotateModel) {
         boolean dynamic() {
             return provider != null;
         }

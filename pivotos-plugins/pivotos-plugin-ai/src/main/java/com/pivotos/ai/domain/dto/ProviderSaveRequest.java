@@ -34,6 +34,15 @@ public class ProviderSaveRequest {
     @Size(max = 64, message = "默认模型最长 64 字符")
     private String defaultModel;
 
+    /**
+     * 对话模型池（英文逗号分隔，如 qwen3.8-flash,qwen3.7-flash；V3.2-D）
+     *
+     * <p>百炼免费额度按模型独立发放且官方不会自动切模型，配池后由应用层轮询分摊。
+     * 为空则只用 defaultModel。
+     */
+    @Size(max = 500, message = "模型池最长 500 字符")
+    private String modelPool;
+
     /** 向量化模型名（空则回退 spring.ai.openai.embedding.options.model） */
     @Size(max = 64, message = "向量化模型名最长 64 字符")
     private String embeddingModel;

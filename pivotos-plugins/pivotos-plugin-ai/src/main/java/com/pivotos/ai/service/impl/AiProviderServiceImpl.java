@@ -3,6 +3,7 @@ package com.pivotos.ai.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.pivotos.ai.api.enums.AiErrorCode;
 import com.pivotos.ai.client.AiClientRegistry;
+import com.pivotos.ai.client.AiModelPoolRouter;
 import com.pivotos.ai.client.DelegatingEmbeddingModel;
 import com.pivotos.ai.domain.dto.ApiKeySaveRequest;
 import com.pivotos.ai.domain.dto.ProviderSaveRequest;
@@ -57,6 +58,8 @@ public class AiProviderServiceImpl implements AiProviderService {
     private final AiProviderMapper providerMapper;
     private final AiApiKeyMapper apiKeyMapper;
     private final AiClientRegistry clientRegistry;
+    /** 模型池轮询器（V3.2-D：供应商配置变更时同步清掉池游标与耗尽标记） */
+    private final AiModelPoolRouter modelPoolRouter;
     private final AiProperties aiProperties;
     /** message 插件未装配时降级为仅记日志（只依赖 -api 契约） */
     private final ObjectProvider<IMessageFacade> messageFacadeProvider;
@@ -92,6 +95,8 @@ public class AiProviderServiceImpl implements AiProviderService {
         fillProvider(existing, request);
         providerMapper.updateById(existing);
         clientRegistry.evictProvider(existing.getId());
+        // 模型池改了 → 游标与耗尽标记一并作废（否则旧池的耗尽状态会带进新池）
+        modelPoolRouter.evictProvider(existing.getId());
         evictEmbeddingModel();
     }
 
@@ -102,6 +107,7 @@ public class AiProviderServiceImpl implements AiProviderService {
         providerMapper.deleteById(id);
         apiKeyMapper.delete(Wrappers.<AiApiKey>lambdaQuery().eq(AiApiKey::getProviderId, id));
         clientRegistry.evictProvider(id);
+        modelPoolRouter.evictProvider(id);
         evictEmbeddingModel();
     }
 
@@ -374,6 +380,7 @@ public class AiProviderServiceImpl implements AiProviderService {
         entity.setCode(request.getCode());
         entity.setBaseUrl(request.getBaseUrl().strip());
         entity.setDefaultModel(request.getDefaultModel() == null ? "" : request.getDefaultModel().strip());
+        entity.setModelPool(request.getModelPool() == null ? "" : request.getModelPool().strip());
         entity.setEmbeddingModel(request.getEmbeddingModel() == null ? "" : request.getEmbeddingModel().strip());
         entity.setRerankModel(request.getRerankModel() == null ? "" : request.getRerankModel().strip());
         entity.setSort(request.getSort() == null ? 0 : request.getSort());
@@ -387,6 +394,7 @@ public class AiProviderServiceImpl implements AiProviderService {
         vo.setName(entity.getName());
         vo.setCode(entity.getCode());
         vo.setBaseUrl(entity.getBaseUrl());
+        vo.setModelPool(entity.getModelPool());
         vo.setDefaultModel(entity.getDefaultModel());
         vo.setEmbeddingModel(entity.getEmbeddingModel());
         vo.setRerankModel(entity.getRerankModel());
